@@ -1,6 +1,6 @@
 # PRD: Dynamic Menu System — Apps Mutu Gading
 
-> **Author:** AI Assistant  
+> **Author:** Ilham Ramadhan  
 > **Date:** 2026-04-01  
 > **Status:** Draft — Awaiting Review  
 > **Module:** Core  
