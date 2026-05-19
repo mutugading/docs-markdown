@@ -1,21 +1,53 @@
 ---
-title: "PRD — Costing Workflow Suite, Phase B: Product Order & BOM Management"
-version: "1.2"
+title: "PRD — Costing Workflow Suite, Phase B: Product Order, BOM & Parameter Management"
+version: "1.4"
 status: "Draft"
 phase: "B"
 last_updated: "2026-05"
 author: "[IT Leader]"
 related:
-  - "PRD_PhaseA_ProductRequest.md"
+  - "PRD_PhaseA.md"
+  - "PRD_PhaseC.md"
   - "ERD_Master.md"
   - "GLOSSARY.md"
+  - "INTEGRATION_CrossPhase.md"
+changelog:
+  - version: "1.4"
+    date: "2026-05"
+    changes:
+      - "Tambah cost_parameter_master (CPRM_) — definisi 125 parameter dengan metadata engine"
+      - "Tambah Generic Master Pattern: cost_master_definition (CMD_) + cost_master_data (CMSD_)"
+      - "Tambah cost_product_parameter (CPP_) — static parameter values per product"
+      - "Tambah cost_parameter_dependency (CPRD_) — dependency graph (visualization only)"
+      - "Tambah Section 6.12-6.16 FR parameter management & cross-phase hook"
+      - "Tambah Section 7.9 data model parameter & master tables"
+      - "Seed data: 125 parameter records, 8 master type definitions"
+  - version: "1.3"
+    date: "2026-05"
+    changes:
+      - "Tambah cost_product_master (CPM_) — product identity terpisah dari product order"
+      - "Tambah cost_product_type (CPT_) — master jenis product (POY/PTY/TTY/dll)"
+      - "Tambah cost_product_code_counter (CPCC_) — atomic auto-increment per type+YYMM"
+      - "Tambah cost_rm_type (CRMT_) — RM type jadi master table user-definable"
+      - "Tambah ERP replica tables: cost_erp_item (CEI_), cost_erp_grade (CEG_), cost_erp_shade (CES_)"
+      - "Restructure product_order: identity pindah ke product_master"
+      - "Terapkan Column Prefix Naming Convention ke seluruh data model"
+      - "Product code format: CST + TYPE(3) + YYMM(4) + AUTO(6)"
+  - version: "1.2"
+    date: "2026-05"
+    changes:
+      - "Added Section 6.7 Costing Orchestration (FR-19 sampai FR-24)"
+  - version: "1.1"
+    date: "2026-05"
+    changes:
+      - "Added FR-9 Flow View, FR-17 Flow Editor, FR-18 Auto-Layout"
 ---
 
 # PRD — Phase B: Product Order & BOM Management System
 ## Costing Workflow Suite
 
-> *Sistem Pengelolaan Urutan Proses Produksi (Material to Finished Goods)*
-> Version 1.2 — Draft | May 2026
+> *Sistem Pengelolaan Urutan Proses Produksi, BOM, dan Parameter Cost*
+> Version 1.4 — Draft | May 2026
 
 ---
 
@@ -23,7 +55,11 @@ related:
 
 Dokumen ini mendefinisikan kebutuhan untuk membangun sistem pengelolaan Product Order — sebuah aplikasi internal yang menyimpan dan mengelola urutan proses produksi dari raw material awal hingga finished goods. Setiap produk dapat melalui satu hingga lebih dari tujuh tahap produksi, dimana output suatu tahap dapat menjadi input bagi tahap berikutnya (multi-level Bill of Materials).
 
+Sejak v1.3, sistem ini juga mengelola **Product Master** — identitas product di costing system yang terpisah dari ERP. Setiap product di costing punya kode unik (format: CSTPTY2605000001) dan dapat di-link ke ERP item secara informational. Product master menjadi fondasi: product order (BOM) mereferensi product master, dan komponen BOM juga mereferensi product master (untuk Captive Cost) atau ERP item langsung (untuk Store Rate).
+
 Tujuan utama sistem ini adalah:
+
+- Menjadi single source of truth identitas product di costing system, terpisah dari ERP karena costing terjadi sebelum transaksi produksi/sales.
 
 - Menjadi single source of truth struktur BOM (Bill of Materials) multi-level untuk seluruh produk perusahaan.
 
@@ -33,7 +69,7 @@ Tujuan utama sistem ini adalah:
 
 - Mempertahankan historical traceability ketika struktur BOM berubah (versioning).
 
-Sistem ini berfokus pada struktur dan urutan proses (process sequence) saja. Aspek quantity, costing, inventory, dan production scheduling berada di luar scope dan diasumsikan ditangani sistem lain.
+- Menjadi costing orchestrator: menyediakan topological sort dan dependency resolution untuk calculation engine eksternal.
 
 ## 2. Background & Problem Statement
 
@@ -45,7 +81,23 @@ Chips BRT → POY0000458 → PTY0001531 → PTY0001532 → TCY0000061 → TCM000
 
 Output dari setiap tahap adalah finished goods bagi tahap tersebut, sekaligus menjadi raw material bagi tahap selanjutnya. Karena satu intermediate product (misalnya TCY0000061) dapat dipakai oleh banyak product hilir, struktur datanya bersifat directed acyclic graph (DAG), bukan tree sederhana.
 
-### 2.2. Kondisi Saat Ini
+### 2.2. Konteks ERP vs Costing
+
+Di ERP (Oracle), transaksi produksi dan sales menggunakan 3 Primary Key: item_code, item_grade_code_1, item_grade_code_2. Contoh:
+
+- item_code: PTY0000001 (prefix 3 digit jenis product + 7 digit auto increment)
+- item_grade_code_1: AX, AM, B, C (grading kualitas)
+- item_grade_code_2: NL, Z114S, Z108S (warna/shade)
+
+Cost di ERP di-define per kombinasi ketiga key tersebut, misalnya PTY0000001-AX-Z108S = USD 1.2/kg.
+
+Namun costing terjadi **sebelum** produksi dan sales di ERP. Product yang akan di-cost mungkin belum ada di ERP. Untuk itu, costing system memiliki product master sendiri dengan format kode: CST + jenis product (3 digit) + YYMM (4 digit) + auto number (6 digit). Contoh: CSTPTY2605000001.
+
+Perbedaan kunci dengan ERP: di costing, setiap kombinasi item+shade = **satu product record terpisah** (bukan satu item dengan multiple grade/shade). Grade di costing default ke grade terbaik (AX) karena produksi selalu menargetkan grade tertinggi — grade dibawahnya adalah turunan yang harganya diturunkan sesuai policy perusahaan. Namun grade tetap di-record untuk future differentiation.
+
+Product master costing memiliki field untuk link ke item_code, grade, dan shade di ERP — sebagai attribut informational untuk rekonsiliasi setelah product masuk ERP.
+
+### 2.3. Kondisi Saat Ini
 
 Saat ini mapping urutan proses dikelola dalam file Excel berisi 31.012 baris pasangan FG-RM. Sebuah finished goods muncul beberapa kali dengan urutan komponen di-flatten dari komponen terjauh (chips) hingga ke dirinya sendiri.
 
@@ -61,41 +113,43 @@ Beberapa masalah dari pendekatan saat ini:
 
 - Tidak ada validasi struktural — potensi terjadinya cycle (BOM lingkar) tidak dideteksi sistem.
 
-### 2.3. Stakeholders
+### 2.4. Stakeholders
 
-| **Stakeholder**        | **Kebutuhan Utama**                                   | **Akses Tipikal**            |
-|------------------------|-------------------------------------------------------|------------------------------|
-| Production Planning    | Membaca BOM untuk perencanaan produksi                | Read-only, BOM explosion     |
-| Process Engineering    | Memelihara struktur BOM, mendefinisikan urutan proses | Create, Read, Update, Delete |
-| Cost Accounting        | Membaca struktur captive cost untuk perhitungan HPP   | Read-only, Where-used        |
-| Master Data Management | Memelihara konsistensi data master & integrasi        | Admin, Import/Export         |
-| Auditor (Internal)     | Verifikasi historis struktur produksi                 | Read-only, Version history   |
+| **Stakeholder** | **Kebutuhan Utama** | **Akses Tipikal** |
+|---|---|---|
+| Production Planning | Membaca BOM untuk perencanaan produksi | Read-only, BOM explosion |
+| Process Engineering | Memelihara product master dan struktur BOM | Create, Read, Update, Delete |
+| Cost Accounting | Membaca struktur captive cost untuk perhitungan HPP | Read-only, Where-used |
+| Master Data Management | Memelihara konsistensi data master & integrasi ERP | Admin, Import/Export, ERP sync |
+| Auditor (Internal) | Verifikasi historis struktur produksi | Read-only, Version history |
 
 ## 3. Goals & Non-Goals
 
 ### 3.1. Goals (In-Scope)
 
-1.  Menyimpan struktur BOM multi-level untuk seluruh finished goods variant secara normalized (1 record = 1 komponen langsung).
+1. Menyediakan Product Master sebagai identitas product di costing system, dengan format kode sendiri (CST prefix) dan linkage informational ke ERP.
 
-2.  Menyediakan CRUD untuk product order, version, dan komponennya melalui antarmuka pengguna.
+2. Menyimpan struktur BOM multi-level untuk seluruh finished goods variant secara normalized (1 record = 1 komponen langsung).
 
-3.  Menyediakan visualisasi BOM tree (vertical hierarchical) dan flow view (horizontal DAG) yang dapat di-expand multi-level.
+3. Menyediakan CRUD untuk product master, product order, version, dan komponennya melalui antarmuka pengguna.
 
-4.  Menyediakan editor BOM visual berbasis drag-and-drop canvas yang memungkinkan user meng-compose struktur BOM secara grafis, mendukung convergent (many-to-one) dan divergent (one-to-many) flow.
+4. Menyediakan visualisasi BOM tree (vertical hierarchical) dan flow view (horizontal DAG) yang dapat di-expand multi-level.
 
-5.  Menyediakan report BOM explosion (drill-down semua komponen dari finished goods ke raw material terbawah).
+5. Menyediakan editor BOM visual berbasis drag-and-drop canvas yang memungkinkan user meng-compose struktur BOM secara grafis.
 
-6.  Menyediakan report where-used (drill-up: produk apa saja yang memakai suatu item).
+6. Menyediakan report BOM explosion (drill-down semua komponen dari FG ke RM terbawah) dan where-used (drill-up: produk apa saja yang memakai suatu item).
 
-7.  Mempertahankan versioning lengkap atas perubahan BOM (setiap save = versi baru, versi lama tetap accessible).
+7. Mempertahankan versioning lengkap atas perubahan BOM (setiap save = versi baru, versi lama tetap accessible).
 
-8.  Mendeteksi dan memberi peringatan bila terjadi struktur cycle (FG memakai dirinya sendiri sebagai RM, langsung maupun tidak langsung).
+8. Mendeteksi dan memberi peringatan bila terjadi struktur cycle.
 
-9.  Menyediakan fasilitas import data awal dari file Excel format baku.
+9. Menyediakan fasilitas import data awal dari file Excel format baku.
 
-10. Mengintegrasikan dengan master data eksternal (item, cylinder type, shade) melalui foreign key.
+10. Menyediakan ERP replica tables (item, grade, shade) di PostgreSQL untuk referensi master data dan komponen Store Rate.
 
-11. Menjadi costing orchestrator: menyediakan topological sort dan dependency resolution untuk calculation engine eksternal, dengan dukungan batch (per period) maupun on-demand.
+11. Menyediakan RM Type sebagai master table yang user-definable, dengan reference_target (PRODUCT atau MASTER) untuk menentukan FK mana yang dipakai oleh komponen.
+
+12. Menjadi costing orchestrator: menyediakan topological sort dan dependency resolution untuk calculation engine eksternal, dengan dukungan batch maupun on-demand.
 
 ### 3.2. Non-Goals (Out-of-Scope)
 
@@ -109,7 +163,7 @@ Beberapa masalah dari pendekatan saat ini:
 
 - Production scheduling, work order, MRP.
 
-- Master data untuk item, cylinder type, shade — diasumsikan sudah ada dan tidak diduplikasi.
+- Pengelolaan master data ERP (item, grade, shade) — hanya replica read-only; pengelolaan di ERP Oracle.
 
 - User & role management — diambil dari SSO/IAM eksisting.
 
@@ -117,541 +171,905 @@ Beberapa masalah dari pendekatan saat ini:
 
 ## 4. Key Concepts & Terminology
 
-| **Term**         | **Definition**                                                                                                                                                        |
-|------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Product Order    | Definisi struktur BOM untuk satu finished goods variant — entity utama sistem ini. Setiap product order memiliki kode unik (eks. FG_TOP_2).                           |
-| Component        | Satu raw material atau intermediate product yang masuk sebagai komponen langsung sebuah product order.                                                                |
-| RM Type          | Klasifikasi komponen: Store Rate (dibeli dari luar/master), Captive Cost (diproduksi sendiri di tahap sebelumnya), Multi Yarn (blending banyak yarn), Uneven Packing. |
-| Single-Level BOM | Daftar komponen langsung satu product order (parent → direct children saja).                                                                                          |
-| Multi-Level BOM  | Drill-down rekursif dari finished goods hingga raw material terbawah (intermediate product di-expand otomatis).                                                       |
-| BOM Explosion    | Operasi traversal turun (parent → children → grand-children) untuk mendapatkan multi-level BOM.                                                                       |
-| Where-Used       | Operasi traversal naik (child → parents → grand-parents) untuk mengetahui semua produk yang memakai suatu item.                                                       |
-| Version          | Snapshot struktur BOM pada satu titik waktu. Setiap perubahan menghasilkan version baru; version lama menjadi superseded namun tetap dapat ditelusuri.                |
-| Cycle            | Kondisi error dimana sebuah product order, langsung atau melalui rantai komponen, menggunakan dirinya sendiri sebagai komponen.                                       |
+| **Term** | **Definition** |
+|---|---|
+| Product Master | Identitas product di costing system. Satu record = satu product (item+shade). Memiliki kode sendiri (CST prefix) terpisah dari ERP. |
+| Product Code | Business key product master, format: CST + TYPE(3) + YYMM(4) + AUTO(6). Contoh: CSTPTY2605000001. |
+| Product Type | Klasifikasi jenis product (POY, PTY, TTY, dll). Master table, dikelola Admin. |
+| Product Order | Definisi struktur BOM untuk satu product master — entity yang menyimpan HOW to make a product. |
+| Component | Satu raw material atau intermediate product yang masuk sebagai komponen langsung sebuah product order. |
+| RM Type | Klasifikasi komponen — user-definable via master table. Initial: Store Rate, Captive Cost, Multi Yarn, Uneven Packing. Setiap RM type punya reference_target (PRODUCT atau MASTER) yang menentukan FK di komponen. |
+| Reference Target | Properti RM type: PRODUCT (komponen referensi ke product master / Captive Cost) atau MASTER (komponen referensi ke ERP item / Store Rate). |
+| Single-Level BOM | Daftar komponen langsung satu product order (parent → direct children saja). |
+| Multi-Level BOM | Drill-down rekursif dari finished goods hingga raw material terbawah. |
+| BOM Explosion | Operasi traversal turun (parent → children → grand-children) untuk mendapatkan multi-level BOM. |
+| Where-Used | Operasi traversal naik (child → parents → grand-parents) untuk mengetahui semua produk yang memakai suatu item. |
+| Version | Snapshot struktur BOM pada satu titik waktu. Setiap perubahan menghasilkan version baru; version lama menjadi superseded namun tetap dapat ditelusuri. |
+| Cycle | Kondisi error dimana sebuah product order menggunakan dirinya sendiri sebagai komponen (langsung atau tidak langsung). |
+| ERP Linkage | Field informational di product master (item_code, grade_code_1, grade_code_2) untuk link ke ERP Oracle. Bukan FK — hanya attribut. |
+| Grade | Klasifikasi kualitas produk (AX, AM, B, C). Di costing default ke grade terbaik (AX). Editable untuk future differentiation. |
 
 ## 5. Assumptions & Dependencies
 
-12. Master data sudah tersedia: tabel master item, cylinder type, shade, beserta sys_id-nya.
+1. Database menggunakan PostgreSQL (versi 14+ untuk dukungan recursive CTE yang optimal).
 
-13. Database menggunakan PostgreSQL (versi 14+ untuk dukungan recursive CTE yang optimal).
+2. SSO/IAM eksisting menyediakan identitas user dan role.
 
-14. SSO/IAM eksisting menyediakan identitas user dan role; sistem ini mempercayai token/session yang diberikan.
+3. ERP menggunakan Oracle DB. Master data (item, grade, shade) perlu di-replika ke PostgreSQL sebagai read-only tables. Mekanisme sync (CDC / scheduled job) = infrastructure concern, ditentukan saat implementasi.
 
-15. Struktur BOM yang ada di file Excel sumber diperlakukan sebagai inisial data dan akan diimport satu kali.
+4. Struktur BOM yang ada di file Excel sumber diperlakukan sebagai inisial data dan akan diimport satu kali.
 
-16. Field RM_LEFT_NO_INTO di Excel sumber dianggap redundan (selalu sama dengan FG_LEFT_NO record itu sendiri); 156 baris anomali diperlakukan sebagai data error dan akan di-normalisasi saat import.
+5. Field RM_LEFT_NO_INTO di Excel sumber dianggap redundan; 156 baris anomali diperlakukan sebagai data error dan akan di-normalisasi saat import.
 
-17. Field FG_SEQUENCE di Excel sumber dianggap derivative dari cylinder type (1:1 mapping); tidak disimpan sebagai kolom terpisah.
+6. Field FG_SEQUENCE di Excel sumber dianggap derivative dari cylinder type (1:1 mapping); tidak disimpan sebagai kolom terpisah.
 
-18. Field RM_SUB_SEQUENCE_REAL di Excel sumber adalah invers dari RM_SEQUENCE; salah satu redundan, hanya RM_SEQUENCE yang akan disimpan.
+7. Field RM_SUB_SEQUENCE_REAL di Excel sumber adalah invers dari RM_SEQUENCE; redundan, hanya RM_SEQUENCE yang akan disimpan.
+
+8. Phase A (Product Request) mungkin sudah live saat Phase B go-live. Routing draft di Phase A dapat di-promote ke product order di Phase B. Promote flow: PIC manual select/create product master → system create product order + components.
+
+9. Costing terjadi sebelum produksi/sales di ERP. Product yang di-cost mungkin belum ada di ERP — sehingga ERP linkage fields nullable.
+
+10. Grade di costing default AX (top grade) — karena produksi menargetkan grade tertinggi. Grade dibawahnya adalah turunan dengan harga yang diturunkan sesuai policy perusahaan. Namun field grade tetap ada untuk future differentiation.
 
 ## 6. Functional Requirements
 
-### 6.1. Product Order Management (CRUD)
+### 6.1. Product Master Management
 
-**FR-1: Create Product Order**
+**FR-1a: Create Product Master**
 
-- User dapat membuat product order baru dengan mengisi: product code (top_2), item code (FK master), cylinder type (FK master), shade code/name (FK master, optional).
+- User dapat membuat product master baru dengan mengisi: product type (dropdown dari master), product name (free-text deskripsi lengkap), shade code (free-text introductory), grade code (default AX, editable), description.
 
-- Sistem otomatis generate sys_id (PK numerik); user tidak menentukan sys_id manual.
+- Sistem auto-generate product code: CST + type_code + YYMM + auto_number(6). Counter per (product_type + YYMM), bukan global. Contoh: CSTPTY2605000001 (PTY pertama di Juni 2026).
 
-- Saat create, sistem otomatis membuat version pertama dengan status draft.
+- ERP linkage fields (item_code, grade_code_1, grade_code_2) opsional — dapat diisi saat product sudah ada di ERP.
 
-- Validasi: product code (top_2) harus unik secara global.
+- Validasi: product code harus unik secara global (dijamin oleh sistem).
 
-**FR-2: Read / Search Product Order**
+**FR-1b: Search / Browse Product Master**
 
-- User dapat mencari product order berdasarkan: kode (partial match), item code, cylinder type, shade.
+- User dapat mencari product master berdasarkan: product code (partial match), product name (full-text search), product type, shade code, ERP item code.
 
 - Hasil pencarian dapat di-filter, di-sort, dan dipaginasi.
 
-- User dapat melihat detail product order: atribut, daftar komponen langsung pada version aktif, history version.
+- Detail product master menampilkan: semua attribut, ERP linkage, linked product order (jika ada), audit info.
 
-**FR-3: Update Product Order**
+**FR-1c: Update Product Master**
 
-- Update terhadap atribut (item code, cyl type, shade) langsung berlaku tanpa membuat version baru.
+- User dapat update: product name, shade code, grade code, description, ERP linkage fields.
+
+- Product code dan product type tidak dapat diubah setelah create (immutable).
+
+- Setiap update dicatat di audit log.
+
+**FR-1d: Deactivate Product Master**
+
+- Soft-delete: is_active = false.
+
+- Tidak diperbolehkan men-deactivate product master yang sedang dipakai sebagai komponen di product order aktif — sistem menampilkan daftar dependency dan menolak operasi.
+
+### 6.2. Product Order Management (CRUD)
+
+**FR-2: Create Product Order**
+
+- User dapat membuat product order baru dengan memilih product master (autocomplete search) dan mengisi cylinder type (FK master).
+
+- Satu product master dapat memiliki maksimal satu product order aktif.
+
+- Saat create, sistem otomatis membuat version pertama dengan status draft.
+
+**FR-3: Read / Search Product Order**
+
+- User dapat mencari product order berdasarkan: product code (dari product master), product name, cylinder type.
+
+- Hasil pencarian dapat di-filter, di-sort, dan dipaginasi.
+
+- User dapat melihat detail product order: product master info, daftar komponen pada version aktif, history version.
+
+**FR-4: Update Product Order**
+
+- Update terhadap atribut order (cyl_type) langsung berlaku tanpa membuat version baru.
 
 - Update terhadap struktur komponen (BOM lines) selalu membuat version baru: version aktif sebelumnya menjadi superseded.
 
 - Tidak diperbolehkan menghapus atau mengubah version yang sudah superseded — hanya read-only.
 
-**FR-4: Delete Product Order**
+**FR-5: Delete Product Order**
 
-- Soft-delete: status berubah menjadi inactive, record tetap ada untuk historical traceability.
+- Soft-delete: is_active = false, record tetap ada untuk historical traceability.
 
-- Tidak diperbolehkan men-delete product order yang sedang dipakai sebagai komponen di product order lain yang masih aktif — sistem menampilkan daftar dependency dan menolak operasi.
+- Tidak diperbolehkan men-delete product order yang sedang dipakai sebagai komponen (via product master) di product order lain yang masih aktif.
 
-### 6.2. BOM Component Management
+### 6.3. BOM Component Management
 
-**FR-5: Add Component**
+**FR-6: Add Component**
 
-- Pada saat editing version draft, user dapat menambah komponen dengan input: RM sys_id (autocomplete dari master item ATAU product order lain), RM type, sequence_no, dan optional sub_sequence + sub_type untuk multi-yarn blending.
+- Pada saat editing version draft, user dapat menambah komponen dengan input: RM type (dropdown dari master cost_rm_type), RM reference (autocomplete), sequence_no, dan optional sub_sequence + sub_type.
 
-- Bila RM type = Captive Cost, RM sys_id harus mengarah ke product order lain yang sudah ada di sistem.
+- RM type menentukan reference target:
+  - reference_target = PRODUCT → autocomplete dari product master (Captive Cost-like types).
+  - reference_target = MASTER → autocomplete dari cost_erp_item (Store Rate-like types).
+  - Bila RM type allow_sub_sequence = true → satu sequence_no boleh memiliki beberapa baris dengan sub_sequence berbeda (Multi Yarn-like types).
 
-- Bila RM type = Store Rate, RM sys_id harus mengarah ke master item eksternal.
+- Fallback: bila RM belum ada di master/product, user dapat isi rm_description sebagai free-text temporary.
 
-- Bila RM type = Multi Yarn, satu sequence_no boleh memiliki beberapa baris dengan sub_sequence berbeda.
-
-**FR-6: Reorder / Edit / Remove Component**
+**FR-7: Reorder / Edit / Remove Component**
 
 - User dapat mengubah sequence_no, mengganti RM, atau menghapus komponen — semua hanya pada version draft.
 
 - Perubahan tersimpan saat user men-commit version draft menjadi active (membuat version baru).
 
-**FR-7: Cycle Detection**
+**FR-8: Cycle Detection**
 
-- Sebelum commit version baru, sistem menjalankan traversal komponen Captive Cost untuk mendeteksi cycle (langsung atau tidak langsung).
+- Sebelum commit version baru, sistem menjalankan traversal komponen dengan reference_target = PRODUCT untuk mendeteksi cycle (langsung atau tidak langsung).
 
 - Bila cycle terdeteksi, sistem menampilkan warning lengkap dengan jalur cycle dan meminta konfirmasi user.
 
 - User dapat memilih untuk tetap menyimpan (override) atau membatalkan. Bila override, sistem mencatat tanda cycle_override pada version tersebut.
 
-### 6.3. Visualization
+### 6.4. Visualization
 
-**FR-8: BOM Tree View**
+**FR-9: BOM Tree View**
 
 - Tampilan tree expand/collapse dari finished goods ke bawah hingga raw material terbawah.
 
-- Setiap node menampilkan: kode product/RM, nama, tipe (FG/Intermediate/Raw Material), RM type.
+- Setiap node menampilkan: product code, product name, RM type name.
 
-- Node Captive Cost dapat di-expand karena mengarah ke product order lain; node Store Rate adalah leaf (tidak bisa di-expand).
+- Node dengan reference_target = PRODUCT dapat di-expand (mengarah ke product order lain); node dengan reference_target = MASTER adalah leaf.
 
-- User dapat klik node Captive Cost untuk navigasi ke product order tersebut sebagai context baru.
+- User dapat klik node PRODUCT untuk navigasi ke product order tersebut sebagai context baru.
 
-**FR-9: BOM Graph View (Flow View)**
+**FR-10: BOM Graph View (Flow View)**
 
-- Visualisasi horizontal node-graph (mirip flow diagram industri) untuk product dengan convergent flow — banyak raw material bertemu di satu finished goods, atau satu raw material berkembang ke banyak intermediate product.
+- Visualisasi horizontal node-graph (mirip flow diagram industri) untuk product dengan convergent flow.
 
-- Node disusun secara horizontal per stage (Stage 1 di paling kiri sebagai chips/raw material; FG di paling kanan).
+- Node disusun secara horizontal per stage. Edge berupa kurva Bezier ber-arrow yang menunjukkan arah aliran material.
 
-- Edge berupa kurva Bezier ber-arrow yang menunjukkan arah aliran material dari komponen ke product.
+- Mendukung convergent (many-to-one) dan divergent (one-to-many).
 
-- Mendukung kasus convergent (many-to-one, mis. Multi Yarn blending) dan divergent (one-to-many, mis. satu intermediate dipakai oleh banyak FG).
+- Mode read-only: user dapat pan, zoom, dan klik node untuk highlight.
 
-- Mode read-only: user dapat pan, zoom, dan klik node untuk highlight; tidak ada modifikasi struktur di mode ini.
+- Tersedia tombol "Edit di Flow Editor" untuk berpindah ke mode editing (FR-18).
 
-- Stage labels otomatis berdasarkan cyl_type / sequence_no komponen.
+**FR-18: Flow Editor (Drag-Drop Visual BOM Builder)**
 
-- Tersedia tombol "Edit di Flow Editor" untuk berpindah ke mode editing (FR-17).
-
-**FR-17: Flow Editor (Drag-Drop Visual BOM Builder)**
-
-Editor visual yang memungkinkan user membangun atau memodifikasi struktur BOM dengan drag-and-drop pada canvas, mirip Lucidchart / n8n / Figma. Ini adalah cara alternatif (selain form-based FR-1 sampai FR-6) untuk meng-compose product order beserta komponennya.
+Editor visual yang memungkinkan user membangun atau memodifikasi struktur BOM dengan drag-and-drop pada canvas.
 
 Komponen UI:
 
-- Panel kiri (Item Library / Palette): daftar item yang dapat di-drag ke canvas, terbagi dalam kategori Raw Material (Store Rate), Intermediate / Captive (product order yang sudah ada), dan node types khusus (Empty FG, Multi Yarn group).
+- Panel kiri (Item Library / Palette): daftar item dari product master dan cost_erp_item yang dapat di-drag ke canvas, terbagi per RM type.
 
 - Canvas tengah (Editor Surface): area kerja dengan grid background, snap-to-grid, pan/zoom, dan fit-to-screen.
 
-- Panel kanan (Inspector): menampilkan atribut node atau edge yang sedang dipilih; user dapat edit item code, cyl type, shade, rm_type, sequence di sini.
+- Panel kanan (Inspector): menampilkan atribut node atau edge yang sedang dipilih; user dapat edit rm_type, sequence di sini.
 
 - Toolbar atas: undo/redo, auto-layout, align-stages, zoom controls, snap toggle, validate, save draft, commit.
 
 Interaksi pokok:
 
-19. Drag item dari Palette ke Canvas → membuat node baru pada posisi drop.
+- Drag item dari Palette ke Canvas → membuat node baru pada posisi drop.
 
-20. Drag dari port output (kanan) sebuah node ke port input (kiri) node lain → membuat edge / koneksi (komponen relationship).
+- Drag dari port output node ke port input node lain → membuat edge / koneksi (komponen relationship).
 
-21. Klik node → select, atribut tampil di Inspector. Klik lagi di area kosong → deselect.
+- Tombol Validate → jalankan cycle detection; menampilkan jalur cycle bila ditemukan.
 
-22. Drag node (selain port) → reposisi; canvas mendukung snap-to-grid (20px default).
-
-23. Delete key pada node terpilih → hapus node (dengan konfirmasi bila punya koneksi).
-
-24. Tombol Validate → jalankan cycle detection dan referensi master data; menampilkan jalur cycle bila ditemukan.
-
-25. Tombol Commit version → simpan canvas sebagai version baru product order.
+- Tombol Commit version → simpan canvas sebagai version baru product order.
 
 Mapping canvas ke schema:
 
-- Setiap node mewakili satu product order (existing atau new); position (x, y) disimpan di metadata version untuk preserve layout antar sesi.
+- Setiap node = satu product master (PRODUCT) atau satu ERP item (MASTER); posisi disimpan di cost_bom_layout.
 
-- Setiap edge mewakili satu baris di product_order_component (parent product order = node tujuan edge; rm_ref = node sumber edge).
+- Setiap edge = satu baris di cost_product_order_component.
 
-- Convergent flow (banyak edge masuk ke 1 node) otomatis di-mapping sebagai komponen multiple dengan rm_type Captive Cost atau Multi Yarn (sub_sequence terisi otomatis berurutan).
+- Convergent flow otomatis di-mapping sebagai komponen multiple.
 
-Persistensi layout:
+**FR-19: Auto-Layout & Visual Helpers**
 
-- Tambahkan tabel pendukung product_order_version_layout (version_id, node_id, x, y) untuk menyimpan posisi visual.
-
-- Bila version dibuka tanpa metadata layout (mis. hasil import Excel), sistem menjalankan auto-layout algorithm (dagre / elk) untuk menghasilkan layout default berbasis stage.
-
-**FR-18: Auto-Layout & Visual Helpers**
-
-- Auto-layout: tombol untuk menghitung ulang posisi semua node menggunakan hierarchical layout algorithm — node disusun per stage (kolom) berdasarkan cyl_type / sequence_no, dengan node convergent diletakkan center-vertical relatif terhadap input-nya.
+- Auto-layout: tombol untuk menghitung ulang posisi semua node menggunakan hierarchical layout algorithm (dagre / elkjs).
 
 - Snap-to-grid (toggle): posisi node dibulatkan ke grid 20px terdekat.
 
 - Align-stages: paksa semua node dengan stage yang sama berada di kolom x yang sama.
 
-- Minimap (opsional, Phase 2): peta thumbnail di pojok canvas untuk navigasi cepat pada graph besar.
+### 6.5. Reporting
 
-### 6.4. Reporting
+**FR-11: BOM Explosion Report**
 
-**FR-10: BOM Explosion Report**
+- Input: satu atau lebih product code; opsional: max depth, filter RM type.
 
-- Input: satu atau lebih product order code; opsional: max depth, filter RM type.
-
-- Output: daftar lengkap semua komponen multi-level beserta level kedalaman (1 = komponen langsung, 2 = komponen dari komponen, dst).
+- Output: daftar lengkap semua komponen multi-level beserta level kedalaman.
 
 - Format hasil: tabel pada layar, exportable ke Excel/CSV.
 
-- Performa target: explosion 1 product (max depth 10) selesai dalam \< 2 detik.
+- Performa target: explosion 1 product (max depth 10) selesai dalam < 2 detik.
 
-**FR-11: Where-Used Report**
+**FR-12: Where-Used Report**
 
-- Input: satu item (item code dari master ATAU product order code) — sistem mendukung kedua tipe input.
+- Input: satu product code (dari product master) ATAU satu item code (dari ERP item).
 
 - Output: daftar lengkap product order yang memakai item tersebut sebagai komponen, langsung maupun tidak langsung, beserta level.
 
-- Format hasil sama seperti FR-10.
+### 6.6. Version Management
 
-### 6.5. Version Management
-
-**FR-12: View Version History**
+**FR-13: View Version History**
 
 - Pada halaman detail product order, terdapat tab Version History menampilkan: nomor version, status (draft/active/superseded), tanggal create, user, jumlah komponen.
 
 - User dapat klik version untuk melihat snapshot struktur BOM pada version tersebut (read-only).
 
-**FR-13: Compare Versions**
+**FR-14: Compare Versions**
 
 - User dapat memilih dua version dan melihat diff: komponen yang ditambah, dihapus, atau diubah.
 
-### 6.6. Data Import / Export
+### 6.7. Data Import / Export
 
-**FR-14: Initial Import dari Excel**
+**FR-15: Initial Import dari Excel**
 
 - Sistem menyediakan fasilitas import dari file Excel format baku (didefinisikan di Section 8).
 
-- Import bersifat upsert: bila product order sudah ada, akan dibuatkan version baru; bila belum ada, dibuat record baru.
+- Import bersifat upsert: bila product order sudah ada, akan dibuatkan version baru; bila belum ada, dibuat record baru (termasuk auto-create product master jika belum ada).
 
-- Sistem menampilkan preview validasi sebelum commit (count rows, error rows, summary).
+- Sistem menampilkan preview validasi sebelum commit.
 
 - Setiap import dicatat sebagai import job dengan log lengkap.
 
-**FR-15: Export ke Excel**
+**FR-16: Export ke Excel**
 
-- User dapat mengexport: single product order (full BOM exploded), multiple product order (hasil filter), atau dump seluruh database.
+- User dapat mengexport: single product order (full BOM exploded), multiple product order, atau dump seluruh database.
 
-### 6.7. Costing Orchestration
+### 6.8. Costing Orchestration
 
-Sistem ini berperan sebagai costing orchestrator: menyediakan urutan eksekusi (topological sort), resolusi dependency komponen, dan integrasi dengan engine eksternal yang melakukan kalkulasi sebenarnya. Sistem ini tidak menyimpan parameter cost maupun cost result; keduanya berada di tabel eksternal (lihat Section 5 Assumptions). Formula kalkulasi cost (apakah weighted, ada yield factor, dan sebagainya) ditangani oleh calculation engine eksternal di luar scope dokumen ini.
+Sistem ini berperan sebagai costing orchestrator: menyediakan urutan eksekusi (topological sort), resolusi dependency komponen, dan integrasi dengan engine eksternal yang melakukan kalkulasi sebenarnya. Sistem ini tidak menyimpan parameter cost maupun cost result.
 
-**FR-19: Topological Sort untuk Cost Rollup**
+**FR-20: Topological Sort untuk Cost Rollup**
 
-- Sistem menyediakan API yang menerima product_sys_id dan version_id (opsional, default current_version), lalu mengembalikan urutan node yang harus di-cost — dari level terdalam (raw material) ke FG itu sendiri.
+- Sistem menyediakan API yang menerima CPM_product_sys_id dan version_id (opsional, default current_version), lalu mengembalikan urutan node yang harus di-cost dari level terdalam ke FG.
 
-- Urutan ini di-derive dari product_order_exploded dengan ORDER BY level DESC, di-dedup berdasarkan (rm_ref_type, rm_ref_id) sehingga node yang muncul di banyak path hanya dihitung sekali.
+- Urutan di-derive dari cost_product_order_exploded, di-dedup berdasarkan (rm_product_sys_id / rm_master_item_id).
 
-- Output API berisi: ordinal, product_sys_id, version_id, level, jumlah komponen langsung, daftar referensi komponen (rm_ref_type, rm_ref_id) yang dibutuhkan untuk menghitung node ini.
+**FR-21: Dependency Resolution per Node**
 
-**FR-20: Dependency Resolution per Node**
+- Untuk setiap node dalam urutan kalkulasi, sistem menyediakan daftar komponen dari cost_product_order_component pada active version.
 
-- Untuk setiap node N dalam urutan kalkulasi, sistem menyediakan daftar komponen yang dibutuhkan: dari product_order_component WHERE version_id = active_version_of(N).
+- Setiap komponen disertai RM type (dan reference_target-nya), sub_sequence, dan sub_type.
 
-- Setiap komponen disertai klasifikasi (rm_ref_type = MASTER atau PRODUCT), sub_sequence (bila Multi Yarn), dan sub_type.
+**FR-22: Batch Costing Orchestrator**
 
-- Sistem tidak mengambil cost-nya sendiri; consumer (calculation engine) yang akan query master price atau cost result period sebelumnya berdasarkan klasifikasi tersebut.
+- Trigger batch per period untuk seluruh product_order aktif.
 
-**FR-21: Batch Costing Orchestrator**
+- Orchestrator menjalankan: gather → topological sort → dependency resolution → call calculation engine → write result.
 
-- Mendukung trigger batch (per period) yang menghitung cost untuk seluruh product_order aktif dalam satu kali eksekusi.
+- Eksekusi menghormati dependency order: node terdalam dihitung lebih dulu.
 
-- Orchestrator menjalankan: (a) gather semua FG product yang harus di-cost, (b) untuk setiap FG, panggil FR-19 dan FR-20, (c) panggil calculation engine eksternal, (d) tulis hasil ke tabel cost result eksternal.
+- Product yang parameternya tidak lengkap di-skip dan dicatat ke error log.
 
-- Bila parameter cost untuk suatu product tidak tersedia di period tersebut, orchestrator melewati product tersebut dan mencatat ke error log. Eksekusi tetap berlanjut untuk product lainnya — semua product yang bisa dihitung akan dihitung; report failed entries di akhir batch.
+**FR-23: On-Demand Costing**
 
-- Eksekusi dilakukan dengan menghormati dependency: node level terdalam dihitung lebih dulu sehingga ketika node level atasnya dihitung, cost komponen captive cost sudah tersedia di period yang sama.
+- User dapat trigger kalkulasi cost untuk satu product beserta dependency chain-nya.
 
-**FR-22: On-Demand Costing**
+- Preview sebelum eksekusi: berapa node yang akan dihitung.
 
-- User dapat memilih product order dan period, lalu trigger kalkulasi cost untuk product tersebut saja (atau termasuk dependency chain bila belum ada hasil di period tersebut).
+**FR-24: Costing Status Dashboard**
 
-- Sebelum eksekusi, sistem menampilkan preview: berapa node yang akan dihitung, mana yang sudah ada cost (reuse) dan mana yang akan dihitung baru.
+- Menampilkan per period: total product, sudah di-cost, gagal, pending.
 
-- Hasil on-demand menimpa cost result period yang sama (overwrite); audit log mencatat user dan timestamp.
+- Drill-down per product: status, last calculated, link ke error detail.
 
-**FR-23: Costing Status Dashboard**
+**FR-25: External Dependencies Contract**
 
-- Menampilkan untuk period berjalan: total product, sudah di-cost, gagal di-cost (dengan alasan), pending.
+| **Tabel** | **Pemilik** | **Operasi sistem ini** | **Konteks** |
+|---|---|---|---|
+| Master raw material price | TBD | Lookup cost per CEI_item_id di period tertentu. Read only. | Node berikutnya butuh cost komponen reference_target = MASTER |
+| Parameter cost (process cost) | TBD | Lookup parameter per CPM_product_sys_id di period tertentu. Read only. | Input bagi calculation engine |
+| Cost result | TBD | Insert/update per (CPM_product_sys_id, CPOV_version_id, period). | Output kalkulasi; input bagi node atasnya saat rollup |
 
-- Drill-down per product: status, last calculated, link ke detail error bila gagal.
+### 6.9. RM Type Management (Admin)
 
-- Menjadi dasar bagi cost accounting tim untuk monitoring tutup buku.
+**FR-26: RM Type CRUD**
 
-**FR-24: External Dependencies Contract**
+- Admin dapat create/edit/disable RM type via admin panel.
 
-Sistem ini bergantung pada tiga tabel eksternal yang spesifikasinya akan didetailkan di dokumen integrasi terpisah. Untuk PRD ini, kontrak minimal yang harus disepakati:
+- Setiap RM type memiliki: code, display name, reference_target (PRODUCT atau MASTER), allow_sub_sequence flag.
 
-| **Tabel**                     | **Pemilik** | **Operasi sistem ini**                                                                                                                                                     | **Konteks pemakaian**                                            |
-|-------------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------|
-| Master raw material price     | TBD         | Lookup cost per master_item_id di period tertentu. Sistem ini hanya read.                                                                                                  | Saat node berikutnya butuh cost komponen rm_ref_type = MASTER    |
-| Parameter cost (process cost) | TBD         | Lookup parameter cost per product_sys_id di period tertentu. Sistem ini hanya read.                                                                                        | Input bagi calculation engine untuk menghitung process cost node |
-| Cost result                   | TBD         | Tabel hasil kalkulasi cost per (product_sys_id, version_id, period). Sistem ini insert/update; calculation engine yang menulis isinya, atau orchestrator atas nama engine. | Output kalkulasi; jadi input bagi node level atasnya saat rollup |
+- RM type tidak dapat dihapus jika ada komponen yang menggunakannya — hanya di-disable.
 
-Bila tabel-tabel di atas belum tersedia pada saat implementasi Phase 1–4, fitur costing (FR-19 sampai FR-23) ditunda ke phase setelah tabel-tabel tersebut siap.
+- reference_target tidak dapat diubah jika ada komponen existing yang menggunakan RM type tersebut.
 
-### 6.8. Audit Trail
+### 6.10. ERP Replica Management (Admin)
 
-**FR-16: Activity Log**
+**FR-27: ERP Sync Status**
 
-- Setiap operasi write (create, update, delete, version commit, import) tercatat dengan: timestamp, user ID, operasi, entity, before-value, after-value (untuk update).
+- Admin dashboard menampilkan: last sync timestamp per replica table (item, grade, shade), jumlah record, jumlah record active/inactive.
 
-- Log dapat dilihat oleh user dengan role appropriate (sesuai SSO/IAM).
+- Manual trigger untuk force sync (selain scheduled job).
+
+- Sync error log: record yang gagal di-sync dengan alasan.
+
+### 6.11. Audit Trail
+
+**FR-17: Activity Log**
+
+- Setiap operasi write (create, update, delete, version commit, import, ERP link change) tercatat dengan: timestamp, user ID, operasi, entity, before-value, after-value.
+
+- Menggunakan cost_audit_log (CAL_) yang shared dengan Phase A.
+
+### 6.12. Parameter Master Management
+
+**FR-28: Parameter Master Display**
+
+- Read-only listing untuk semua user: 125 parameters, filterable by department, function type, display group.
+- Setiap param menampilkan: code, name, description, function type, owner dept, is_required, is_period_dependent, lookup target (jika LOOKUP).
+- Sorted berdasarkan `CPRM_display_order`.
+
+**FR-29: Parameter Master Admin Edit**
+
+- Admin dapat update field non-critical: description, display_order, display_group, is_required_for_costing, owner_department.
+- Field critical **immutable** post-creation (param_code, function_type, data_type, calc_function_key) — perubahan butuh code deployment dan reviewer approval.
+
+**FR-30: Parameter Search**
+
+- Full-text search pada param_code, param_name, description.
+- Multi-filter: owner_dept + function_type + is_required + is_period_dependent.
+
+### 6.13. Generic Master Management
+
+**FR-31: Master Definition CRUD**
+
+- Admin dapat create master type baru via Admin panel.
+- Field wajib: master_code (immutable setelah create), master_name, is_period_dependent flag.
+- Optional: attributes_schema — JSON schema untuk validasi JSONB attributes di data rows.
+
+**FR-32: Master Data CRUD**
+
+- Admin dapat create/update/disable rows di master data per master type.
+- Form dinamis berdasarkan `attributes_schema` dari master definition (guided editor jika schema ada).
+- Untuk period-dependent master: field period wajib diisi.
+- Disable (soft delete) — tidak hard delete agar history calculation terjaga.
+
+**FR-33: Master Data Listing**
+
+- Per master type: tabel listing dengan filter period (untuk period-dependent), filter active status.
+- Pagination, sortable columns.
+
+**FR-34: Master Audit**
+
+- Setiap INSERT/UPDATE/disable pada cost_master_data tercatat di cost_audit_log.
+- Event ini dapat surface di Phase A activity timeline untuk product yang terdampak.
+
+### 6.14. Static Parameter Entry (Phase B)
+
+**FR-35: Static Parameter Entry Form**
+
+- Per product, form parameter diorganisasi per display_group (Spec, Machine, Grade, Packing, dll).
+- Hanya menampilkan params yang `function_type IN ('ENTRY', 'JSONB')` dan `is_period_dependent = false`.
+- Visibility param disesuaikan departemen user: params dengan `owner_department` matching user's department diprioritaskan di atas.
+- Required indicator (asterisk) untuk `is_required_for_costing = true`.
+
+**FR-36: Conditional Parameter Display**
+
+- Param dengan `required_for_yarn_types` filter hanya tampil jika yarn type product (PARAM 1) match.
+- Param JSONB (Raw Material, Masterbatch) tampil sebagai compound JSON editor.
+
+**FR-37: Save Parameter Value**
+
+- UPSERT ke `cost_product_parameter` (static).
+- Validasi: hanya satu value column yang terisi, sesuai data_type param.
+- Mandatory field: filled_by, filled_at.
+- Trigger **service hook auto-complete** (FR-38).
+
+**FR-38: Cross-Phase Auto-Complete Hook**
+
+- Setiap kali parameter value disimpan (FR-37 atau Phase C dynamic save):
+  1. Cari Phase A request yang link ke product ini via `CPR_resolved_product_sys_id`.
+  2. Jika request status = PARAMETER_PENDING, call `get_missing_required_params()`.
+  3. Jika hasilnya empty → auto-transition ke PARAMETER_COMPLETE (**monotonic** — tidak bounce back).
+- Detail flow di `INTEGRATION_CrossPhase.md` section INT-5.
+
+### 6.15. Parameter Dependency Graph (Visualization)
+
+**FR-39: Dependency Graph Display**
+
+- Visualisasi DAG antar parameter menggunakan graph view (force-directed atau tree layout).
+- Click param → tampilkan: depends on (upstream), is depended by (downstream).
+- Use case: impact analysis — "kalau PARAM 8 berubah, param mana saja yang terpengaruh?"
+
+**FR-40: Dependency Graph Sync**
+
+- Read-only dari user perspective. Source of truth ada di Go calculation engine registry.
+- Auto-sync triggered pada deployment via CI/CD: truncate-and-insert `cost_parameter_dependency`.
+- Timestamp sync ditampilkan di header graph view.
+
+### 6.16. Bulk Parameter Import
+
+**FR-41: Bulk Import Parameter Values**
+
+- Admin dapat import nilai parameter via CSV.
+- Format: product_code, param_code, value (static values only — period values via Phase C).
+- Preview validation sebelum commit: validasi product exists, param exists, data_type match.
+- Import report: success count, failed rows dengan alasan.
 
 ## 7. Data Model
 
+### 7.0. Konvensi Penamaan — Column Prefix
+
+Seluruh tabel menggunakan Column Prefix Naming Convention: setiap kolom diawali prefix inisial dari nama tabel (termasuk module prefix `cost_`). Nama kolom globally unique di seluruh database.
+
+**Prefix Registry Phase B:**
+
+| Prefix | Table Name | Category |
+|---|---|---|
+| CPT_ | cost_product_type | Master |
+| CPCC_ | cost_product_code_counter | Master |
+| CPM_ | cost_product_master | Core |
+| CRMT_ | cost_rm_type | Master |
+| CEI_ | cost_erp_item | ERP Replica |
+| CEG_ | cost_erp_grade | ERP Replica |
+| CES_ | cost_erp_shade | ERP Replica |
+| CPO_ | cost_product_order | Core |
+| CPOV_ | cost_product_order_version | Core |
+| CPOC_ | cost_product_order_component | Core |
+| CPOE_ | cost_product_order_exploded | Materialized View |
+| CBL_ | cost_bom_layout | Supporting |
+| CAL_ | cost_audit_log | Shared (Phase A+B) |
+
+**Combined Phase A + B: 28 tables, zero collision.**
+
 ### 7.1. Pendekatan: Hybrid Storage
 
-Storage utama menggunakan model normalized single-level BOM (mengikuti praktik industri ERP). Untuk mendukung query BOM explosion yang sering dan cepat, sistem menyediakan materialized view yang berisi struktur exploded (flatten) — di-refresh otomatis setiap kali ada perubahan version yang di-commit menjadi active.
+Storage utama menggunakan model normalized single-level BOM (mengikuti praktik industri ERP). Untuk mendukung query BOM explosion yang sering dan cepat, sistem menyediakan materialized view (cost_product_order_exploded) yang berisi struktur flatten — di-refresh otomatis setiap kali ada version commit.
 
-Pendekatan ini memberikan keuntungan: (1) update sederhana dan single source of truth, (2) where-used cepat karena natural pada normalized table, (3) BOM explosion juga cepat karena dilayani materialized view.
+### 7.2. Entitas — Master & Reference
 
-### 7.2. Entitas Utama
+#### 7.2.1. cost_product_type (CPT_)
 
-#### 7.2.1. product_order
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPT_type_id | SERIAL | PK | |
+| CPT_type_code | VARCHAR(5) | UNIQUE NOT NULL | "POY", "PTY", "TTY", dll |
+| CPT_type_name | VARCHAR(100) | NOT NULL | Display name |
+| CPT_is_active | BOOLEAN | DEFAULT true | |
+| CPT_created_at | TIMESTAMPTZ | NOT NULL | |
+| CPT_updated_at | TIMESTAMPTZ | NOT NULL | |
 
-Tabel utama yang menyimpan satu record per FG variant. Mengganti konsep FG_TOP_2 di file Excel sumber.
+#### 7.2.2. cost_product_code_counter (CPCC_)
 
-| **Column**             | **Type**              | **Constraint**                | **Notes**                                              |
-|------------------------|-----------------------|-------------------------------|--------------------------------------------------------|
-| product_sys_id         | BIGSERIAL             | PK                            | Pengganti FG_LEFT_NO; di-generate oleh sistem          |
-| product_code           | VARCHAR(100)          | UNIQUE NOT NULL               | Pengganti FG_TOP_2 (mis. TCM0000001-6378-01-MEEREBAH)  |
-| item_code              | VARCHAR(50)           | FK master item                | Pengganti FG_ITEM_CODE                                 |
-| cyl_type_id            | INT                   | FK master cyl_type            | Pengganti FG_CYL_TYPE; FG_SEQUENCE = derived dari sini |
-| shade_id               | INT                   | FK master shade, NULL allowed | Pengganti FG_SHADE_CODE/NAME                           |
-| current_version_id     | BIGINT                | FK product_order_version      | Version yang aktif saat ini                            |
-| status                 | VARCHAR(20)           | NOT NULL                      | active / inactive (soft-delete)                        |
-| created_by, created_at | VARCHAR / TIMESTAMPTZ | NOT NULL                      | Audit fields                                           |
-| updated_by, updated_at | VARCHAR / TIMESTAMPTZ | NOT NULL                      | Audit fields                                           |
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPCC_counter_id | SERIAL | PK | |
+| CPCC_product_type_id | INT | FK cost_product_type, NOT NULL | |
+| CPCC_year_month | VARCHAR(4) | NOT NULL | "2605" = Jun 2026 |
+| CPCC_last_number | INT | NOT NULL DEFAULT 0 | Last used auto number |
 
-#### 7.2.2. product_order_version
+UNIQUE constraint: (CPCC_product_type_id, CPCC_year_month).
 
-Snapshot struktur BOM pada satu titik waktu. Setiap commit perubahan komponen menghasilkan version baru.
+#### 7.2.3. cost_rm_type (CRMT_)
 
-| **Column**             | **Type**              | **Constraint**            | **Notes**                                           |
-|------------------------|-----------------------|---------------------------|-----------------------------------------------------|
-| version_id             | BIGSERIAL             | PK                        | Identifier unique                                   |
-| product_sys_id         | BIGINT                | FK product_order NOT NULL | Owner product order                                 |
-| version_no             | INT                   | NOT NULL                  | Increment per product (1, 2, 3, ...)                |
-| status                 | VARCHAR(20)           | NOT NULL                  | draft / active / superseded                         |
-| effective_from         | TIMESTAMPTZ           | NOT NULL                  | Kapan version mulai aktif                           |
-| effective_to           | TIMESTAMPTZ           | NULL allowed              | Kapan version berhenti aktif (NULL = masih berlaku) |
-| cycle_override         | BOOLEAN               | DEFAULT false             | True bila user override cycle warning               |
-| created_by, created_at | VARCHAR / TIMESTAMPTZ | NOT NULL                  | Audit fields                                        |
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CRMT_type_id | SERIAL | PK | |
+| CRMT_type_code | VARCHAR(30) | UNIQUE NOT NULL | User-definable |
+| CRMT_type_name | VARCHAR(100) | NOT NULL | Display name |
+| CRMT_reference_target | VARCHAR(10) | NOT NULL | PRODUCT / MASTER |
+| CRMT_allow_sub_sequence | BOOLEAN | DEFAULT false | True untuk Multi Yarn-like types |
+| CRMT_is_active | BOOLEAN | DEFAULT true | |
+| CRMT_created_at | TIMESTAMPTZ | NOT NULL | |
 
-Constraint tambahan: UNIQUE (product_sys_id, version_no). Hanya satu version dengan status = active per product_sys_id (partial unique index).
+Initial seed: STORE_RATE (MASTER), CAPTIVE_COST (PRODUCT), MULTI_YARN (PRODUCT, allow_sub_sequence=true), UNEVEN_PACK (PRODUCT).
 
-#### 7.2.3. product_order_component
+### 7.3. Entitas — ERP Replica
 
-Daftar komponen langsung sebuah version. Inilah representasi normalized single-level BOM.
+Replicated from Oracle ERP. Read-only di costing. Sync via scheduled job (mechanism TBD).
 
-| **Column**     | **Type**     | **Constraint**                    | **Notes**                                                                           |
-|----------------|--------------|-----------------------------------|-------------------------------------------------------------------------------------|
-| component_id   | BIGSERIAL    | PK                                | Identifier unique                                                                   |
-| version_id     | BIGINT       | FK product_order_version NOT NULL | Parent version                                                                      |
-| sequence_no    | INT          | NOT NULL                          | Urutan proses di dalam version (1 = paling awal)                                    |
-| sub_sequence   | INT          | NULL allowed                      | Untuk multi-yarn blending (NULL = single component)                                 |
-| sub_type       | VARCHAR(30)  | NULL allowed                      | Yarn-Cap / Stores / PTY / REWINDING                                                 |
-| rm_type        | VARCHAR(30)  | NOT NULL                          | Store Rate / Captive Cost / Multi Yarn / Uneven Packing                             |
-| rm_ref_type    | VARCHAR(10)  | NOT NULL                          | PRODUCT (FK ke product_order) atau MASTER (FK ke master item)                       |
-| rm_ref_id      | BIGINT       | NOT NULL                          | Polymorphic FK: ke product_order.product_sys_id ATAU master item id                 |
-| rm_description | VARCHAR(255) | NULL allowed                      | Deskripsi fallback untuk Multi Yarn yang RM-nya belum ada di master (lihat catatan) |
+#### 7.3.1. cost_erp_item (CEI_)
 
-Catatan implementasi polymorphic FK: bisa dipisah menjadi dua kolom (rm_product_sys_id, rm_master_item_id) yang mutually exclusive (CHECK constraint) untuk dapat menggunakan FK constraint database. Pendekatan ini direkomendasikan.
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CEI_item_id | BIGSERIAL | PK | Internal PK |
+| CEI_item_code | VARCHAR(20) | UNIQUE NOT NULL | "PTY0000001" |
+| CEI_item_name | VARCHAR(255) | | |
+| CEI_item_type | VARCHAR(10) | | "POY", "PTY", dll |
+| CEI_is_active | BOOLEAN | DEFAULT true | |
+| CEI_synced_at | TIMESTAMPTZ | NOT NULL | Last sync timestamp |
 
-Catatan rm_description: 276 baris di data sumber memiliki RM_TYPE = Multi Yarn dengan RM_ITEM_CODE NULL — hanya RM_TOP_2 (deskripsi text) yang tersedia. Untuk akomodasi ini, kolom rm_description menampung deskripsi text bila item belum ada di master. Best practice: master item dilengkapi terlebih dahulu sehingga rm_ref_id selalu terisi.
+#### 7.3.2. cost_erp_grade (CEG_)
 
-#### 7.2.4. product_order_exploded (materialized view)
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CEG_grade_id | SERIAL | PK | |
+| CEG_grade_code | VARCHAR(20) | UNIQUE NOT NULL | "AX", "AM", "B", "C" |
+| CEG_grade_name | VARCHAR(100) | | |
+| CEG_is_active | BOOLEAN | DEFAULT true | |
+| CEG_synced_at | TIMESTAMPTZ | NOT NULL | |
 
-Materialized view yang berisi hasil flatten/explode rekursif. Setiap baris merepresentasikan satu komponen multi-level dari sebuah product order.
+#### 7.3.3. cost_erp_shade (CES_)
 
-| **Column**                      | **Type** | **Constraint**           | **Notes**                                         |
-|---------------------------------|----------|--------------------------|---------------------------------------------------|
-| product_sys_id                  | BIGINT   | FK product_order         | Product order yang di-explode                     |
-| version_id                      | BIGINT   | FK product_order_version | Version snapshot                                  |
-| level                           | INT      | —                        | Kedalaman: 1 = direct child, 2 = grand-child, dst |
-| sequence_path                   | TEXT     | —                        | Jalur sequence (mis. 1 → 2 → 1) untuk debugging   |
-| rm_ref_type, rm_ref_id          | —        | —                        | Sama seperti di product_order_component           |
-| rm_type, sub_sequence, sub_type | —        | —                        | Diturunkan dari komponen asal                     |
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CES_shade_id | SERIAL | PK | |
+| CES_shade_code | VARCHAR(20) | UNIQUE NOT NULL | "NL", "Z114S", "Z108S" |
+| CES_shade_name | VARCHAR(100) | | |
+| CES_is_active | BOOLEAN | DEFAULT true | |
+| CES_synced_at | TIMESTAMPTZ | NOT NULL | |
 
-View ini di-refresh oleh trigger pada perubahan status version (commit ke active) atau via scheduled job (untuk recovery). REFRESH MATERIALIZED VIEW CONCURRENTLY direkomendasikan agar tidak mem-block read query.
+Note: CES_ juga dipakai Phase A untuk autocomplete shade saat Marketing isi product spec. Phase A field CPS_shade_id → FK ke CES_shade_id.
 
-#### 7.2.5. audit_log
+### 7.4. Entitas — Product Master
 
-Log audit aktivitas user pada entitas product_order, version, dan component.
+#### 7.4.1. cost_product_master (CPM_)
 
-| **Column**            | **Type**              | **Constraint** | **Notes**                           |
-|-----------------------|-----------------------|----------------|-------------------------------------|
-| log_id                | BIGSERIAL             | PK             |                                     |
-| entity_type           | VARCHAR(50)           | NOT NULL       | product_order / version / component |
-| entity_id             | BIGINT                | NOT NULL       |                                     |
-| operation             | VARCHAR(20)           | NOT NULL       | INSERT / UPDATE / DELETE / COMMIT   |
-| before_data           | JSONB                 | NULL allowed   | Snapshot sebelum perubahan          |
-| after_data            | JSONB                 | NULL allowed   | Snapshot setelah perubahan          |
-| user_id, performed_at | VARCHAR / TIMESTAMPTZ | NOT NULL       | Audit fields                        |
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPM_product_sys_id | BIGSERIAL | PK | Internal, immutable |
+| CPM_product_code | VARCHAR(20) | UNIQUE NOT NULL | CSTPTY2605000001 (generated) |
+| CPM_product_type_id | INT | FK cost_product_type, NOT NULL | |
+| CPM_product_name | TEXT | NOT NULL | "PTY 150/36/RND/DSD/NI/DH/N/1/Z" |
+| CPM_shade_code | VARCHAR(50) | | Free-text introductory |
+| CPM_grade_code | VARCHAR(20) | NOT NULL DEFAULT 'AX' | Default top grade, editable |
+| CPM_description | TEXT | | |
+| CPM_erp_item_code | VARCHAR(20) | | Informational ("PTY0000001") |
+| CPM_erp_grade_code_1 | VARCHAR(20) | | Informational ("AX") |
+| CPM_erp_grade_code_2 | VARCHAR(20) | | Informational ("Z108S") |
+| CPM_erp_linked_at | TIMESTAMPTZ | | |
+| CPM_erp_linked_by | VARCHAR(64) | | |
+| CPM_is_active | BOOLEAN | DEFAULT true | ACTIVE / INACTIVE |
+| CPM_created_at | TIMESTAMPTZ | NOT NULL | |
+| CPM_created_by | VARCHAR(64) | NOT NULL | |
+| CPM_updated_at | TIMESTAMPTZ | NOT NULL | |
+| CPM_updated_by | VARCHAR(64) | NOT NULL | |
 
-#### 7.2.6. product_order_version_layout
+Product code generation: atomic function menggunakan cost_product_code_counter. Format CST + CPT_type_code + YYMM + LPAD(auto,6,'0').
 
-Menyimpan posisi visual (x, y) setiap node pada Flow Editor agar tata letak yang sudah diatur user dapat di-preserve antar sesi.
+### 7.5. Entitas — Product Order & BOM
 
-| **Column**    | **Type**    | **Constraint**                    | **Notes**                                      |
-|---------------|-------------|-----------------------------------|------------------------------------------------|
-| layout_id     | BIGSERIAL   | PK                                |                                                |
-| version_id    | BIGINT      | FK product_order_version NOT NULL | Owner version snapshot                         |
-| node_ref_type | VARCHAR(10) | NOT NULL                          | PRODUCT atau MASTER (sama seperti rm_ref_type) |
-| node_ref_id   | BIGINT      | NOT NULL                          | ID node yang di-layout                         |
-| pos_x         | INT         | NOT NULL                          | Posisi horizontal canvas (px)                  |
-| pos_y         | INT         | NOT NULL                          | Posisi vertikal canvas (px)                    |
-| updated_at    | TIMESTAMPTZ | NOT NULL                          | Audit field                                    |
+#### 7.5.1. cost_product_order (CPO_)
 
-Catatan: bila tidak ada record layout untuk sebuah version (mis. version hasil import Excel atau version yang dibuka di Flow Editor pertama kali), front-end menjalankan auto-layout algorithm dan men-generate record default.
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPO_order_id | BIGSERIAL | PK | |
+| CPO_product_sys_id | BIGINT | FK cost_product_master, NOT NULL | WHAT product |
+| CPO_cyl_type_id | INT | | FK master cyl_type (ERP) |
+| CPO_current_version_id | BIGINT | FK cost_product_order_version | Set after first commit |
+| CPO_is_active | BOOLEAN | DEFAULT true | Soft-delete |
+| CPO_created_at | TIMESTAMPTZ | NOT NULL | |
+| CPO_created_by | VARCHAR(64) | NOT NULL | |
+| CPO_updated_at | TIMESTAMPTZ | NOT NULL | |
+| CPO_updated_by | VARCHAR(64) | NOT NULL | |
 
-### 7.3. Relasi (ERD Summary)
+Perubahan dari v1.2: field identity (product_code, item_code, shade_id) pindah ke cost_product_master. Product order sekarang = "BOM definition for a product" bukan "the product itself".
 
-Diagram relasi (high-level):
+#### 7.5.2. cost_product_order_version (CPOV_)
 
-\[master_item\] ──(FK)── \[product_order\] ──1:N── \[product_order_version\] ──1:N── \[product_order_component\]
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPOV_version_id | BIGSERIAL | PK | |
+| CPOV_order_id | BIGINT | FK cost_product_order, NOT NULL | |
+| CPOV_version_no | INT | NOT NULL | Increment per order |
+| CPOV_status | VARCHAR(20) | NOT NULL | draft / active / superseded |
+| CPOV_effective_from | TIMESTAMPTZ | | Kapan version aktif |
+| CPOV_effective_to | TIMESTAMPTZ | | Kapan superseded |
+| CPOV_cycle_override | BOOLEAN | DEFAULT false | |
+| CPOV_created_at | TIMESTAMPTZ | NOT NULL | |
+| CPOV_created_by | VARCHAR(64) | NOT NULL | |
 
-\[product_order_component\].rm_ref_id (polymorphic) ──\> \[product_order\] (Captive Cost)
+Constraints: UNIQUE (CPOV_order_id, CPOV_version_no). Partial unique index: max 1 active per order.
 
-──\> \[master_item\] (Store Rate)
+#### 7.5.3. cost_product_order_component (CPOC_)
 
-\[product_order_version\] ──1:N── \[product_order_version_layout\] (posisi visual canvas)
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CPOC_component_id | BIGSERIAL | PK | |
+| CPOC_version_id | BIGINT | FK cost_product_order_version, NOT NULL | |
+| CPOC_sequence_no | INT | NOT NULL | |
+| CPOC_sub_sequence | INT | | Untuk Multi Yarn-like types |
+| CPOC_sub_type | VARCHAR(30) | | Yarn-Cap / Stores / PTY / REWINDING |
+| CPOC_rm_type_id | INT | FK cost_rm_type, NOT NULL | User-definable RM type |
+| CPOC_rm_product_sys_id | BIGINT | FK cost_product_master | Diisi jika reference_target = PRODUCT |
+| CPOC_rm_master_item_id | BIGINT | FK cost_erp_item | Diisi jika reference_target = MASTER |
+| CPOC_rm_description | VARCHAR(255) | | Fallback bila RM belum di-master |
 
-\[product_order_exploded\] = materialized view dari traversal rekursif atas \[product_order_component\]
+CHECK constraint: exactly one of (rm_product_sys_id, rm_master_item_id) non-null, ATAU kedua null + rm_description non-null (fallback).
 
-### 7.4. Pendekatan Teknis: Visual BOM Editor
+UNIQUE constraint: (CPOC_version_id, CPOC_sequence_no, CPOC_sub_sequence).
 
-Untuk implementasi Flow Editor (FR-17) dan Flow View (FR-9), direkomendasikan penggunaan library canvas/diagram berikut sesuai stack front-end:
+#### 7.5.4. cost_bom_layout (CBL_)
 
-| **Library**                | **Konteks**        | **Catatan**                                                                                                                                                             |
-|----------------------------|--------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| React Flow / @xyflow/react | React              | Library matang, MIT licensed, dukungan penuh untuk custom node/edge, pan/zoom, minimap, snap-to-grid, save/load state ke JSON. Banyak dipakai di production (mis. n8n). |
-| dagre / elkjs              | Layout engine      | Dipakai bersama React Flow untuk auto-layout hierarchical. Dagre lebih sederhana; elkjs lebih powerful untuk graph besar dengan banyak constraint.                      |
-| d3-zoom / d3-drag          | Vanilla / fallback | Bila perlu kontrol lebih granular atau target non-React; lebih banyak coding manual.                                                                                    |
+| **Column** | **Type** | **Constraint** | **Notes** |
+|---|---|---|---|
+| CBL_layout_id | BIGSERIAL | PK | |
+| CBL_version_id | BIGINT | FK cost_product_order_version, NOT NULL | |
+| CBL_node_ref_type | VARCHAR(10) | NOT NULL | PRODUCT / MASTER |
+| CBL_node_ref_id | BIGINT | NOT NULL | |
+| CBL_pos_x | INT | NOT NULL | Posisi horizontal (px) |
+| CBL_pos_y | INT | NOT NULL | Posisi vertikal (px) |
+| CBL_updated_at | TIMESTAMPTZ | NOT NULL | |
 
-Format penyimpanan state canvas:
+UNIQUE constraint: (CBL_version_id, CBL_node_ref_type, CBL_node_ref_id).
 
-- Nodes: di-derive dari product_order + product_order_component pada version aktif; tidak perlu disimpan terpisah sebagai "node" entity.
+#### 7.5.5. cost_product_order_exploded (CPOE_) — Materialized View
 
-- Edges: di-derive dari product_order_component (1 baris komponen = 1 edge dari rm_ref ke parent product order).
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CPOE_root_product_sys_id | BIGINT | Product yang di-explode |
+| CPOE_version_id | BIGINT | Version snapshot |
+| CPOE_level | INT | 1 = direct child, 2 = grand-child, dst |
+| CPOE_sequence_no | INT | |
+| CPOE_sub_sequence | INT | |
+| CPOE_sub_type | VARCHAR(30) | |
+| CPOE_rm_type_id | INT | FK cost_rm_type |
+| CPOE_rm_product_sys_id | BIGINT | |
+| CPOE_rm_master_item_id | BIGINT | |
+| CPOE_rm_description | VARCHAR(255) | |
+| CPOE_sequence_path | TEXT | Jalur sequence untuk debugging |
 
-- Position: disimpan di product_order_version_layout (lihat 7.2.6).
+View di-refresh via REFRESH MATERIALIZED VIEW CONCURRENTLY setelah version commit atau via scheduled daily job.
 
-- Saat user save draft, sistem write ke 3 tabel: product_order, product_order_component, product_order_version_layout dalam 1 transaction.
+### 7.6. Relasi (ERD Summary)
 
-Pertimbangan UX penting:
+```
+[cost_product_type] 1:N [cost_product_master] 1:0..1 [cost_product_order]
+                                                           │
+[cost_product_code_counter] — utility untuk code generation │
+                                                           │
+                                              [cost_product_order_version]
+                                                  │              │
+                                                  1:N            1:N
+                                                  │              │
+                                    [cost_product_order_component]  [cost_bom_layout]
+                                          │              │
+                                  Dual FK │              │
+                     ┌────────────────────┴──────────────┐
+                     │                                   │
+          CPOC_rm_product_sys_id              CPOC_rm_master_item_id
+                     │                                   │
+          [cost_product_master]                [cost_erp_item]
+          (reference_target=PRODUCT)           (reference_target=MASTER)
 
-- Karena BOM bisa besar (max depth = 13 di data current, ratusan node untuk product complex), Flow Editor sebaiknya memungkinkan user fokus pada subset graph — mis. "hanya 2 level ke atas dan 2 level ke bawah dari node terpilih" — agar canvas tidak overwhelming.
+[cost_rm_type] — master table, determines which FK to use
 
-- Untuk eksplorasi multi-level penuh, gunakan BOM Tree (vertical) atau Flow View read-only (horizontal); Flow Editor lebih cocok untuk editing fokus.
+[cost_product_order_exploded] — materialized view dari recursive traversal
 
-- Validate cycle harus dijalankan baik saat real-time saat user menarik koneksi baru (visual warning), maupun saat commit (block save jika user tidak override).
+[cost_erp_grade], [cost_erp_shade] — ERP replica, supporting tables
 
-### 7.5. Indeks Wajib
+[cost_audit_log] — cross-cutting, shared with Phase A
+```
 
-- UNIQUE INDEX (product_order.product_code).
+### 7.7. Integrasi Phase A → Phase B
 
-- INDEX (product_order_version.product_sys_id, status) — untuk lookup version aktif cepat.
+Promote routing draft ke product order:
 
-- INDEX (product_order_component.version_id, sequence_no) — untuk read komponen terurut.
+1. PIC di Phase A klik "Promote to Product Order".
 
-- INDEX (product_order_component.rm_ref_type, rm_ref_id) — untuk where-used query.
+2. Sistem buka dialog: search/create product master.
+   - Search existing → select CPM_product_sys_id.
+   - Create new → input product_type, product_name, shade_code → system generate product_code.
 
-- INDEX (product_order_exploded.product_sys_id, level), (rm_ref_type, rm_ref_id) — query explosion & where-used.
+3. System create cost_product_order (CPO_) yang reference product master terpilih.
 
-- UNIQUE INDEX (product_order_version_layout.version_id, node_ref_type, node_ref_id) — satu posisi per node per version.
+4. System copy cost_routing_draft_component (CRDC_) → cost_product_order_component (CPOC_):
+   - CRDC_rm_ref_text → resolve ke CPOC_rm_product_sys_id atau CPOC_rm_master_item_id (atau fallback ke CPOC_rm_description).
+   - CRDC_rm_type → match ke CRMT_type_id di cost_rm_type.
+
+5. System set CRD_linked_product_order_id → CPO_order_id.
+
+6. System set CRD_status → PROMOTED.
+
+Seed fields dari Phase A:
+- CRD_shade_code → CPM_shade_code (saat create new product master).
+- CRD_raw_material_type → hint untuk komponen terdalam (informational, Engineering adjust).
+
+### 7.8. Indeks Wajib
+
+- cost_product_master: UNIQUE(CPM_product_code), INDEX(CPM_product_type_id), INDEX(CPM_erp_item_code) WHERE NOT NULL, GIN full-text search pada CPM_product_name.
+
+- cost_product_order: INDEX(CPO_product_sys_id), INDEX(CPO_is_active) WHERE true.
+
+- cost_product_order_version: INDEX(CPOV_order_id, CPOV_status), partial UNIQUE(CPOV_order_id) WHERE status='active'.
+
+- cost_product_order_component: INDEX(CPOC_version_id, CPOC_sequence_no), INDEX(CPOC_rm_product_sys_id) WHERE NOT NULL, INDEX(CPOC_rm_master_item_id) WHERE NOT NULL, INDEX(CPOC_rm_type_id).
+
+- cost_product_order_exploded: UNIQUE(root, version, level, sequence_path), INDEX(CPOE_rm_product_sys_id) WHERE NOT NULL, INDEX(CPOE_rm_master_item_id) WHERE NOT NULL.
+
+- cost_bom_layout: UNIQUE(CBL_version_id, CBL_node_ref_type, CBL_node_ref_id).
+
+### 7.9. Entitas — Parameter Master & Generic Master
+
+#### 7.9.1. cost_parameter_master (CPRM_)
+
+Definisi 125+ parameter. Single source of truth metadata parameter — engine, UI, dan validation semua merujuk ke tabel ini.
+
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CPRM_param_id | SERIAL PK | |
+| CPRM_param_code | VARCHAR(50) UNIQUE | "DENIER", "YARN_TYPE" — immutable |
+| CPRM_param_name | VARCHAR(200) | Human-readable |
+| CPRM_description | TEXT | |
+| CPRM_function_type | VARCHAR(20) | ENTRY / CALCULATION / LOOKUP / JSONB / NOT_USED |
+| CPRM_data_type | VARCHAR(20) | NUMERIC / TEXT / FLAG / JSON |
+| CPRM_unit_of_measure | VARCHAR(20) | kg, %, USD/kg |
+| CPRM_owner_department | VARCHAR(30) | Engineering / Production / Finance / RND |
+| CPRM_is_required_for_costing | BOOLEAN | Wajib diisi untuk dapat cost |
+| CPRM_required_for_yarn_types | JSONB | ["PTY","TTY"] atau NULL = all yarn types |
+| CPRM_is_period_dependent | BOOLEAN | false → CPP (Phase B) / true → CPPP (Phase C) |
+| CPRM_formula_doc | TEXT | Human-readable formula documentation |
+| CPRM_calc_function_key | VARCHAR(100) | Go function key, wajib untuk CALCULATION type |
+| CPRM_lookup_master_code | VARCHAR(30) | FK ke CMD_master_code, wajib untuk LOOKUP type |
+| CPRM_display_order | INT | Urutan tampil di form |
+| CPRM_display_group | VARCHAR(50) | Spec / Machine / Grade / Packing / Cost / dll |
+| CPRM_is_active | BOOLEAN | |
+
+**Breakdown 125 parameter berdasarkan function type:**
+
+| Function Type | Jumlah | Keterangan |
+|---|---|---|
+| ENTRY | 45 | Diisi manual (termasuk static specs) |
+| CALCULATION | 41 | Dihitung Go engine |
+| LOOKUP | 28 | Dari master data |
+| JSONB | 14 | Struktur JSON complex (RM, MB) |
+| NOT_USED | 6 | Placeholder, dikosongkan dulu |
+
+**Static vs Dynamic split:**
+
+| is_period_dependent | Jumlah | Storage |
+|---|---|---|
+| false | 72 | cost_product_parameter (Phase B) |
+| true | 53 | cost_product_parameter_period (Phase C) |
+
+Seed data lengkap di: `V003__phase_b_parameter_master.sql`
+
+#### 7.9.2. cost_master_definition (CMD_)
+
+Type registry untuk generic master pattern.
+
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CMD_master_id | SERIAL PK | |
+| CMD_master_code | VARCHAR(30) UNIQUE | Immutable: "MACHINE", "BOX_BOBBIN_COST" |
+| CMD_master_name | VARCHAR(100) | |
+| CMD_description | TEXT | |
+| CMD_attributes_schema | JSONB | Optional JSON schema untuk validasi |
+| CMD_is_period_dependent | BOOLEAN | true = rows butuh period field |
+| CMD_is_active | BOOLEAN | |
+
+**8 master types initial:**
+
+| Master Code | Period Dep? | Contoh atribut |
+|---|---|---|
+| MACHINE | No | power_per_day, manpower, overhead, spares |
+| BOX_BOBBIN_COST | Yes | bobbin_rate, box_rate, weight_per_box |
+| INTERMINGLING | Yes | cost_per_kg |
+| PARAM_DATA | Yes | steam_cost, softner_cost, washing_cost |
+| PRODUCT_GRADE | No | std_value_loss, bc_special |
+| VOLUME_BUCKET | No | bucket_qty, machine_code |
+| CHANGEOVER_LOSS | No | loss_kg, machine_code |
+| YARN_TYPE | No | yarn_type_code, description |
+
+#### 7.9.3. cost_master_data (CMSD_)
+
+Actual master data rows. Attributes di JSONB.
+
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CMSD_data_id | BIGSERIAL PK | |
+| CMSD_master_id | INT FK CMD | |
+| CMSD_data_code | VARCHAR(100) | Instance identifier (machine code, pack code) |
+| CMSD_data_name | VARCHAR(255) | |
+| CMSD_period | VARCHAR(6) | "202605" — NULL untuk non-period master |
+| CMSD_attributes | JSONB NOT NULL | Data aktual |
+| CMSD_is_active | BOOLEAN | Soft delete |
+
+UNIQUE (CMSD_master_id, CMSD_data_code, CMSD_period).
+GIN index pada CMSD_attributes untuk query fleksibel.
+
+#### 7.9.4. cost_product_parameter (CPP_)
+
+Static parameter values per product. Untuk params dengan `CPRM_is_period_dependent = false`.
+
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CPP_value_id | BIGSERIAL PK | |
+| CPP_product_sys_id | BIGINT FK CPM | |
+| CPP_param_id | INT FK CPRM | |
+| CPP_value_numeric | DECIMAL(20,6) | Untuk NUMERIC params |
+| CPP_value_text | TEXT | Untuk TEXT params |
+| CPP_value_flag | BOOLEAN | Untuk FLAG params |
+| CPP_value_json | JSONB | Untuk JSON params |
+| CPP_filled_at / by | TIMESTAMPTZ / VARCHAR | |
+
+UNIQUE (CPP_product_sys_id, CPP_param_id).
+
+Estimasi: 12.000 products × 72 static params = **~864.000 rows**.
+
+#### 7.9.5. cost_parameter_dependency (CPRD_)
+
+Dependency graph — visualization only. Auto-synced dari Go calc registry saat deployment. Read-only untuk user.
+
+| **Column** | **Type** | **Notes** |
+|---|---|---|
+| CPRD_dep_id | BIGSERIAL PK | |
+| CPRD_param_id | INT FK CPRM | Dependent param |
+| CPRD_depends_on_param_id | INT FK CPRM | Upstream param |
+| CPRD_synced_at | TIMESTAMPTZ | Last sync |
+| CPRD_git_commit | VARCHAR(40) | Code version saat sync |
+
+UNIQUE (CPRD_param_id, CPRD_depends_on_param_id). No self-dependency (CHECK constraint).
+
+### 7.10. Prefix Registry (Update)
+
+**Phase B lengkap — 17 tables:**
+
+| Prefix | Table |
+|---|---|
+| CPT_ | cost_product_type |
+| CPCC_ | cost_product_code_counter |
+| CPM_ | cost_product_master |
+| CRMT_ | cost_rm_type |
+| CEI_ | cost_erp_item |
+| CEG_ | cost_erp_grade |
+| CES_ | cost_erp_shade |
+| CPO_ | cost_product_order |
+| CPOV_ | cost_product_order_version |
+| CPOC_ | cost_product_order_component |
+| CPOE_ | cost_product_order_exploded (matview) |
+| CBL_ | cost_bom_layout |
+| CPRM_ | cost_parameter_master |
+| CMD_ | cost_master_definition |
+| CMSD_ | cost_master_data |
+| CPP_ | cost_product_parameter |
+| CPRD_ | cost_parameter_dependency |
 
 ## 8. Excel Input Format (untuk Import)
 
 ### 8.1. Filosofi
 
-Format Excel baru disederhanakan untuk match dengan model normalized: satu baris di Excel = satu komponen langsung. Hasilnya, jumlah baris akan turun signifikan dibanding format flatten lama (estimasi dari 31.012 baris menjadi sekitar 13.000–15.000 baris).
-
-Sistem akan menyediakan converter dari format Excel lama ke format Excel baru untuk migrasi data awal — user tidak perlu mengubah file Excel lama secara manual.
+Format Excel baru disederhanakan untuk match dengan model normalized: satu baris di Excel = satu komponen langsung. Sistem akan menyediakan converter dari format Excel lama ke format baru.
 
 ### 8.2. Struktur Sheet
 
-Excel input terdiri dari satu sheet utama. Atribut master (cyl_type, shade) tidak perlu diisi ulang karena akan di-resolve oleh sistem berdasarkan kode.
+| **Column** | **Type** | **Required** | **Description** |
+|---|---|---|---|
+| FG_PRODUCT_CODE | VARCHAR | Yes | Product code (CST format) atau legacy product_code |
+| FG_ITEM_CODE | VARCHAR | Yes | Item code (harus ada di cost_erp_item) |
+| FG_CYL_TYPE_CODE | VARCHAR | Yes | Kode cylinder type |
+| FG_SHADE_CODE | VARCHAR | No | Shade code (free-text) |
+| FG_GRADE_CODE | VARCHAR | No | Grade code (default AX jika kosong) |
+| SEQUENCE_NO | INT | Yes | Urutan komponen |
+| SUB_SEQUENCE | INT | No | Untuk multi-yarn blending |
+| SUB_TYPE | VARCHAR | No | Yarn-Cap / Stores / PTY / REWINDING |
+| RM_TYPE_CODE | VARCHAR | Yes | Code dari cost_rm_type |
+| RM_REF_TYPE | VARCHAR | Yes | PRODUCT / MASTER (harus sesuai RM type reference_target) |
+| RM_REF_CODE | VARCHAR | Yes | Product code (bila PRODUCT) atau ERP item code (bila MASTER) |
+| RM_DESCRIPTION | VARCHAR | No | Fallback deskripsi |
 
-| **Column**       | **Type** | **Required** | **Description**                                                                |
-|------------------|----------|--------------|--------------------------------------------------------------------------------|
-| FG_TOP_2         | VARCHAR  | Yes          | Identitas product order (unik global)                                          |
-| FG_ITEM_CODE     | VARCHAR  | Yes          | Item code (harus ada di master item)                                           |
-| FG_CYL_TYPE_CODE | VARCHAR  | Yes          | Kode cylinder type (harus ada di master)                                       |
-| FG_SHADE_CODE    | VARCHAR  | No           | Kode shade (harus ada di master bila diisi)                                    |
-| SEQUENCE_NO      | INT      | Yes          | Urutan komponen di product order ini (1, 2, 3, ...)                            |
-| SUB_SEQUENCE     | INT      | No           | Untuk multi-yarn blending; kosongkan bila single component                     |
-| SUB_TYPE         | VARCHAR  | No           | Yarn-Cap / Stores / PTY / REWINDING                                            |
-| RM_TYPE          | VARCHAR  | Yes          | Store Rate / Captive Cost / Multi Yarn / Uneven Packing                        |
-| RM_REF_TYPE      | VARCHAR  | Yes          | PRODUCT (mengarah ke FG_TOP_2 lain) atau MASTER (mengarah ke kode master item) |
-| RM_REF_CODE      | VARCHAR  | Yes          | Kode product order lain (bila PRODUCT) atau kode master item (bila MASTER)     |
-| RM_DESCRIPTION   | VARCHAR  | No           | Fallback deskripsi bila Multi Yarn RM belum ada di master                      |
+### 8.3. Import Behavior
 
-### 8.3. Contoh Baris
+- Sistem auto-create product master record jika FG_PRODUCT_CODE belum ada (generate kode baru sesuai format CST).
 
-Contoh: TCM0000001-6378-01-MEEREBAH yang sebelumnya memakai 5 baris di format lama, di format baru hanya 1 baris (karena ia hanya punya satu komponen langsung: TCY0000061-6378-01-CABLER):
+- ERP linkage auto-fill jika FG_ITEM_CODE match di cost_erp_item.
 
-FG_TOP_2: TCM0000001-6378-01-MEEREBAH
-
-FG_ITEM_CODE: TCM0000001 \| FG_CYL_TYPE_CODE: MEEREBAH \| FG_SHADE_CODE: 6378-01
-
-SEQUENCE_NO: 1 \| RM_TYPE: Captive Cost \| RM_REF_TYPE: PRODUCT
-
-RM_REF_CODE: TCY0000061-6378-01-CABLER
-
-Sedangkan TCY0000061-6378-01-CABLER akan punya barisnya sendiri (1 baris, mengarah ke PTY0001532-6378-01-PLY ( Carp)), dan seterusnya. Chain panjang muncul sebagai banyak entri terpisah, bukan diulang-ulang.
-
-### 8.4. Import Validation Rules
-
-- Setiap FG_TOP_2 harus konsisten atribut FG_ITEM_CODE, FG_CYL_TYPE_CODE, dan FG_SHADE_CODE-nya di seluruh baris.
-
-- Kombinasi FG_TOP_2 + SEQUENCE_NO + SUB_SEQUENCE harus unik.
-
-- Bila RM_REF_TYPE = PRODUCT, RM_REF_CODE harus berupa FG_TOP_2 yang juga ada di file ATAU sudah ada di database.
-
-- Bila RM_REF_TYPE = MASTER, RM_REF_CODE harus ada di master item.
-
-- Sistem mendeteksi cycle pada seluruh file sebelum commit; jika ada, ditampilkan sebagai warning yang perlu di-override.
-
-### 8.5. Migrasi dari Format Lama
-
-Sistem menyediakan converter terpisah (script atau menu) untuk membaca file Excel format lama (22 kolom dengan prefix FG\_ dan RM\_) dan menghasilkan file format baru. Logika converter:
-
-26. Untuk setiap FG_TOP_2 di file lama, identifikasi baris dengan RM_SEQUENCE max — itu adalah komponen langsung (direct child) sebenarnya.
-
-27. Baris-baris dengan RM_SEQUENCE \< max adalah hasil flatten dari intermediate product di bawahnya; di-skip untuk FG ini karena akan muncul sebagai entri tersendiri ketika converter memproses intermediate product itu.
-
-28. Untuk Multi Yarn (RM_SUB_SEQUENCE not null), semua row dengan sequence_no yang sama dipertahankan dengan sub_sequence terisi.
-
-29. Field RM_LEFT_NO_INTO dan RM_SUB_SEQUENCE_REAL diabaikan (redundant).
+- Cycle detection pada seluruh file sebelum commit.
 
 ## 9. Non-Functional Requirements
 
 ### 9.1. Performance
 
-- BOM explosion single product (depth ≤ 10): response time \< 2 detik.
+- BOM explosion single product (depth ≤ 10): response time < 2 detik.
 
-- Where-used single item: response time \< 2 detik.
+- Where-used single item: response time < 2 detik.
 
-- Search & list product order (paginated): response time \< 1 detik untuk dataset ≤ 50.000 record.
+- Search & list product order/master (paginated): response time < 1 detik untuk dataset ≤ 50.000 record.
 
-- Refresh materialized view (concurrent): tidak mem-block read; selesai \< 30 detik untuk full refresh.
+- Refresh materialized view (concurrent): selesai < 30 detik untuk full refresh.
+
+- Product master full-text search: response time < 500ms.
 
 ### 9.2. Scalability
 
-- Mendukung minimal 50.000 product order, 250.000 komponen, 200.000 versions.
+- Mendukung minimal 50.000 product master, 50.000 product order, 250.000 komponen, 200.000 versions.
 
 - Mendukung minimal 50 concurrent users.
 
 ### 9.3. Availability
 
-- Target uptime: 99.5% jam kerja (mengikuti SLA infrastruktur internal).
+- Target uptime: 99.5% jam kerja.
 
 - Backup database otomatis harian; retensi minimal 30 hari.
 
@@ -659,191 +1077,180 @@ Sistem menyediakan converter terpisah (script atau menu) untuk membaca file Exce
 
 - Autentikasi via SSO/IAM eksisting.
 
-- Otorisasi berbasis role dari IAM (mapping role → permission didefinisikan saat implementasi).
+- Otorisasi berbasis role (mapping role → permission di implementasi).
 
-- Audit log atas semua operasi write (lihat FR-16).
+- Audit log atas semua operasi write.
 
 - Database connection menggunakan TLS.
 
 ### 9.5. Platform & Form Factor
 
-Bentuk aplikasi (web app / web + mobile / desktop) belum diputuskan pada saat dokumen ini disusun. Akan ditentukan pada fase technical design berdasarkan profil user dan ketersediaan tim engineering.
+- Web app responsif (desktop primary).
 
-Apapun bentuknya, prinsip yang dipegang:
+- React front-end (konsisten dengan Phase A); React Flow untuk visual BOM editor.
 
-- API back-end yang clean dan dapat dikonsumsi front-end manapun (REST atau GraphQL).
-
-- Pemisahan tegas antara layer presentasi dan business logic.
+- REST API back-end.
 
 ### 9.6. Internationalization
 
-- UI Bahasa Indonesia sebagai default; struktur kode mendukung penambahan bahasa lain di masa depan.
+- UI Bahasa Indonesia sebagai default.
 
-- Tanggal/waktu disimpan dalam timezone UTC, ditampilkan dalam WIB.
+- Tanggal/waktu disimpan UTC, ditampilkan WIB.
 
 ## 10. Success Metrics
 
-- 100% data Excel sumber berhasil di-import tanpa data loss (kecuali baris yang valid sebagai data error).
+- 100% data Excel sumber berhasil di-import tanpa data loss.
 
-- Reduksi storage size minimal 50% dibanding file Excel lama (sebagai indikator denormalization removal).
+- BOM explosion dan where-used selesai dalam < 5 detik di sistem.
 
-- BOM explosion dan where-used yang sebelumnya dilakukan manual via Excel kini selesai dalam \< 5 detik di sistem.
+- Process Engineering melaporkan reduksi waktu update BOM minimal 70%.
 
-- Process Engineering tim melaporkan reduksi waktu update BOM minimal 70% dibanding update manual di Excel.
+- Zero kasus inkonsistensi data antar produk yang share intermediate product.
 
-- Zero kasus inkonsistensi data antar produk yang share intermediate product (terjamin oleh single source of truth).
+- Product master menjadi single source of truth identitas product di costing (tidak ada spreadsheet parallel).
 
 ## 11. Risks & Mitigations
 
-| **Risk**                                                                                                           | **Severity** | **Mitigation**                                                                                                                                          |
-|--------------------------------------------------------------------------------------------------------------------|--------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Data error pada file Excel sumber (mis. 156 baris RM_LEFT_NO_INTO anomali, 19 FG_TOP_2 dengan multiple FG_LEFT_NO) | Medium       | Sediakan dry-run import dengan validation report; review manual dengan domain expert sebelum commit final                                               |
-| Cycle yang tidak terdeteksi karena depth limit pada recursive query                                                | Low-Med      | Set safe maximum depth (mis. 20) yang konservatif, beri warning bila tercapai; tambahkan periodic full-graph cycle detection job                        |
-| Materialized view jadi stale karena trigger gagal                                                                  | Medium       | Sediakan endpoint untuk manual refresh dan scheduled refresh harian sebagai safety net; expose monitoring last_refreshed_at di UI                       |
-| Master data tidak tersedia/lengkap pada saat import awal                                                           | High         | Lakukan validasi pre-import; tampilkan daftar kode yang tidak ditemukan; sediakan opsi import partial atau auto-create placeholder dengan flag          |
-| Polymorphic FK menyulitkan referential integrity                                                                   | Medium       | Gunakan dua kolom mutually-exclusive (rm_product_sys_id, rm_master_item_id) dengan CHECK constraint, bukan satu kolom polymorphic                       |
-| User resistance karena format Excel input baru berbeda                                                             | Medium       | Sediakan converter otomatis dari format lama ke baru; training sesi untuk Process Engineering tim; pertahankan export ke format flatten lama bila perlu |
+| **Risk** | **Severity** | **Mitigation** |
+|---|---|---|
+| Data error pada file Excel sumber | Medium | Dry-run import dengan validation report; review manual sebelum commit |
+| Cycle tidak terdeteksi karena depth limit | Low-Med | Safe max depth 20; periodic full-graph cycle detection job |
+| Materialized view stale | Medium | Manual refresh endpoint + scheduled daily safety net + monitoring last_refreshed_at |
+| ERP master data tidak lengkap di replica | High | Validasi pre-import; force sync sebelum bulk operation; placeholder with flag |
+| Polymorphic FK complexity | Medium | Dual column mutually-exclusive dengan CHECK constraint (sudah diimplementasi) |
+| ERP sync failure (Oracle → PostgreSQL) | Medium | Retry mechanism; alert on sync failure; stale data indicator di UI |
+| Product code counter race condition | Low | Atomic upsert via PostgreSQL ON CONFLICT + RETURNING (sudah diimplementasi) |
+| Product master proliferation (terlalu banyak record) | Low-Med | Dedup check saat create (similar name + shade + type warning); periodic cleanup review |
 
 ## 12. Implementation Phasing (Suggested)
 
 **Phase 1 — Foundation (MVP)**
 
-- Schema database lengkap (product_order, version, component, audit_log).
-
-- API CRUD product_order, version, component.
-
-- Integrasi master data (read-only) untuk item, cyl_type, shade.
-
-- Import dari Excel + converter format lama → baru.
-
+- Schema database lengkap (semua tabel dengan prefix convention).
+- cost_product_type, cost_rm_type seed data.
+- ERP replica tables (cost_erp_item, cost_erp_grade, cost_erp_shade) + initial sync.
+- Product master CRUD (FR-1a sampai FR-1d).
+- Product order CRUD (FR-2 sampai FR-5).
+- BOM component management (FR-6 sampai FR-8).
 - Cycle detection.
+- Import dari Excel + converter format lama.
 
 **Phase 2 — Visualization & Reporting**
 
-- BOM tree view (FR-8) — vertical hierarchical.
-
-- Flow view (FR-9) — horizontal DAG read-only.
-
-- Materialized view product_order_exploded dengan auto-refresh.
-
-- BOM explosion report (FR-10) dan where-used report (FR-11).
-
-- Export ke Excel.
+- BOM tree view (FR-9).
+- Flow view (FR-10).
+- Materialized view cost_product_order_exploded + auto-refresh.
+- BOM explosion report (FR-11) dan where-used report (FR-12).
+- Export ke Excel (FR-16).
 
 **Phase 3 — Visual BOM Editor**
 
-- Flow Editor drag-drop canvas (FR-17) menggunakan React Flow.
-
-- Auto-layout & visual helpers (FR-18).
-
-- Persistensi layout via product_order_version_layout.
-
-- Real-time cycle detection saat user membuat koneksi baru.
+- Flow Editor drag-drop canvas (FR-18).
+- Auto-layout & visual helpers (FR-19).
+- cost_bom_layout persistence.
+- Real-time cycle detection.
 
 **Phase 4 — Versioning & Audit**
 
-- Version history dan comparison view (FR-12, FR-13).
-
-- Audit log UI.
+- Version history dan comparison view (FR-13, FR-14).
+- Audit log UI (FR-17).
 
 **Phase 5 — Costing Orchestration**
 
-- Topological sort API (FR-19) berbasis product_order_exploded.
-
-- Dependency resolution API (FR-20) berbasis product_order_component.
-
-- Batch orchestrator (FR-21) dan on-demand trigger (FR-22).
-
-- Costing status dashboard (FR-23).
-
+- Topological sort API (FR-20).
+- Dependency resolution (FR-21).
+- Batch orchestrator (FR-22) dan on-demand trigger (FR-23).
+- Costing status dashboard (FR-24).
 - Prasyarat: tabel external (parameter cost, master RM price, cost result) sudah tersedia.
 
-**Phase 6 — Enhancements (Optional)**
+**Phase 6 — Admin & Enhancements**
 
-- Minimap pada Flow Editor untuk navigasi graph besar.
-
-- Approval workflow (bila kebutuhan muncul di masa depan).
-
-- Public API untuk konsumsi sistem hilir (production scheduling, costing, dll).
+- RM type management UI (FR-26).
+- ERP sync management UI (FR-27).
+- Phase A → Phase B promote flow (Section 7.7).
+- Minimap pada Flow Editor.
 
 ## 13. Open Questions
 
-30. Apakah ada batasan maksimum depth BOM yang realistis? (Saat ini ditemukan max RM_SEQUENCE = 13; safe default 20.)
+1. Apakah ada batasan maksimum depth BOM yang realistis? (Saat ini max RM_SEQUENCE = 13; safe default 20.)
 
-31. Bagaimana proses approval bila perlu ditambahkan di masa depan? (Saat ini di luar scope.)
+2. Mekanisme integrasi ERP Oracle → PostgreSQL: CDC (Change Data Capture), DB link, scheduled dump, atau API? Mempengaruhi freshness data replica.
 
-32. Bentuk aplikasi (web / mobile / desktop) — final decision.
+3. Untuk 276 baris Multi Yarn dengan RM_ITEM_CODE NULL: strategi final melengkapi master item atau "description-only RM" sebagai first-class concept?
 
-33. Mekanisme integrasi dengan sistem master data: API call real-time, replikasi, atau snapshot harian?
+4. Calculation engine eksternal: REST API, message queue, atau direct database write?
 
-34. Untuk 276 baris Multi Yarn dengan RM_ITEM_CODE NULL: apakah strategi finalnya adalah melengkapi master item, atau membuat kategori "description-only RM" sebagai first-class concept?
+5. Period definition di tabel parameter cost dan cost result: bulanan, kuartalan, atau effective-dated?
 
-35. Apakah perlu role khusus untuk import operation (terpisah dari CRUD biasa)?
+6. Saat version BOM berubah di tengah period, cost result version lama tetap valid sampai tutup buku, atau perlu re-calculate?
 
-36. Calculation engine eksternal: REST API, message queue, atau direct database write? Mempengaruhi cara orchestrator memanggil engine di FR-21/FR-22.
+7. Product type list (POY, PTY, TTY, TTS, ATY, ITY, TCH, TTM) — sudah final atau ada tipe lain?
 
-37. Period definition di tabel parameter cost dan cost result: bulanan, kuartalan, atau effective-dated? Mempengaruhi key composite di tabel external.
-
-38. Saat version BOM berubah di tengah period, cost result version lama tetap valid sampai tutup buku, atau perlu re-calculate otomatis?
+8. Cylinder type master: tetap di ERP (butuh replica table juga) atau dikelola di costing system?
 
 ## 14. Appendix
 
 ### 14.1. Mapping Field Excel Lama → Schema Baru
 
-| **Excel Lama (Column)**             | **Skema Baru (Column / Source)**       | **Status**                               |
-|-------------------------------------|----------------------------------------|------------------------------------------|
-| FG_ITEM_CODE                        | product_order.item_code (via master)   | Kept                                     |
-| FG_TOP_2                            | product_order.product_code             | Kept (renamed)                           |
-| FG_ITEM_NAME                        | (master item)                          | Dropped — dari master                    |
-| FG_CYL_TYPE                         | product_order.cyl_type_id (via master) | Kept (FK)                                |
-| FG_SHADE_CODE                       | product_order.shade_id (via master)    | Kept (FK)                                |
-| FG_SHADE_NAME                       | (master shade)                         | Dropped — dari master                    |
-| FG_LEFT_NO                          | product_order.product_sys_id           | Re-generated by system                   |
-| FG_SEQUENCE                         | —                                      | Dropped — derived dari cyl_type          |
-| RM_ITEM_CODE                        | (via rm_ref_id ke master/product)      | Resolved via FK                          |
-| RM_TOP_2                            | (via rm_ref_id atau rm_description)    | Resolved via FK or fallback              |
-| RM_ITEM_NAME / CYL_TYPE / SHADE\_\* | (via master)                           | Dropped — dari master                    |
-| RM_LEFT_NO                          | component.rm_ref_id (polymorphic)      | Kept (resolved)                          |
-| RM_CYL_SYS_ID                       | (via master)                           | Dropped — dari master                    |
-| RM_SEQUENCE                         | component.sequence_no                  | Kept (renamed)                           |
-| RM_TYPE                             | component.rm_type                      | Kept                                     |
-| RM_SUB_SEQUENCE                     | component.sub_sequence                 | Kept                                     |
-| RM_SUB_TYPE                         | component.sub_type                     | Kept                                     |
-| RM_LEFT_NO_INTO                     | —                                      | Dropped — redundant                      |
-| RM_SUB_SEQUENCE_REAL                | —                                      | Dropped — redundant (invers RM_SEQUENCE) |
+| **Excel Lama** | **Skema Baru** | **Status** |
+|---|---|---|
+| FG_ITEM_CODE | CPM_erp_item_code (informational) | Kept as attribute |
+| FG_TOP_2 | CPM_product_code (new format CST) | Remapped |
+| FG_ITEM_NAME | CPM_product_name | Kept |
+| FG_CYL_TYPE | CPO_cyl_type_id | Kept (FK) |
+| FG_SHADE_CODE | CPM_shade_code (free-text) | Kept |
+| FG_LEFT_NO | CPM_product_sys_id | Re-generated |
+| FG_SEQUENCE | — | Dropped (derived) |
+| RM_ITEM_CODE | CEI_item_code (via FK) | Resolved |
+| RM_TOP_2 | (via CPOC_rm_product_sys_id) | Resolved via FK |
+| RM_LEFT_NO | CPOC_rm_product_sys_id / CPOC_rm_master_item_id | Resolved (dual FK) |
+| RM_SEQUENCE | CPOC_sequence_no | Kept |
+| RM_TYPE | CPOC_rm_type_id (FK cost_rm_type) | Kept (now FK) |
+| RM_SUB_SEQUENCE | CPOC_sub_sequence | Kept |
+| RM_SUB_TYPE | CPOC_sub_type | Kept |
+| RM_LEFT_NO_INTO | — | Dropped (redundant) |
+| RM_SUB_SEQUENCE_REAL | — | Dropped (redundant) |
 
-### 14.2. Glossary Singkatan
+### 14.2. Product Code Format
+
+```
+CST  +  PTY  +  2605  +  000001
+│       │       │        │
+│       │       │        └── auto-increment 6 digit per (type + YYMM)
+│       │       └── YYMM (tahun-bulan pembuatan)
+│       └── product type code (3 char, dari cost_product_type)
+└── module prefix (costing)
+
+Contoh:
+CSTPTY2605000001 - PTY 150/36/RND/DSD/NI/DH/N/1/Z - Z108S
+CSTPTY2605000002 - PTY 150/36/RND/DSD/NI/DH/N/1/Z - Z114S
+CSTPOY2605000001 - POY 150/36 SD                    - NL
+```
+
+### 14.3. Glossary Singkatan
 
 - BOM — Bill of Materials
-
+- CDC — Change Data Capture
 - CTE — Common Table Expression (SQL)
-
 - DAG — Directed Acyclic Graph
-
+- ERP — Enterprise Resource Planning
 - FG — Finished Goods
-
 - FK — Foreign Key
-
 - HPP — Harga Pokok Produksi
-
 - IAM — Identity & Access Management
-
 - MVP — Minimum Viable Product
-
 - PK — Primary Key
-
 - PRD — Product Requirements Document
-
 - RM — Raw Material
-
 - SLA — Service Level Agreement
-
 - SSO — Single Sign-On
 
-### 14.3. Document Revision History
+### 14.4. Document Revision History
 
-| **Version** | **Date** | **Description**                                                                                                                      | **Author** |
-|-------------|----------|--------------------------------------------------------------------------------------------------------------------------------------|------------|
-| 1.0         | May 2026 | Initial draft                                                                                                                        | —          |
-| 1.1         | May 2026 | Added FR-9 Flow View, FR-17 Flow Editor (drag-drop canvas), FR-18 Auto-Layout; new table product_order_version_layout                | —          |
-| 1.2         | May 2026 | Added Section 6.7 Costing Orchestration (FR-19 sampai FR-24); sistem menjadi costing orchestrator untuk calculation engine eksternal | —          |
+| **Version** | **Date** | **Description** | **Author** |
+|---|---|---|---|
+| 1.0 | May 2026 | Initial draft | — |
+| 1.1 | May 2026 | Added FR-9 Flow View, FR-17 Flow Editor, FR-18 Auto-Layout | — |
+| 1.2 | May 2026 | Added Section 6.7 Costing Orchestration (FR-19 sampai FR-24) | — |
+| 1.3 | May 2026 | Product Master (CPM), Product Type (CPT), RM Type master (CRMT), ERP replica tables, Column Prefix Convention | — |
+| 1.4 | May 2026 | Parameter Master (CPRM), Generic Master Pattern (CMD+CMSD), Static Params (CPP), Dependency Graph (CPRD), FR-28 s/d FR-41 | — |

@@ -6,9 +6,11 @@ phase: "A"
 last_updated: "2026-05"
 author: "[IT Leader]"
 related:
-  - "PRD_PhaseB_ProductOrder.md"
+  - "PRD_PhaseB.md"
+  - "PRD_PhaseC.md"
   - "ERD_Master.md"
   - "GLOSSARY.md"
+  - "INTEGRATION_CrossPhase.md"
 changelog:
   - version: "1.1"
     date: "2026-05"
