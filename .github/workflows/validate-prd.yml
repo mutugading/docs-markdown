@@ -1,0 +1,83 @@
+name: Validate PRD Structure
+
+on:
+  pull_request:
+    paths:
+      - '**/PRD/**.md'
+      - '**/SRS/**.md'
+
+jobs:
+  validate:
+    name: Check Document Structure
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check PRD required sections
+        run: |
+          echo "Checking PRD files changed in this PR..."
+          
+          # Get changed files
+          git fetch origin ${{ github.base_ref }}
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep 'PRD/.*\.md' || true)
+          
+          if [ -z "$CHANGED" ]; then
+            echo "No PRD files changed, skipping validation."
+            exit 0
+          fi
+
+          FAILED=0
+          for file in $CHANGED; do
+            echo "Checking: $file"
+            
+            # Check required sections
+            for section in "Executive Summary" "Functional Requirements" "Data Model" "Change Log"; do
+              if ! grep -qi "$section" "$file"; then
+                echo "❌ Missing section: '$section' in $file"
+                FAILED=1
+              fi
+            done
+
+            # Check frontmatter version
+            if ! grep -q "^version:" "$file"; then
+              echo "❌ Missing 'version:' in frontmatter of $file"
+              FAILED=1
+            fi
+
+            if [ $FAILED -eq 0 ]; then
+              echo "✅ $file OK"
+            fi
+          done
+
+          exit $FAILED
+
+      - name: Comment changed files on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            
+            try {
+              const changed = execSync(
+                'git diff --name-only origin/${{ github.base_ref }}...HEAD'
+              ).toString().trim();
+              
+              const prdFiles = changed.split('\n').filter(f => f.includes('/PRD/') || f.includes('/SRS/'));
+              
+              if (prdFiles.length === 0) return;
+              
+              const body = `### 📄 Dokumen yang Berubah di PR Ini\n\n` +
+                prdFiles.map(f => `- \`${f}\``).join('\n') +
+                `\n\n> **IT Leader / Tech Lead:** Mohon review perubahan dokumen sebelum merge.`;
+              
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            } catch(e) {
+              console.log('No changes to report');
+            }
