@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel — Dashboard Config</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1F4E79; --primary-light: #2E75B6; --accent: #534AB7;
+  --success: #1d9e75; --danger: #a32d2d; --warning: #BA7517;
+  --bg: #F4F7FB; --surface: #FFFFFF; --border: #E5E7EB;
+  --text: #1F2937; --text-secondary: #6B7280; --text-muted: #9CA3AF;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+.topbar { background: var(--primary); color: white; padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between; }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.logo { font-weight: 700; font-size: 16px; }
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-nav a { color: rgba(255,255,255,0.85); text-decoration: none;
+  padding: 6px 12px; border-radius: 4px; font-size: 13px; }
+.topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
+.user-info { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--warning);
+  display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+
+.admin-banner { background: linear-gradient(90deg, #FAEEDA, #FAC775);
+  padding: 8px 24px; font-size: 12px; color: #633806; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; }
+
+.main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+.page-header { display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.page-title h1 { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.page-title .subtitle { font-size: 13px; color: var(--text-secondary); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tab { padding: 10px 16px; cursor: pointer; font-size: 14px; font-weight: 600;
+  color: var(--text-secondary); border-bottom: 2px solid transparent; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.toolbar { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer;
+  font-size: 13px; font-weight: 600; background: white; color: var(--text); transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--bg); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: white; }
+.btn-primary:hover { background: #163B5C; }
+.btn-success { background: var(--success); border-color: var(--success); color: white; }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: white; }
+
+.search-input { flex: 1; max-width: 300px; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: 6px; font-size: 13px; font-family: inherit; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { text-align: left; padding: 12px 16px; background: var(--bg);
+  font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+.data-table td { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.data-table tbody tr:hover { background: var(--bg); }
+
+.badge { display: inline-block; padding: 3px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.badge-active { background: #DCFCE7; color: #166534; }
+.badge-inactive { background: #FEE2E2; color: #991B1B; }
+.badge-type { background: #DBEAFE; color: #1E40AF; }
+.badge-chart { background: #F3E8FF; color: #6B21A8; }
+
+.action-icon { color: var(--primary); cursor: pointer; padding: 4px; font-size: 14px; }
+.action-icon:hover { background: var(--bg); border-radius: 4px; }
+
+.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 1000px) { .editor-grid { grid-template-columns: 1fr; } }
+
+.editor-section { padding: 20px; }
+.editor-section h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--primary); }
+
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.form-input, .form-select, .form-textarea { width: 100%; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: inherit;
+  background: white; color: var(--text); }
+.form-textarea { font-family: 'Monaco', 'Consolas', monospace; font-size: 12px;
+  min-height: 280px; resize: vertical; line-height: 1.5; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.json-editor { background: #1E293B; color: #E2E8F0; padding: 12px; border-radius: 6px;
+  font-family: 'Monaco', 'Consolas', monospace; font-size: 12px; line-height: 1.6;
+  border: 1px solid #334155; min-height: 280px; }
+.json-editor:focus { outline: 2px solid var(--primary-light); }
+
+.preview-area { background: var(--bg); border-radius: 6px; padding: 16px; min-height: 320px; }
+.preview-chart { height: 280px; background: white; border-radius: 6px; padding: 12px; }
+
+.checkbox-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px;
+  padding: 6px 12px; background: var(--bg); border-radius: 6px; cursor: pointer; }
+.checkbox-label input { cursor: pointer; }
+
+.info-box { background: #EEF2FF; border-left: 4px solid var(--primary);
+  padding: 12px 16px; border-radius: 6px; font-size: 13px; margin-bottom: 20px; }
+
+.divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.stat-label { font-size: 11px; text-transform: uppercase; color: var(--text-secondary);
+  letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 700; color: var(--text); }
+
+.etl-log { font-size: 12px; }
+.etl-log td.status-success { color: var(--success); font-weight: 600; }
+.etl-log td.status-failed { color: var(--danger); font-weight: 600; }
+
+@media (max-width: 768px) {
+  .main { padding: 16px; }
+  .toolbar { flex-direction: column; align-items: stretch; }
+  .search-input { max-width: 100%; }
+  .data-table { font-size: 12px; }
+  .data-table th, .data-table td { padding: 8px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="logo">⚙️ Admin Panel</span>
+    <nav class="topbar-nav">
+      <a href="ebitda_viewer.html">Dashboards</a>
+      <a href="#" class="active">Admin</a>
+      <a href="excel_upload.html">Upload Data</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span>IT Admin</span>
+    <div class="avatar">IT</div>
+  </div>
+</div>
+
+<div class="admin-banner">
+  🔒 Admin area — restricted to ADMIN / IT_LEADER roles
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Dashboard Configuration</h1>
+      <div class="subtitle">Manage dashboards, ETL jobs, and system settings</div>
+    </div>
+    <button class="btn btn-primary" onclick="showSection('editor')">+ New Dashboard</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('dashboards', this)">Dashboards</div>
+    <div class="tab" onclick="switchTab('etl', this)">ETL Jobs</div>
+    <div class="tab" onclick="switchTab('roles', this)">Role Mapping</div>
+    <div class="tab" onclick="switchTab('audit', this)">Audit Log</div>
+  </div>
+
+  <div id="tab-dashboards">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Dashboards</div>
+        <div class="stat-value">12</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active</div>
+        <div class="stat-value" style="color:var(--success)">10</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Inactive</div>
+        <div class="stat-value" style="color:var(--text-muted)">2</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last ETL Success</div>
+        <div class="stat-value" style="color:var(--success); font-size:18px">2h ago</div>
+      </div>
+    </div>
+
+    <div id="dashboard-list">
+      <div class="toolbar">
+        <input type="text" class="search-input" placeholder="Search dashboards..." />
+        <select class="form-select" style="width:auto">
+          <option>All Modules</option>
+          <option>MIS</option>
+          <option>SALES</option>
+          <option>HR</option>
+        </select>
+        <select class="form-select" style="width:auto">
+          <option>All Status</option>
+          <option>Active</option>
+          <option>Inactive</option>
+        </select>
+      </div>
+
+      <div class="card">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Title</th>
+              <th>Module</th>
+              <th>Chart Type</th>
+              <th>Drill</th>
+              <th>Grain</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>EBITDA</strong></td>
+              <td>EBITDA Performance</td>
+              <td><span class="badge badge-type">MIS</span></td>
+              <td><span class="badge badge-chart">Waterfall</span></td>
+              <td>3 levels</td>
+              <td>Monthly</td>
+              <td><span class="badge badge-active">Active</span></td>
+              <td>
+                <span class="action-icon" onclick="showSection('editor')">✏️</span>
+                <span class="action-icon">👁️</span>
+                <span class="action-icon">📋</span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>NET_PROFIT</strong></td>
+              <td>Net Profit Trend</td>
+              <td><span class="badge badge-type">MIS</span></td>
+              <td><span class="badge badge-chart">Bar + Line</span></td>
+              <td>2 levels</td>
+              <td>Monthly</td>
+              <td><span class="badge badge-active">Active</span></td>
+              <td>
+                <span class="action-icon">✏️</span>
+                <span class="action-icon">👁️</span>
+                <span class="action-icon">📋</span>
+              </td>
+            </tr>
+            <tr style="opacity:0.6">
+              <td><strong>SALES_MONTHLY</strong></td>
+              <td>Sales by Region</td>
+              <td><span class="badge badge-type">SALES</span></td>
+              <td><span class="badge badge-chart">Stacked Bar</span></td>
+              <td>3 levels</td>
+              <td>Monthly</td>
+              <td><span class="badge badge-inactive">Phase 2</span></td>
+              <td>
+                <span class="action-icon">✏️</span>
+                <span class="action-icon">👁️</span>
+              </td>
+            </tr>
+            <tr style="opacity:0.6">
+              <td><strong>OVERTIME_DAILY</strong></td>
+              <td>Overtime by Department</td>
+              <td><span class="badge badge-type">HR</span></td>
+              <td><span class="badge badge-chart">Line + Heatmap</span></td>
+              <td>2 levels</td>
+              <td>Daily</td>
+              <td><span class="badge badge-inactive">Phase 2</span></td>
+              <td>
+                <span class="action-icon">✏️</span>
+                <span class="action-icon">👁️</span>
+              </td>
+            </tr>
+            <tr style="opacity:0.6">
+              <td><strong>INVENTORY_AGING</strong></td>
+              <td>Inventory Aging Analysis</td>
+              <td><span class="badge badge-type">INV</span></td>
+              <td><span class="badge badge-chart">Stacked Bar</span></td>
+              <td>2 levels</td>
+              <td>Monthly</td>
+              <td><span class="badge badge-inactive">Phase 2</span></td>
+              <td>
+                <span class="action-icon">✏️</span>
+                <span class="action-icon">👁️</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="dashboard-editor" style="display:none">
+      <div class="info-box">
+        💡 <strong>Tip:</strong> Edit JSON di kanan, preview di sebelahnya akan auto-update. Klik <strong>Save & Activate</strong> untuk publish ke user.
+      </div>
+
+      <div class="toolbar" style="margin-bottom:16px">
+        <button class="btn" onclick="showSection('list')">← Back to List</button>
+        <button class="btn">Preview Full</button>
+        <button class="btn btn-success" onclick="saveDashboard()">💾 Save & Activate</button>
+      </div>
+
+      <div class="card editor-grid">
+        <div class="editor-section" style="border-right:1px solid var(--border)">
+          <h3>📋 Basic Information</h3>
+          <div class="form-group">
+            <label class="form-label">Dashboard Code</label>
+            <input type="text" class="form-input" value="EBITDA" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dashboard Title</label>
+            <input type="text" class="form-input" value="EBITDA Performance" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <input type="text" class="form-input" value="Earnings Before Interest, Tax, Depreciation & Amortization" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Module Type</label>
+              <select class="form-select">
+                <option selected>MIS</option>
+                <option>SALES</option>
+                <option>HR</option>
+                <option>INV</option>
+                <option>OPEX</option>
+                <option>PROD</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Filter Group 1</label>
+              <input type="text" class="form-input" value="EBITDA" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Period Grain</label>
+              <select class="form-select">
+                <option selected>MONTHLY</option>
+                <option>DAILY</option>
+                <option>QUARTERLY</option>
+                <option>YEARLY</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Max Drill Level</label>
+              <select class="form-select">
+                <option>1</option>
+                <option>2</option>
+                <option selected>3</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Menu Group</label>
+            <select class="form-select">
+              <option selected>Finance</option>
+              <option>Sales</option>
+              <option>Operations</option>
+              <option>HR</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Compare Modes (multi-select)</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label"><input type="checkbox" checked> MoM</label>
+              <label class="checkbox-label"><input type="checkbox" checked> QoQ</label>
+              <label class="checkbox-label"><input type="checkbox" checked> YoY</label>
+              <label class="checkbox-label"><input type="checkbox" checked> YTD</label>
+              <label class="checkbox-label"><input type="checkbox" checked> R12</label>
+              <label class="checkbox-label"><input type="checkbox"> DoD</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Access Roles</label>
+            <div class="checkbox-group">
+              <label class="checkbox-label"><input type="checkbox" checked> CEO</label>
+              <label class="checkbox-label"><input type="checkbox" checked> CFO</label>
+              <label class="checkbox-label"><input type="checkbox" checked> FINANCE_MGR</label>
+              <label class="checkbox-label"><input type="checkbox"> DEPT_HEAD</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-section">
+          <h3>🎨 Chart Configuration</h3>
+          <div class="form-group">
+            <label class="form-label">Chart Type</label>
+            <select class="form-select" id="chartTypeSelect" onchange="updatePreview()">
+              <option value="waterfall" selected>Waterfall</option>
+              <option value="bar">Bar Chart</option>
+              <option value="line">Line Chart</option>
+              <option value="stacked_bar">Stacked Bar</option>
+              <option value="donut">Donut Chart</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Chart Config (JSON)</label>
+            <textarea class="form-textarea" id="chartConfigJson" onkeyup="updatePreview()">{
+  "type": "waterfall",
+  "positive_color": "#1d9e75",
+  "negative_color": "#a32d2d",
+  "total_color": "#534AB7",
+  "x_axis_field": "group_2",
+  "y_axis_field": "display_value",
+  "show_total_bar": true,
+  "number_format": "currency_thousands",
+  "decimals": 1,
+  "drill_to": "group_3"
+}</textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Live Preview</label>
+            <div class="preview-area">
+              <div class="preview-chart" id="previewChart"></div>
+              <div style="margin-top:8px; font-size:12px; color:var(--text-muted); text-align:center">
+                Preview menggunakan sample data EBITDA April 2026
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-etl" style="display:none">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Active Jobs</div>
+        <div class="stat-value">6</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last 24h Success</div>
+        <div class="stat-value" style="color:var(--success)">36 / 36</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Duration</div>
+        <div class="stat-value" style="font-size:18px">8m 24s</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Next Run</div>
+        <div class="stat-value" style="font-size:18px">20:00 WIB</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="btn btn-primary">▶ Trigger Manual ETL</button>
+      <button class="btn">📊 View Schedule</button>
+    </div>
+
+    <div class="card">
+      <table class="data-table etl-log">
+        <thead>
+          <tr>
+            <th>Job ID</th>
+            <th>Job Name</th>
+            <th>Source</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Rows</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>#1247</td>
+            <td>ETL_MIS_EBITDA</td>
+            <td>Oracle ERP</td>
+            <td>26 May 16:00</td>
+            <td>7m 12s</td>
+            <td>2,135</td>
+            <td class="status-success">✓ SUCCESS</td>
+            <td><span class="action-icon">📋</span></td>
+          </tr>
+          <tr>
+            <td>#1246</td>
+            <td>ETL_MIS_NET_PROFIT</td>
+            <td>Oracle ERP</td>
+            <td>26 May 16:00</td>
+            <td>3m 45s</td>
+            <td>456</td>
+            <td class="status-success">✓ SUCCESS</td>
+            <td><span class="action-icon">📋</span></td>
+          </tr>
+          <tr>
+            <td>#1245</td>
+            <td>MV_REFRESH</td>
+            <td>PostgreSQL</td>
+            <td>26 May 16:08</td>
+            <td>42s</td>
+            <td>—</td>
+            <td class="status-success">✓ SUCCESS</td>
+            <td><span class="action-icon">📋</span></td>
+          </tr>
+          <tr>
+            <td>#1244</td>
+            <td>ETL_MIS_EBITDA</td>
+            <td>Oracle ERP</td>
+            <td>26 May 12:00</td>
+            <td>6m 58s</td>
+            <td>2,128</td>
+            <td class="status-success">✓ SUCCESS</td>
+            <td><span class="action-icon">📋</span></td>
+          </tr>
+          <tr>
+            <td>#1230</td>
+            <td>ETL_MIS_EBITDA</td>
+            <td>Oracle ERP</td>
+            <td>25 May 08:00</td>
+            <td>12s</td>
+            <td>0</td>
+            <td class="status-failed">✗ FAILED</td>
+            <td><span class="action-icon">📋</span> <span class="action-icon">🔄</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-roles" style="display:none">
+    <div class="info-box">
+      💡 Role mapping menentukan dashboard mana yang user lihat. Reuse RBAC dari Laravel — sync role list 1x sehari.
+    </div>
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Role Code</th>
+            <th>Description</th>
+            <th>Accessible Dashboards</th>
+            <th>Users</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>CEO</strong></td>
+            <td>Chief Executive Officer</td>
+            <td>EBITDA, NET_PROFIT (+ all Phase 2)</td>
+            <td>1</td>
+            <td><span class="action-icon">✏️</span></td>
+          </tr>
+          <tr>
+            <td><strong>CFO</strong></td>
+            <td>Chief Financial Officer</td>
+            <td>EBITDA, NET_PROFIT (+ all Finance)</td>
+            <td>1</td>
+            <td><span class="action-icon">✏️</span></td>
+          </tr>
+          <tr>
+            <td><strong>FINANCE_MGR</strong></td>
+            <td>Finance Manager</td>
+            <td>EBITDA, NET_PROFIT</td>
+            <td>3</td>
+            <td><span class="action-icon">✏️</span></td>
+          </tr>
+          <tr>
+            <td><strong>OPS_MGR</strong></td>
+            <td>Operations Manager</td>
+            <td>(Phase 2 — Production, Inventory)</td>
+            <td>2</td>
+            <td><span class="action-icon">✏️</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-audit" style="display:none">
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>26 May 14:32</td>
+            <td>IT Admin</td>
+            <td>UPDATE</td>
+            <td>EBITDA dashboard</td>
+            <td>Changed chart_config color palette</td>
+          </tr>
+          <tr>
+            <td>26 May 10:15</td>
+            <td>Finance Mgr</td>
+            <td>UPLOAD</td>
+            <td>EBITDA Apr 2026</td>
+            <td>Excel upload, 28 rows committed</td>
+          </tr>
+          <tr>
+            <td>26 May 09:08</td>
+            <td>IT Admin</td>
+            <td>CREATE</td>
+            <td>SALES_MONTHLY</td>
+            <td>New dashboard configured (status: draft)</td>
+          </tr>
+          <tr>
+            <td>25 May 16:45</td>
+            <td>System</td>
+            <td>ETL_FAIL</td>
+            <td>Job #1230</td>
+            <td>Oracle connection timeout, retry succeeded</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let previewChartInstance = null;
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['dashboards','etl','roles','audit'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = (t === name) ? 'block' : 'none';
+  });
+}
+
+function showSection(s) {
+  document.getElementById('dashboard-list').style.display = s === 'list' ? 'block' : 'none';
+  document.getElementById('dashboard-editor').style.display = s === 'editor' ? 'block' : 'none';
+  if (s === 'editor') setTimeout(updatePreview, 100);
+}
+
+function saveDashboard() {
+  alert('Dashboard saved and activated!\n\nIn production, this would:\n1. UPSERT row di DASHBOARD_CONFIG\n2. Invalidate Redis cache\n3. Notify role assignees\n\nUser dapat akses dashboard ini dalam ~30 detik.');
+}
+
+function updatePreview() {
+  const json = document.getElementById('chartConfigJson').value;
+  let config;
+  try { config = JSON.parse(json); }
+  catch(e) { return; }
+
+  // Sync chart type select
+  const sel = document.getElementById('chartTypeSelect');
+  if (sel.value !== config.type) sel.value = config.type;
+
+  if (previewChartInstance) previewChartInstance.dispose();
+  const el = document.getElementById('previewChart');
+  previewChartInstance = echarts.init(el);
+
+  // Sample data EBITDA Apr 2026 (group_2 level)
+  const sample = [
+    { g2: 'INCOME', value: 5602761 },
+    { g2: 'PRODUCTION COST', value: -2698479 },
+    { g2: 'COLOR CONSUMPTION', value: -176725 },
+    { g2: 'MATERIAL CONSUMPTION', value: -476458 },
+    { g2: 'ENERGY COST', value: -536117 },
+    { g2: 'MANPOWER', value: -952446 },
+    { g2: 'OVERHEADS', value: -111676 },
+    { g2: 'SELLING COST', value: -173132 }
+  ];
+
+  function fmt(v) {
+    const abs = Math.abs(v);
+    let s = abs >= 1e6 ? (v/1e6).toFixed(1)+'M' : (v/1e3).toFixed(0)+'K';
+    return (v<0 ? '(' + s.replace('-','') + ')' : s);
+  }
+
+  if (config.type === 'waterfall') {
+    let cum = 0;
+    const placeholders = [], pos = [], neg = [];
+    sample.forEach(it => {
+      if (it.value >= 0) { placeholders.push(cum); pos.push(it.value); neg.push('-'); }
+      else { placeholders.push(cum + it.value); pos.push('-'); neg.push(-it.value); }
+      cum += it.value;
+    });
+    const cats = sample.map(it => it.g2);
+    cats.push('EBITDA');
+    placeholders.push(0); pos.push('-'); neg.push('-');
+    const totals = sample.map(()=>'-'); totals.push(cum);
+
+    previewChartInstance.setOption({
+      grid: { left: '3%', right: '4%', top: 20, bottom: 60, containLabel: true },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: cats, axisLabel: { rotate: 35, fontSize: 9 } },
+      yAxis: { type: 'value', axisLabel: { formatter: fmt, fontSize: 10 } },
+      series: [
+        { type: 'bar', stack: 'w', itemStyle: { color: 'transparent' }, data: placeholders, silent: true },
+        { type: 'bar', stack: 'w', itemStyle: { color: config.positive_color || '#1d9e75' }, data: pos },
+        { type: 'bar', stack: 'w', itemStyle: { color: config.negative_color || '#a32d2d' }, data: neg },
+        { type: 'bar', stack: 'w', itemStyle: { color: config.total_color || '#534AB7' }, data: totals,
+          label: { show: true, position: 'top', formatter: (p) => p.value !== '-' ? fmt(p.value) : '', fontSize: 10, fontWeight: 'bold' } }
+      ]
+    });
+  } else if (config.type === 'bar') {
+    previewChartInstance.setOption({
+      grid: { left: '3%', right: '4%', top: 20, bottom: 60, containLabel: true },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: sample.map(s => s.g2), axisLabel: { rotate: 35, fontSize: 9 } },
+      yAxis: { type: 'value', axisLabel: { formatter: fmt, fontSize: 10 } },
+      series: [{ type: 'bar', data: sample.map(s => ({
+        value: s.value,
+        itemStyle: { color: s.value >= 0 ? (config.positive_color || '#1d9e75') : (config.negative_color || '#a32d2d') }
+      })) }]
+    });
+  } else if (config.type === 'line') {
+    previewChartInstance.setOption({
+      grid: { left: '3%', right: '4%', top: 20, bottom: 60, containLabel: true },
+      tooltip: { trigger: 'axis' },
+      xAxis: { type: 'category', data: sample.map(s => s.g2), axisLabel: { rotate: 35, fontSize: 9 } },
+      yAxis: { type: 'value', axisLabel: { formatter: fmt, fontSize: 10 } },
+      series: [{ type: 'line', smooth: true, data: sample.map(s => s.value),
+        lineStyle: { color: config.positive_color || '#1F4E79', width: 3 } }]
+    });
+  } else if (config.type === 'donut') {
+    previewChartInstance.setOption({
+      tooltip: { trigger: 'item' },
+      legend: { orient: 'vertical', left: 'right', textStyle: { fontSize: 10 } },
+      series: [{
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['35%', '50%'],
+        data: sample.filter(s => s.value < 0).map(s => ({ value: -s.value, name: s.g2 })),
+        label: { fontSize: 10 }
+      }]
+    });
+  } else if (config.type === 'stacked_bar') {
+    previewChartInstance.setOption({
+      grid: { left: '3%', right: '4%', top: 20, bottom: 60, containLabel: true },
+      tooltip: { trigger: 'axis' },
+      legend: { bottom: 0, textStyle: { fontSize: 10 } },
+      xAxis: { type: 'category', data: ['Jan','Feb','Mar','Apr'], axisLabel: { fontSize: 10 } },
+      yAxis: { type: 'value', axisLabel: { formatter: fmt, fontSize: 10 } },
+      series: [
+        { name: 'Production', type: 'bar', stack: 'a', data: [2300000, 2400000, 2350000, 2698000] },
+        { name: 'Material', type: 'bar', stack: 'a', data: [450000, 480000, 470000, 476000] },
+        { name: 'Energy', type: 'bar', stack: 'a', data: [520000, 510000, 530000, 536000] },
+        { name: 'Manpower', type: 'bar', stack: 'a', data: [900000, 920000, 940000, 952000] }
+      ]
+    });
+  }
+}
+
+window.addEventListener('resize', () => { if (previewChartInstance) previewChartInstance.resize(); });
+</script>
+</body>
+</html>

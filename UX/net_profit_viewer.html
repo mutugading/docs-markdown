@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Net Profit Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1F4E79; --primary-light: #2E75B6; --accent: #534AB7;
+  --success: #1d9e75; --danger: #a32d2d; --warning: #BA7517;
+  --bg: #F4F7FB; --surface: #FFFFFF; --border: #E5E7EB;
+  --text: #1F2937; --text-secondary: #6B7280; --text-muted: #9CA3AF;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+.topbar { background: var(--primary); color: white; padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between; }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.logo { font-weight: 700; font-size: 16px; }
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-nav a { color: rgba(255,255,255,0.85); text-decoration: none;
+  padding: 6px 12px; border-radius: 4px; font-size: 13px; }
+.topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
+.user-info { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+  display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+.menu-toggle { display: none; background: transparent; border: none; color: white;
+  cursor: pointer; padding: 4px 8px; font-size: 18px; }
+
+.container { display: flex; min-height: calc(100vh - 56px); }
+.sidebar { width: 240px; background: var(--surface); border-right: 1px solid var(--border); padding: 16px 0; flex-shrink: 0; }
+.sidebar-group { margin-bottom: 16px; }
+.sidebar-group-title { padding: 0 20px; font-size: 11px; font-weight: 600;
+  color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.sidebar-item { display: block; padding: 8px 20px; color: var(--text); text-decoration: none;
+  font-size: 14px; border-left: 3px solid transparent; transition: all 0.15s; }
+.sidebar-item:hover { background: var(--bg); }
+.sidebar-item.active { background: #EEF2FF; color: var(--primary); border-left-color: var(--primary); font-weight: 600; }
+
+.main { flex: 1; padding: 24px; overflow-x: auto; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.page-title h1 { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.page-title .subtitle { font-size: 13px; color: var(--text-secondary); }
+.data-freshness { font-size: 12px; color: var(--text-muted); background: var(--surface);
+  padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); }
+.data-freshness .dot { display: inline-block; width: 8px; height: 8px; background: var(--success);
+  border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+.filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 14px 16px; margin-bottom: 20px; display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.filter-group { display: flex; align-items: center; gap: 8px; }
+.filter-label { font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: 0.3px; }
+.filter-select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px;
+  background: white; font-size: 13px; color: var(--text); cursor: pointer; font-family: inherit; }
+.compare-toggle { display: flex; background: var(--bg); border-radius: 6px; padding: 2px; }
+.compare-btn { padding: 6px 12px; border: none; background: transparent; border-radius: 4px;
+  cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary); transition: all 0.15s; }
+.compare-btn.active { background: white; color: var(--primary); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px; margin-bottom: 20px; }
+.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.kpi-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 6px; font-weight: 600; }
+.kpi-value { font-size: 24px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+.kpi-delta { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.kpi-delta.positive { color: var(--success); }
+.kpi-delta.negative { color: var(--danger); }
+.kpi-sparkline { height: 32px; margin-top: 8px; }
+
+.chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 20px; margin-bottom: 20px; }
+.chart-card-header { display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.chart-card-title { font-size: 16px; font-weight: 600; }
+.chart-card-hint { font-size: 12px; color: var(--text-muted); }
+.chart-container { width: 100%; height: 400px; }
+.chart-container.tall { height: 460px; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { text-align: left; padding: 10px 12px; background: var(--bg);
+  font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+.data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .num.positive { color: var(--success); }
+.data-table .num.negative { color: var(--danger); }
+
+.info-note { background: #EEF2FF; border-left: 4px solid var(--primary);
+  padding: 12px 16px; border-radius: 6px; font-size: 13px; color: var(--text); margin-bottom: 20px; }
+
+@media (max-width: 1024px) {
+  .sidebar { display: none; }
+  .menu-toggle { display: block; }
+  .topbar-nav { display: none; }
+}
+@media (max-width: 768px) {
+  .main { padding: 16px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .chart-container { height: 320px; }
+}
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <button class="menu-toggle" onclick="document.querySelector('.sidebar').style.display = document.querySelector('.sidebar').style.display === 'block' ? 'none' : 'block'">☰</button>
+    <span class="logo">📊 Executive Dashboard</span>
+    <nav class="topbar-nav">
+      <a href="#" class="active">Dashboards</a>
+      <a href="admin_panel.html">Admin</a>
+      <a href="excel_upload.html">Upload Data</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span>John Doe — CFO</span>
+    <div class="avatar">JD</div>
+  </div>
+</div>
+
+<div class="container">
+  <aside class="sidebar">
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Finance</div>
+      <a href="ebitda_viewer.html" class="sidebar-item">EBITDA Performance</a>
+      <a href="#" class="sidebar-item active">Net Profit Trend</a>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Sales (Phase 2)</div>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Sales Monthly</a>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Operations (Phase 2)</div>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Inventory Aging</a>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Production Output</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>Net Profit Trend</h1>
+        <div class="subtitle">Bottom-line profitability over time</div>
+      </div>
+      <div class="data-freshness">
+        <span class="dot"></span> Data as of 26 May 2026, 16:00 WIB
+      </div>
+    </div>
+
+    <div class="info-note">
+      💡 <strong>Different chart configuration:</strong> Same engine, different chart_config JSON. 
+      Net Profit menggunakan bar chart dengan overlay line untuk YoY comparison — di-set di DASHBOARD_CONFIG, no code change.
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">Period:</span>
+        <select class="filter-select" id="periodPreset" onchange="renderAll()">
+          <option value="L12M" selected>Last 12 Months</option>
+          <option value="L24M">Last 24 Months</option>
+          <option value="THIS_YEAR">This Year</option>
+          <option value="ALL">All Periods</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Compare:</span>
+        <div class="compare-toggle">
+          <button class="compare-btn" onclick="setCompare('NONE')">None</button>
+          <button class="compare-btn" onclick="setCompare('MoM')">MoM</button>
+          <button class="compare-btn active" onclick="setCompare('YoY')" id="cmp-active">YoY</button>
+          <button class="compare-btn" onclick="setCompare('R12')">R12</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Current Month Net Profit</div>
+        <div class="kpi-value" id="kpi-current">—</div>
+        <div class="kpi-delta" id="kpi-mom">—</div>
+        <div class="kpi-sparkline" id="spark-np"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Net Profit Margin (vs EBITDA)</div>
+        <div class="kpi-value" id="kpi-margin">—</div>
+        <div class="kpi-delta" id="kpi-margin-trend">Avg ratio L12M</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">YTD Net Profit</div>
+        <div class="kpi-value" id="kpi-ytd">—</div>
+        <div class="kpi-delta" id="kpi-ytd-yoy">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">L12M Total</div>
+        <div class="kpi-value" id="kpi-l12">—</div>
+        <div class="kpi-delta" id="kpi-l12-delta">vs previous 12 months</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div>
+          <div class="chart-card-title">Net Profit — Monthly with YoY Comparison</div>
+          <div class="chart-card-hint">Bar = current period • Line = same period last year</div>
+        </div>
+      </div>
+      <div class="chart-container tall" id="mainChart"></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <div>
+            <div class="chart-card-title">Net Profit vs EBITDA</div>
+            <div class="chart-card-hint">Profitability conversion ratio</div>
+          </div>
+        </div>
+        <div class="chart-container" id="ratioChart"></div>
+      </div>
+
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <div>
+            <div class="chart-card-title">Monthly Detail</div>
+            <div class="chart-card-hint">Tabular data view</div>
+          </div>
+        </div>
+        <div style="max-height:400px; overflow-y:auto">
+          <table class="data-table" id="dataTable">
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th class="num">Net Profit</th>
+                <th class="num">YoY</th>
+                <th class="num">vs EBITDA</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const DATA = {"periods":["202301","202302","202303","202304","202305","202306","202307","202308","202309","202310","202311","202312","202401","202402","202403","202404","202405","202406","202407","202408","202409","202410","202411","202412","202501","202502","202503","202504","202505","202506","202507","202508","202509","202510","202511","202512","202601","202602","202603","202604"],"net_profit_total":{"202301":218269.82,"202302":350496.19,"202303":359710.48,"202304":239051.65,"202305":347262.29,"202306":298828.57,"202307":317272.69,"202308":358713.68,"202309":364674.95,"202310":361696.0,"202311":237746.7,"202312":310706.57,"202401":324450.99,"202402":303176.95,"202403":340303.44,"202404":334368.33,"202405":333578.26,"202406":351872.64,"202407":289851.17,"202408":227544.66,"202409":285143.01,"202410":371730.35,"202411":350373.01,"202412":419650.52,"202501":365501.29,"202502":330692.97,"202503":357197.66,"202504":355322.32,"202505":180882.72,"202506":295012.52,"202507":302321.89,"202508":287866.6,"202509":339780.08,"202510":270454.5,"202511":291868.63,"202512":372682.53,"202601":304958.76,"202602":268129.07,"202603":129930.37,"202604":138672.17},"ebitda_total":{"202301":30689.3,"202302":112151.07,"202303":283653.2,"202304":242807.65,"202305":628223.44,"202306":439607.43,"202307":379518.14,"202308":407082.17,"202309":442244.15,"202310":574823.6,"202311":153043.67,"202312":-369410.9,"202401":3816.05,"202402":11622.62,"202403":266599.89,"202404":246283.02,"202405":304367.38,"202406":256028.63,"202407":506324.86,"202408":467681.86,"202409":420556.12,"202410":713121.19,"202411":512849.12,"202412":543115.05,"202501":536016.28,"202502":396692.84,"202503":436148.68,"202504":442291.89,"202505":316417.74,"202506":382569.71,"202507":483349.38,"202508":258003.86,"202509":141244.68,"202510":-45057.45,"202511":139682.63,"202512":753354.82,"202601":189323.58,"202602":224957.64,"202603":124032.62,"202604":1015881.07}};
+const state = { compare: 'YoY', preset: 'L12M' };
+const charts = {};
+
+function fmtMoney(v, opts={}) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  const abs = Math.abs(v);
+  let str;
+  if (abs >= 1e6) str = (v/1e6).toFixed(2) + 'M';
+  else if (abs >= 1e3) str = (v/1e3).toFixed(1) + 'K';
+  else str = v.toFixed(0);
+  return (opts.prefix||'$') + (v<0 ? '(' + str.replace('-','') + ')' : str);
+}
+function fmtPct(v) {
+  if (v === null || v === undefined || isNaN(v) || !isFinite(v)) return '—';
+  return (v>=0 ? '+' : '') + v.toFixed(1) + '%';
+}
+function periodLabel(p) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(p.substr(4,2))-1] + ' ' + p.substr(0,4);
+}
+function getPeriods() {
+  const all = DATA.periods;
+  const last = all[all.length-1];
+  if (state.preset === 'L12M') return all.slice(-12);
+  if (state.preset === 'L24M') return all.slice(-24);
+  if (state.preset === 'THIS_YEAR') return all.filter(p => p.substr(0,4)===last.substr(0,4));
+  return all;
+}
+function prevPeriod(p, offset=1) {
+  const idx = DATA.periods.indexOf(p);
+  return idx>=offset ? DATA.periods[idx-offset] : null;
+}
+
+function setCompare(mode) {
+  state.compare = mode;
+  document.querySelectorAll('.compare-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  renderAll();
+}
+
+function renderKPIs() {
+  const periods = DATA.periods;
+  const cur = periods[periods.length-1];
+  const prev = prevPeriod(cur, 1);
+  const yoy = prevPeriod(cur, 12);
+  const curVal = DATA.net_profit_total[cur];
+  const prevVal = DATA.net_profit_total[prev];
+  const ebitdaCur = DATA.ebitda_total[cur];
+
+  document.getElementById('kpi-current').textContent = fmtMoney(curVal);
+  if (prevVal) {
+    const delta = curVal - prevVal;
+    const pct = (delta/Math.abs(prevVal))*100;
+    const el = document.getElementById('kpi-mom');
+    el.className = 'kpi-delta ' + (delta>=0 ? 'positive' : 'negative');
+    el.innerHTML = (delta>=0?'▲':'▼') + ' ' + fmtPct(pct) + ' vs ' + periodLabel(prev);
+  }
+
+  // Margin
+  const l12 = periods.slice(-12);
+  const npSum = l12.reduce((s,p) => s + (DATA.net_profit_total[p]||0), 0);
+  const ebitdaSum = l12.reduce((s,p) => s + (DATA.ebitda_total[p]||0), 0);
+  const margin = ebitdaSum !== 0 ? (npSum/ebitdaSum)*100 : 0;
+  document.getElementById('kpi-margin').textContent = margin.toFixed(1) + '%';
+
+  // YTD
+  const year = cur.substr(0,4);
+  const ytdP = periods.filter(p => p.substr(0,4)===year && p<=cur);
+  const ytdVal = ytdP.reduce((s,p) => s + (DATA.net_profit_total[p]||0), 0);
+  const ytdLY = periods.filter(p => p.substr(0,4)===(parseInt(year)-1).toString() && p.substr(4,2)<=cur.substr(4,2));
+  const ytdLYVal = ytdLY.reduce((s,p) => s + (DATA.net_profit_total[p]||0), 0);
+  document.getElementById('kpi-ytd').textContent = fmtMoney(ytdVal);
+  if (ytdLYVal !== 0) {
+    const pct = ((ytdVal - ytdLYVal)/Math.abs(ytdLYVal))*100;
+    const el = document.getElementById('kpi-ytd-yoy');
+    el.className = 'kpi-delta ' + (pct>=0 ? 'positive' : 'negative');
+    el.innerHTML = (pct>=0?'▲':'▼') + ' ' + fmtPct(pct) + ' vs YTD ' + (parseInt(year)-1);
+  }
+
+  document.getElementById('kpi-l12').textContent = fmtMoney(npSum);
+  const prev12 = periods.slice(-24, -12);
+  const prev12Sum = prev12.reduce((s,p) => s + (DATA.net_profit_total[p]||0), 0);
+  if (prev12Sum !== 0) {
+    const pct = ((npSum - prev12Sum)/Math.abs(prev12Sum))*100;
+    const el = document.getElementById('kpi-l12-delta');
+    el.className = 'kpi-delta ' + (pct>=0 ? 'positive' : 'negative');
+    el.innerHTML = (pct>=0?'▲':'▼') + ' ' + fmtPct(pct) + ' vs previous 12M';
+  }
+
+  // Sparkline
+  if (charts.spark) charts.spark.dispose();
+  charts.spark = echarts.init(document.getElementById('spark-np'));
+  charts.spark.setOption({
+    grid: { left: 0, right: 0, top: 4, bottom: 4 },
+    xAxis: { type: 'category', show: false },
+    yAxis: { type: 'value', show: false, scale: true },
+    series: [{ type: 'line', data: l12.map(p => DATA.net_profit_total[p]),
+      smooth: true, symbol: 'none', lineStyle: { color: '#1d9e75', width: 2 } }]
+  });
+}
+
+function renderMain() {
+  if (charts.main) charts.main.dispose();
+  charts.main = echarts.init(document.getElementById('mainChart'));
+  const periods = getPeriods();
+  const current = periods.map(p => DATA.net_profit_total[p] || 0);
+
+  let series = [{
+    name: 'Net Profit',
+    type: 'bar',
+    data: current,
+    itemStyle: { color: (params) => params.value >= 0 ? '#1d9e75' : '#a32d2d' },
+    label: { show: true, position: 'top', formatter: (p) => fmtMoney(p.value), fontSize: 10 }
+  }];
+
+  if (state.compare !== 'NONE') {
+    let offset = 1;
+    if (state.compare === 'YoY') offset = 12;
+    else if (state.compare === 'R12') offset = 12;
+    const comparison = periods.map(p => {
+      const prev = prevPeriod(p, offset);
+      return prev ? DATA.net_profit_total[prev] : null;
+    });
+    series.push({
+      name: state.compare + ' Previous',
+      type: 'line',
+      data: comparison,
+      smooth: true,
+      lineStyle: { width: 2, type: 'dashed', color: '#534AB7' },
+      itemStyle: { color: '#534AB7' },
+      symbol: 'circle',
+      symbolSize: 6
+    });
+  }
+
+  charts.main.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0 },
+    grid: { left: '3%', right: '4%', top: 30, bottom: 60, containLabel: true },
+    xAxis: { type: 'category', data: periods.map(periodLabel), axisLabel: { rotate: 30, fontSize: 11 } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    series: series
+  });
+}
+
+function renderRatio() {
+  if (charts.ratio) charts.ratio.dispose();
+  charts.ratio = echarts.init(document.getElementById('ratioChart'));
+  const periods = getPeriods();
+  const npVals = periods.map(p => DATA.net_profit_total[p] || 0);
+  const ebVals = periods.map(p => DATA.ebitda_total[p] || 0);
+
+  charts.ratio.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0 },
+    grid: { left: '3%', right: '4%', top: 20, bottom: 60, containLabel: true },
+    xAxis: { type: 'category', data: periods.map(periodLabel), axisLabel: { rotate: 45, fontSize: 10 } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    series: [
+      { name: 'EBITDA', type: 'line', data: ebVals, smooth: true,
+        lineStyle: { color: '#1F4E79', width: 2 }, itemStyle: { color: '#1F4E79' },
+        areaStyle: { color: '#1F4E79', opacity: 0.08 } },
+      { name: 'Net Profit', type: 'line', data: npVals, smooth: true,
+        lineStyle: { color: '#1d9e75', width: 2 }, itemStyle: { color: '#1d9e75' },
+        areaStyle: { color: '#1d9e75', opacity: 0.12 } }
+    ]
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  getPeriods().slice().reverse().forEach(p => {
+    const np = DATA.net_profit_total[p];
+    const yoyP = prevPeriod(p, 12);
+    const yoyV = yoyP ? DATA.net_profit_total[yoyP] : null;
+    const yoyPct = yoyV && yoyV !== 0 ? ((np - yoyV)/Math.abs(yoyV))*100 : null;
+    const eb = DATA.ebitda_total[p];
+    const ratio = eb && eb !== 0 ? (np/eb)*100 : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + periodLabel(p) + '</td>' +
+                   '<td class="num">' + fmtMoney(np) + '</td>' +
+                   '<td class="num ' + (yoyPct>=0?'positive':'negative') + '">' + fmtPct(yoyPct) + '</td>' +
+                   '<td class="num">' + (ratio !== null ? ratio.toFixed(1)+'%' : '—') + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAll() {
+  state.preset = document.getElementById('periodPreset').value;
+  renderKPIs();
+  renderMain();
+  renderRatio();
+  renderTable();
+}
+
+window.addEventListener('resize', () => Object.values(charts).forEach(c => c && c.resize()));
+renderAll();
+</script>
+</body>
+</html>

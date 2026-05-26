@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EBITDA Dashboard — Executive View</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1F4E79;
+  --primary-light: #2E75B6;
+  --accent: #534AB7;
+  --success: #1d9e75;
+  --danger: #a32d2d;
+  --warning: #BA7517;
+  --bg: #F4F7FB;
+  --surface: #FFFFFF;
+  --border: #E5E7EB;
+  --text: #1F2937;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* TOP BAR */
+.topbar {
+  background: var(--primary);
+  color: white;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.logo { font-weight: 700; font-size: 16px; }
+.menu-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 18px;
+}
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-nav a {
+  color: rgba(255,255,255,0.85);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.topbar-nav a:hover, .topbar-nav a.active {
+  background: rgba(255,255,255,0.15);
+  color: white;
+}
+.user-info { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* LAYOUT */
+.container {
+  display: flex;
+  min-height: calc(100vh - 56px);
+}
+.sidebar {
+  width: 240px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 16px 0;
+  flex-shrink: 0;
+}
+.sidebar-group { margin-bottom: 16px; }
+.sidebar-group-title {
+  padding: 0 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.sidebar-item {
+  display: block;
+  padding: 8px 20px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+}
+.sidebar-item:hover { background: var(--bg); }
+.sidebar-item.active {
+  background: #EEF2FF;
+  color: var(--primary);
+  border-left-color: var(--primary);
+  font-weight: 600;
+}
+
+.main { flex: 1; padding: 24px; overflow-x: auto; }
+
+/* PAGE HEADER */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.page-title h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 4px;
+}
+.page-title .subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.data-freshness {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--surface);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.data-freshness .dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* BREADCRUMB */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.breadcrumb-item {
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.breadcrumb-item:hover { background: var(--bg); }
+.breadcrumb-item.current {
+  color: var(--text);
+  font-weight: 600;
+  cursor: default;
+}
+.breadcrumb-item.current:hover { background: transparent; }
+.breadcrumb-sep { color: var(--text-muted); }
+
+/* FILTERS */
+.filter-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.filter-select, .filter-input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: white;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+.filter-select:focus, .filter-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(31,78,121,0.1);
+}
+.compare-toggle {
+  display: flex;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 2px;
+}
+.compare-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.compare-btn.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+}
+
+/* KPI CARDS */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.kpi-delta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.kpi-delta.positive { color: var(--success); }
+.kpi-delta.negative { color: var(--danger); }
+.kpi-delta-arrow { font-size: 14px; }
+.kpi-sparkline { height: 32px; margin-top: 8px; }
+
+/* CHART CARDS */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chart-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.chart-card-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chart-container {
+  width: 100%;
+  height: 400px;
+}
+.chart-container.tall { height: 480px; }
+
+/* TABLE */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  padding: 10px 12px;
+  background: var(--bg);
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody tr:hover { background: var(--bg); cursor: pointer; }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table .num.positive { color: var(--success); }
+.data-table .num.negative { color: var(--danger); }
+
+/* RESPONSIVE */
+@media (max-width: 1024px) {
+  .sidebar { display: none; }
+  .menu-toggle { display: block; }
+  .topbar-nav { display: none; }
+}
+@media (max-width: 768px) {
+  .main { padding: 16px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .kpi-value { font-size: 20px; }
+  .chart-container { height: 320px; }
+  .chart-container.tall { height: 360px; }
+  .page-header { flex-direction: column; align-items: stretch; }
+}
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .filter-group { justify-content: space-between; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <button class="menu-toggle" onclick="document.querySelector('.sidebar').style.display = document.querySelector('.sidebar').style.display === 'block' ? 'none' : 'block'">☰</button>
+    <span class="logo">📊 Executive Dashboard</span>
+    <nav class="topbar-nav">
+      <a href="#" class="active">Dashboards</a>
+      <a href="admin_panel.html">Admin</a>
+      <a href="excel_upload.html">Upload Data</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span>John Doe — CFO</span>
+    <div class="avatar">JD</div>
+  </div>
+</div>
+
+<div class="container">
+  <aside class="sidebar">
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Finance</div>
+      <a href="#" class="sidebar-item active">EBITDA Performance</a>
+      <a href="net_profit_viewer.html" class="sidebar-item">Net Profit Trend</a>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Sales (Phase 2)</div>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Sales Monthly</a>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Sales by Region</a>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">Operations (Phase 2)</div>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Inventory Aging</a>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Production Output</a>
+    </div>
+    <div class="sidebar-group">
+      <div class="sidebar-group-title">HR (Phase 2)</div>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Overtime Daily</a>
+      <a href="#" class="sidebar-item" style="opacity:0.5">Manpower</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <div class="page-title">
+        <h1>EBITDA Performance</h1>
+        <div class="subtitle">Earnings Before Interest, Tax, Depreciation & Amortization</div>
+      </div>
+      <div class="data-freshness">
+        <span class="dot"></span> Data as of 26 May 2026, 16:00 WIB
+      </div>
+    </div>
+
+    <div class="breadcrumb" id="breadcrumb">
+      <a class="breadcrumb-item current">EBITDA Overview</a>
+    </div>
+
+    <div class="filter-bar">
+      <div class="filter-group">
+        <span class="filter-label">Period:</span>
+        <select class="filter-select" id="periodPreset" onchange="onPresetChange()">
+          <option value="L12M">Last 12 Months</option>
+          <option value="YTD" selected>Year to Date</option>
+          <option value="L6M">Last 6 Months</option>
+          <option value="L3M">Last 3 Months</option>
+          <option value="THIS_YEAR">This Year</option>
+          <option value="LAST_YEAR">Last Year</option>
+          <option value="ALL">All Periods</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">Compare:</span>
+        <div class="compare-toggle">
+          <button class="compare-btn" onclick="setCompare('NONE')">None</button>
+          <button class="compare-btn active" onclick="setCompare('MoM')" id="cmp-MoM">MoM</button>
+          <button class="compare-btn" onclick="setCompare('QoQ')">QoQ</button>
+          <button class="compare-btn" onclick="setCompare('YoY')">YoY</button>
+          <button class="compare-btn" onclick="setCompare('R12')">R12</button>
+        </div>
+      </div>
+      <div class="filter-group" style="margin-left:auto">
+        <span class="filter-label">View:</span>
+        <select class="filter-select" id="viewMode" onchange="renderAll()">
+          <option value="waterfall">Waterfall</option>
+          <option value="trend">Trend Line</option>
+          <option value="bar">Bar Chart</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Current Month EBITDA</div>
+        <div class="kpi-value" id="kpi-current">—</div>
+        <div class="kpi-delta" id="kpi-mom">—</div>
+        <div class="kpi-sparkline" id="spark-ebitda"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">YTD EBITDA</div>
+        <div class="kpi-value" id="kpi-ytd">—</div>
+        <div class="kpi-delta" id="kpi-ytd-yoy">—</div>
+        <div class="kpi-sparkline" id="spark-ytd"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Monthly (L12M)</div>
+        <div class="kpi-value" id="kpi-avg">—</div>
+        <div class="kpi-delta" id="kpi-avg-trend">—</div>
+        <div class="kpi-sparkline" id="spark-avg"></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Best Month (L12M)</div>
+        <div class="kpi-value" id="kpi-best">—</div>
+        <div class="kpi-delta" id="kpi-best-label">—</div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div>
+          <div class="chart-card-title" id="mainChartTitle">EBITDA Breakdown — Apr 2026</div>
+          <div class="chart-card-hint" id="mainChartHint">Click any bar to drill down to detail components</div>
+        </div>
+        <select class="filter-select" id="targetMonth" onchange="renderMain()"></select>
+      </div>
+      <div class="chart-container tall" id="mainChart"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div>
+          <div class="chart-card-title">EBITDA Trend (Last 12 Months)</div>
+          <div class="chart-card-hint">Monthly EBITDA value with comparison</div>
+        </div>
+      </div>
+      <div class="chart-container" id="trendChart"></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <div>
+          <div class="chart-card-title">Component Detail</div>
+          <div class="chart-card-hint">Tabular view of EBITDA components</div>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="dataTable">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th class="num">Current</th>
+              <th class="num">MoM</th>
+              <th class="num">MoM %</th>
+              <th class="num">YoY</th>
+              <th class="num">YoY %</th>
+            </tr>
+          </thead>
+          <tbody id="dataTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const DATA = {"periods":["202301","202302","202303","202304","202305","202306","202307","202308","202309","202310","202311","202312","202401","202402","202403","202404","202405","202406","202407","202408","202409","202410","202411","202412","202501","202502","202503","202504","202505","202506","202507","202508","202509","202510","202511","202512","202601","202602","202603","202604"],"ebitda_total":{"202301":30689.3,"202302":112151.07,"202303":283653.2,"202304":242807.65,"202305":628223.44,"202306":439607.43,"202307":379518.14,"202308":407082.17,"202309":442244.15,"202310":574823.6,"202311":153043.67,"202312":-369410.9,"202401":3816.05,"202402":11622.62,"202403":266599.89,"202404":246283.02,"202405":304367.38,"202406":256028.63,"202407":506324.86,"202408":467681.86,"202409":420556.12,"202410":713121.19,"202411":512849.12,"202412":543115.05,"202501":536016.28,"202502":396692.84,"202503":436148.68,"202504":442291.89,"202505":316417.74,"202506":382569.71,"202507":483349.38,"202508":258003.86,"202509":141244.68,"202510":-45057.45,"202511":139682.63,"202512":753354.82,"202601":189323.58,"202602":224957.64,"202603":124032.62,"202604":1015881.07},"net_profit_total":{"202301":218269.82,"202302":350496.19,"202303":359710.48,"202304":239051.65,"202305":347262.29,"202306":298828.57,"202307":317272.69,"202308":358713.68,"202309":364674.95,"202310":361696.0,"202311":237746.7,"202312":310706.57,"202401":324450.99,"202402":303176.95,"202403":340303.44,"202404":334368.33,"202405":333578.26,"202406":351872.64,"202407":289851.17,"202408":227544.66,"202409":285143.01,"202410":371730.35,"202411":350373.01,"202412":419650.52,"202501":365501.29,"202502":330692.97,"202503":357197.66,"202504":355322.32,"202505":180882.72,"202506":295012.52,"202507":302321.89,"202508":287866.6,"202509":339780.08,"202510":270454.5,"202511":291868.63,"202512":372682.53,"202601":304958.76,"202602":268129.07,"202603":129930.37,"202604":138672.17},"ebitda_g2":{"202301":[{"g2":"INCOME","order":1,"value":6720126.58},{"g2":"PRODUCTION COST","order":2,"value":-4272854.92},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-132925.19},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-516370.02},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":43008.62},{"g2":"ENERGY COST","order":6,"value":-502871.68},{"g2":"PROCUREMENT COST","order":7,"value":-53017.75},{"g2":"MANPOWER","order":8,"value":-820484.97},{"g2":"OVERHEADS","order":9,"value":-116329.68},{"g2":"SELLING COST","order":11,"value":-317591.69}],"202302":[{"g2":"INCOME","order":1,"value":5319985.8},{"g2":"PRODUCTION COST","order":2,"value":-2924493.21},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-163270.61},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-457481.89},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":30992.92},{"g2":"ENERGY COST","order":6,"value":-494448.6},{"g2":"PROCUREMENT COST","order":7,"value":-53987.77},{"g2":"MANPOWER","order":8,"value":-844889.63},{"g2":"OVERHEADS","order":9,"value":-123211.87},{"g2":"SELLING COST","order":11,"value":-177044.07}],"202303":[{"g2":"INCOME","order":1,"value":5688704.82},{"g2":"PRODUCTION COST","order":2,"value":-2866640.42},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-182611.0},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-503749.85},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":37181.63},{"g2":"ENERGY COST","order":6,"value":-538264.54},{"g2":"PROCUREMENT COST","order":7,"value":-101555.91},{"g2":"MANPOWER","order":8,"value":-842622.63},{"g2":"OVERHEADS","order":9,"value":-132988.39},{"g2":"SELLING COST","order":11,"value":-273800.51}],"202304":[{"g2":"INCOME","order":1,"value":4860455.27},{"g2":"PRODUCTION COST","order":2,"value":-2289380.54},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-186798.17},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-482613.61},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":64173.01},{"g2":"ENERGY COST","order":6,"value":-504639.11},{"g2":"PROCUREMENT COST","order":7,"value":-44101.61},{"g2":"MANPOWER","order":8,"value":-852372.85},{"g2":"OVERHEADS","order":9,"value":-124428.16},{"g2":"SELLING COST","order":11,"value":-197486.58}],"202305":[{"g2":"INCOME","order":1,"value":7158114.43},{"g2":"PRODUCTION COST","order":2,"value":-4069633.97},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-142269.48},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-523211.42},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":35270.28},{"g2":"ENERGY COST","order":6,"value":-564924.05},{"g2":"PROCUREMENT COST","order":7,"value":-64466.82},{"g2":"MANPOWER","order":8,"value":-861166.91},{"g2":"OVERHEADS","order":9,"value":-138802.99},{"g2":"SELLING COST","order":11,"value":-200685.63}],"202306":[{"g2":"INCOME","order":1,"value":6086446.78},{"g2":"PRODUCTION COST","order":2,"value":-3095121.86},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-173642.58},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-519245.99},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":38385.8},{"g2":"ENERGY COST","order":6,"value":-581025.96},{"g2":"PROCUREMENT COST","order":7,"value":-68775.8},{"g2":"MANPOWER","order":8,"value":-853879.06},{"g2":"OVERHEADS","order":9,"value":-139056.75},{"g2":"SELLING COST","order":11,"value":-254477.15}],"202307":[{"g2":"INCOME","order":1,"value":6504610.84},{"g2":"PRODUCTION COST","order":2,"value":-3449052.29},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-218644.51},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-555058.74},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":44846.53},{"g2":"ENERGY COST","order":6,"value":-582990.64},{"g2":"PROCUREMENT COST","order":7,"value":-82720.1},{"g2":"MANPOWER","order":8,"value":-875857.33},{"g2":"OVERHEADS","order":9,"value":-154499.18},{"g2":"SELLING COST","order":11,"value":-251116.44}],"202308":[{"g2":"INCOME","order":1,"value":6199046.08},{"g2":"PRODUCTION COST","order":2,"value":-3079215.42},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-202412.81},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-555060.0},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":46472.6},{"g2":"ENERGY COST","order":6,"value":-610339.32},{"g2":"PROCUREMENT COST","order":7,"value":-84085.41},{"g2":"MANPOWER","order":8,"value":-906941.1},{"g2":"OVERHEADS","order":9,"value":-168368.14},{"g2":"SELLING COST","order":11,"value":-232014.31}],"202309":[{"g2":"INCOME","order":1,"value":5859522.14},{"g2":"PRODUCTION COST","order":2,"value":-2763646.56},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-180263.65},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-533636.93},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":39386.53},{"g2":"ENERGY COST","order":6,"value":-585691.91},{"g2":"PROCUREMENT COST","order":7,"value":-82087.04},{"g2":"MANPOWER","order":8,"value":-905634.88},{"g2":"OVERHEADS","order":9,"value":-164425.6},{"g2":"SELLING COST","order":11,"value":-241277.95}],"202310":[{"g2":"INCOME","order":1,"value":5859068.98},{"g2":"PRODUCTION COST","order":2,"value":-2698054.82},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-167316.57},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-542369.27},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":67991.08},{"g2":"ENERGY COST","order":6,"value":-605322.24},{"g2":"PROCUREMENT COST","order":7,"value":-61892.0},{"g2":"MANPOWER","order":8,"value":-893863.04},{"g2":"OVERHEADS","order":9,"value":-151073.92},{"g2":"SELLING COST","order":11,"value":-232344.6}],"202311":[{"g2":"INCOME","order":1,"value":5016671.45},{"g2":"PRODUCTION COST","order":2,"value":-2477583.36},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-152194.22},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-500820.58},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":54708.82},{"g2":"ENERGY COST","order":6,"value":-542642.65},{"g2":"PROCUREMENT COST","order":7,"value":-55058.85},{"g2":"MANPOWER","order":8,"value":-873483.03},{"g2":"OVERHEADS","order":9,"value":-135845.38},{"g2":"SELLING COST","order":11,"value":-180708.53}],"202312":[{"g2":"INCOME","order":1,"value":5045583.11},{"g2":"PRODUCTION COST","order":2,"value":-2772063.63},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-129623.88},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-403102.91},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":32346.29},{"g2":"ENERGY COST","order":6,"value":-524441.72},{"g2":"PROCUREMENT COST","order":7,"value":-70634.09},{"g2":"MANPOWER","order":8,"value":-1148501.12},{"g2":"OVERHEADS","order":9,"value":-83520.53},{"g2":"SELLING COST","order":11,"value":-315452.42}],"202401":[{"g2":"INCOME","order":1,"value":6011073.16},{"g2":"PRODUCTION COST","order":2,"value":-3436933.61},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-101903.65},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-453336.93},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":11414.96},{"g2":"ENERGY COST","order":6,"value":-548273.14},{"g2":"PROCUREMENT COST","order":7,"value":-60592.51},{"g2":"MANPOWER","order":8,"value":-924479.21},{"g2":"OVERHEADS","order":9,"value":-125792.15},{"g2":"SELLING COST","order":11,"value":-367360.87}],"202402":[{"g2":"INCOME","order":1,"value":5686116.94},{"g2":"PRODUCTION COST","order":2,"value":-3271045.02},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-130015.39},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-455270.19},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":16753.26},{"g2":"ENERGY COST","order":6,"value":-478092.71},{"g2":"PROCUREMENT COST","order":7,"value":-39228.04},{"g2":"MANPOWER","order":8,"value":-912522.83},{"g2":"OVERHEADS","order":9,"value":-111944.58},{"g2":"SELLING COST","order":11,"value":-293128.82}],"202403":[{"g2":"INCOME","order":1,"value":5899766.88},{"g2":"PRODUCTION COST","order":2,"value":-3014058.65},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-188718.28},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-491428.85},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":46373.88},{"g2":"ENERGY COST","order":6,"value":-558530.93},{"g2":"PROCUREMENT COST","order":7,"value":-61501.75},{"g2":"MANPOWER","order":8,"value":-925028.58},{"g2":"OVERHEADS","order":9,"value":-112471.99},{"g2":"SELLING COST","order":11,"value":-327801.84}],"202404":[{"g2":"INCOME","order":1,"value":5547847.44},{"g2":"PRODUCTION COST","order":2,"value":-2777642.77},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-136662.75},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-472132.77},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":21919.13},{"g2":"ENERGY COST","order":6,"value":-556443.19},{"g2":"PROCUREMENT COST","order":7,"value":-53468.87},{"g2":"MANPOWER","order":8,"value":-939396.04},{"g2":"OVERHEADS","order":9,"value":-109342.52},{"g2":"SELLING COST","order":11,"value":-278394.64}],"202405":[{"g2":"INCOME","order":1,"value":6770214.65},{"g2":"PRODUCTION COST","order":2,"value":-3707129.82},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-107015.3},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-567668.36},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":24937.03},{"g2":"ENERGY COST","order":6,"value":-597992.01},{"g2":"PROCUREMENT COST","order":7,"value":-75772.71},{"g2":"MANPOWER","order":8,"value":-928579.34},{"g2":"OVERHEADS","order":9,"value":-137913.63},{"g2":"SELLING COST","order":11,"value":-368713.13}],"202406":[{"g2":"INCOME","order":1,"value":6778073.91},{"g2":"PRODUCTION COST","order":2,"value":-3772390.17},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-153613.01},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-514050.35},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":26581.25},{"g2":"ENERGY COST","order":6,"value":-584417.27},{"g2":"PROCUREMENT COST","order":7,"value":-68660.63},{"g2":"MANPOWER","order":8,"value":-923262.88},{"g2":"OVERHEADS","order":9,"value":-138781.73},{"g2":"SELLING COST","order":11,"value":-393450.49}],"202407":[{"g2":"INCOME","order":1,"value":7298845.52},{"g2":"PRODUCTION COST","order":2,"value":-3935631.42},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-160218.1},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-615664.04},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":32908.13},{"g2":"ENERGY COST","order":6,"value":-587121.09},{"g2":"PROCUREMENT COST","order":7,"value":-99833.2},{"g2":"MANPOWER","order":8,"value":-909839.78},{"g2":"OVERHEADS","order":9,"value":-141604.74},{"g2":"SELLING COST","order":11,"value":-375516.42}],"202408":[{"g2":"INCOME","order":1,"value":6845184.82},{"g2":"PRODUCTION COST","order":2,"value":-3566513.91},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-204416.34},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-561648.9},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":49620.55},{"g2":"ENERGY COST","order":6,"value":-600003.56},{"g2":"PROCUREMENT COST","order":7,"value":-90813.61},{"g2":"MANPOWER","order":8,"value":-894778.6},{"g2":"OVERHEADS","order":9,"value":-134875.97},{"g2":"SELLING COST","order":11,"value":-374072.62}],"202409":[{"g2":"INCOME","order":1,"value":6590886.58},{"g2":"PRODUCTION COST","order":2,"value":-3305584.37},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-171412.3},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-582497.77},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":45003.87},{"g2":"ENERGY COST","order":6,"value":-601931.5},{"g2":"PROCUREMENT COST","order":7,"value":-98793.03},{"g2":"MANPOWER","order":8,"value":-954861.48},{"g2":"OVERHEADS","order":9,"value":-126382.66},{"g2":"SELLING COST","order":11,"value":-373871.22}],"202410":[{"g2":"INCOME","order":1,"value":6915472.83},{"g2":"PRODUCTION COST","order":2,"value":-3353218.88},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-195791.1},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-564462.57},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":61633.88},{"g2":"ENERGY COST","order":6,"value":-652130.44},{"g2":"PROCUREMENT COST","order":7,"value":-77095.39},{"g2":"MANPOWER","order":8,"value":-949865.51},{"g2":"OVERHEADS","order":9,"value":-148367.04},{"g2":"SELLING COST","order":11,"value":-323054.59}],"202411":[{"g2":"INCOME","order":1,"value":6265470.41},{"g2":"PRODUCTION COST","order":2,"value":-3048877.96},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-166573.33},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-515015.82},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":48700.96},{"g2":"ENERGY COST","order":6,"value":-588130.54},{"g2":"PROCUREMENT COST","order":7,"value":-94267.68},{"g2":"MANPOWER","order":8,"value":-961869.98},{"g2":"OVERHEADS","order":9,"value":-112902.98},{"g2":"SELLING COST","order":11,"value":-313683.96}],"202412":[{"g2":"INCOME","order":1,"value":6272091.47},{"g2":"PRODUCTION COST","order":2,"value":-3018229.37},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-195548.62},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-537496.61},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":46023.33},{"g2":"ENERGY COST","order":6,"value":-587323.29},{"g2":"PROCUREMENT COST","order":7,"value":-67914.55},{"g2":"MANPOWER","order":8,"value":-977143.05},{"g2":"OVERHEADS","order":9,"value":-8057.37},{"g2":"SELLING COST","order":11,"value":-383286.89}],"202501":[{"g2":"INCOME","order":1,"value":6154967.02},{"g2":"PRODUCTION COST","order":2,"value":-2942642.39},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-197593.53},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-574328.89},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":52367.35},{"g2":"ENERGY COST","order":6,"value":-573170.67},{"g2":"PROCUREMENT COST","order":7,"value":-70473.01},{"g2":"MANPOWER","order":8,"value":-943144.41},{"g2":"OVERHEADS","order":9,"value":-112256.54},{"g2":"SELLING COST","order":11,"value":-257708.65}],"202502":[{"g2":"INCOME","order":1,"value":5801350.04},{"g2":"PRODUCTION COST","order":2,"value":-3020805.24},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-155920.07},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-486607.14},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":33772.06},{"g2":"ENERGY COST","order":6,"value":-498736.29},{"g2":"PROCUREMENT COST","order":7,"value":-58584.09},{"g2":"MANPOWER","order":8,"value":-931088.92},{"g2":"OVERHEADS","order":9,"value":-107182.21},{"g2":"SELLING COST","order":11,"value":-179505.3}],"202503":[{"g2":"INCOME","order":1,"value":4700391.68},{"g2":"PRODUCTION COST","order":2,"value":-1799278.19},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-192445.9},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-509332.83},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":56552.13},{"g2":"ENERGY COST","order":6,"value":-556231.14},{"g2":"PROCUREMENT COST","order":7,"value":-84510.56},{"g2":"MANPOWER","order":8,"value":-892181.0},{"g2":"OVERHEADS","order":9,"value":-106052.33},{"g2":"SELLING COST","order":11,"value":-180763.18}],"202504":[{"g2":"INCOME","order":1,"value":5602761.07},{"g2":"PRODUCTION COST","order":2,"value":-2698479.89},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-176725.3},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-476458.06},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":33141.18},{"g2":"ENERGY COST","order":6,"value":-536117.07},{"g2":"PROCUREMENT COST","order":7,"value":-68575.12},{"g2":"MANPOWER","order":8,"value":-952446.31},{"g2":"OVERHEADS","order":9,"value":-111676.09},{"g2":"SELLING COST","order":11,"value":-173132.52}],"202505":[{"g2":"INCOME","order":1,"value":6007264.65},{"g2":"PRODUCTION COST","order":2,"value":-3201142.38},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-196007.15},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-513819.83},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":40490.57},{"g2":"ENERGY COST","order":6,"value":-558433.63},{"g2":"PROCUREMENT COST","order":7,"value":-67705.92},{"g2":"MANPOWER","order":8,"value":-916484.15},{"g2":"OVERHEADS","order":9,"value":-105141.44},{"g2":"BAD DEBT EXP","order":10,"value":-2960.83},{"g2":"SELLING COST","order":11,"value":-169642.15}],"202506":[{"g2":"INCOME","order":1,"value":5929584.82},{"g2":"PRODUCTION COST","order":2,"value":-3025312.63},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-163523.97},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-474515.92},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":32030.65},{"g2":"ENERGY COST","order":6,"value":-555357.0},{"g2":"PROCUREMENT COST","order":7,"value":-53870.61},{"g2":"MANPOWER","order":8,"value":-970275.6},{"g2":"OVERHEADS","order":9,"value":-105808.75},{"g2":"BAD DEBT EXP","order":10,"value":-8418.16},{"g2":"SELLING COST","order":11,"value":-221963.12}],"202507":[{"g2":"INCOME","order":1,"value":6155629.96},{"g2":"PRODUCTION COST","order":2,"value":-3145936.15},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-218519.15},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-468494.44},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":72658.9},{"g2":"ENERGY COST","order":6,"value":-546969.29},{"g2":"PROCUREMENT COST","order":7,"value":-94500.87},{"g2":"MANPOWER","order":8,"value":-961067.64},{"g2":"OVERHEADS","order":9,"value":-115136.93},{"g2":"BAD DEBT EXP","order":10,"value":0.0},{"g2":"SELLING COST","order":11,"value":-194315.01}],"202508":[{"g2":"INCOME","order":1,"value":5904057.92},{"g2":"PRODUCTION COST","order":2,"value":-3075018.39},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-214155.58},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-470036.39},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":18363.51},{"g2":"ENERGY COST","order":6,"value":-559454.0},{"g2":"PROCUREMENT COST","order":7,"value":-80514.17},{"g2":"MANPOWER","order":8,"value":-955270.22},{"g2":"OVERHEADS","order":9,"value":-111278.21},{"g2":"BAD DEBT EXP","order":10,"value":0.0},{"g2":"SELLING COST","order":11,"value":-198690.61}],"202509":[{"g2":"INCOME","order":1,"value":5535847.33},{"g2":"PRODUCTION COST","order":2,"value":-2909346.11},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-122506.11},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-456930.36},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":9497.97},{"g2":"ENERGY COST","order":6,"value":-527585.44},{"g2":"PROCUREMENT COST","order":7,"value":-59673.53},{"g2":"MANPOWER","order":8,"value":-994034.69},{"g2":"OVERHEADS","order":9,"value":-112594.91},{"g2":"BAD DEBT EXP","order":10,"value":0.0},{"g2":"SELLING COST","order":11,"value":-221429.47}],"202510":[{"g2":"INCOME","order":1,"value":6136957.4},{"g2":"PRODUCTION COST","order":2,"value":-3711493.67},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-111008.36},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-477626.4},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":18950.25},{"g2":"ENERGY COST","order":6,"value":-523806.91},{"g2":"PROCUREMENT COST","order":7,"value":-108175.57},{"g2":"MANPOWER","order":8,"value":-965049.08},{"g2":"OVERHEADS","order":9,"value":-115200.76},{"g2":"BAD DEBT EXP","order":10,"value":0.0},{"g2":"SELLING COST","order":11,"value":-188604.35}],"202511":[{"g2":"INCOME","order":1,"value":6123222.44},{"g2":"PRODUCTION COST","order":2,"value":-3446600.97},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-160048.03},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-487256.2},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":37036.57},{"g2":"ENERGY COST","order":6,"value":-533145.6},{"g2":"PROCUREMENT COST","order":7,"value":-70553.78},{"g2":"MANPOWER","order":8,"value":-982900.95},{"g2":"OVERHEADS","order":9,"value":-112065.28},{"g2":"BAD DEBT EXP","order":10,"value":0.0},{"g2":"SELLING COST","order":11,"value":-228005.57}],"202512":[{"g2":"INCOME","order":1,"value":6048475.16},{"g2":"PRODUCTION COST","order":2,"value":-3378874.84},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-182671.51},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-499831.76},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":6021.04},{"g2":"ENERGY COST","order":6,"value":-562330.34},{"g2":"PROCUREMENT COST","order":7,"value":-86060.95},{"g2":"MANPOWER","order":8,"value":-371252.7},{"g2":"OVERHEADS","order":9,"value":-19073.85},{"g2":"BAD DEBT EXP","order":10,"value":11378.99},{"g2":"SELLING COST","order":11,"value":-212424.42}],"202601":[{"g2":"INCOME","order":1,"value":5734994.64},{"g2":"PRODUCTION COST","order":2,"value":-2857035.78},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-172015.12},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-555978.24},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":5561.94},{"g2":"ENERGY COST","order":6,"value":-584359.16},{"g2":"PROCUREMENT COST","order":7,"value":-69670.99},{"g2":"MANPOWER","order":8,"value":-980181.39},{"g2":"OVERHEADS","order":9,"value":-121267.2},{"g2":"SELLING COST","order":11,"value":-210725.12}],"202602":[{"g2":"INCOME","order":1,"value":5586843.51},{"g2":"PRODUCTION COST","order":2,"value":-2726997.83},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-193210.32},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-505854.99},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":25250.22},{"g2":"ENERGY COST","order":6,"value":-554425.34},{"g2":"PROCUREMENT COST","order":7,"value":-79816.17},{"g2":"MANPOWER","order":8,"value":-980578.1},{"g2":"OVERHEADS","order":9,"value":-126863.22},{"g2":"SELLING COST","order":11,"value":-219390.12}],"202603":[{"g2":"INCOME","order":1,"value":4381673.51},{"g2":"PRODUCTION COST","order":2,"value":-1816899.6},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-167463.68},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-461020.49},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":29810.74},{"g2":"ENERGY COST","order":6,"value":-453899.24},{"g2":"PROCUREMENT COST","order":7,"value":-83024.08},{"g2":"MANPOWER","order":8,"value":-966144.3},{"g2":"OVERHEADS","order":9,"value":-116443.27},{"g2":"SELLING COST","order":11,"value":-222556.97}],"202604":[{"g2":"INCOME","order":1,"value":6920073.85},{"g2":"PRODUCTION COST","order":2,"value":-3343863.94},{"g2":"COLOR CONSUMPTION (SPG)","order":3,"value":-212912.67},{"g2":"MATERIAL CONSUMPTION","order":4,"value":-483670.12},{"g2":"R and D MASTERBATCH PRODUCTION","order":5,"value":85158.88},{"g2":"ENERGY COST","order":6,"value":-523325.69},{"g2":"PROCUREMENT COST","order":7,"value":-74404.39},{"g2":"MANPOWER","order":8,"value":-943166.87},{"g2":"OVERHEADS","order":9,"value":-122898.24},{"g2":"SELLING COST","order":11,"value":-285109.74}]},"ebitda_g3":{"202301":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-43679.99},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-6583.94},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-82661.26}],"ENERGY COST":[{"g3":"POWER - PLN","value":-477020.49},{"g3":"POWER - MASTER BATCH","value":-2028.59},{"g3":"POWER - CNG","value":-23822.6}],"INCOME":[{"g3":"LOCAL SALES","value":4078919.76},{"g3":"EXPORT SALES","value":2604077.8},{"g3":"POP CORN SALES","value":21608.29},{"g3":"SALES RETURN","value":-9652.28},{"g3":"OTHER INCOME - Waste","value":18530.26},{"g3":"OTHER INCOME (Bank Interest and Others)","value":6642.75}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-402226.77},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-23049.07},{"g3":"BONUS PROVISION - SOLO","value":-34415.87},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26222.11},{"g3":"EMPLOYEE COST-JAKARTA","value":-295554.8},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1945.09},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37071.26}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-40095.01},{"g3":"CHEMICALS","value":-105814.7},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-3470.04},{"g3":"SUPERBA - COLOR","value":-1634.04},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-238762.39},{"g3":"SUPPORTING MATERIALS","value":-31303.49},{"g3":"SPARES","value":-80186.76},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-15103.59}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-42542.36},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-44545.33},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29241.99}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-31983.19},{"g3":"PROCUREMENT COST IMPORT","value":-19770.89},{"g3":"PROCUREMENT COST MASTER BATCH","value":-1263.67}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2321437.98},{"g3":"CHIPS COST-RECYCLE","value":-38466.35},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-136.46},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-39486.3},{"g3":"STOCK ADJUSMENT","value":-1588586.32},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-272280.05},{"g3":"BOUGHT OUT  VSY AND RMT","value":-12461.46}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-52547.69},{"g3":"CHANGE OF MASTERBATCH STOCK","value":91518.38},{"g3":"MASTERBATCH WIP VALUATION","value":4037.93}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-60678.79},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-256912.9}]},"202302":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-40241.7},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-934.1},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-122094.81}],"ENERGY COST":[{"g3":"POWER - PLN","value":-478330.5},{"g3":"POWER - MASTER BATCH","value":-2017.01},{"g3":"POWER - CNG","value":-14101.09}],"INCOME":[{"g3":"LOCAL SALES","value":3829569.26},{"g3":"EXPORT SALES","value":1468469.27},{"g3":"POP CORN SALES","value":8895.78},{"g3":"SALES RETURN","value":-3258.2},{"g3":"OTHER INCOME - Waste","value":13334.82},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2974.87}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-401489.89},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-26241.96},{"g3":"BONUS PROVISION - SOLO","value":-36143.67},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27538.55},{"g3":"EMPLOYEE COST-JAKARTA","value":-312498.19},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2045.0},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38932.37}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-31471.42},{"g3":"CHEMICALS","value":-106744.96},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1132.01},{"g3":"SUPERBA - COLOR","value":-590.59},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-209775.08},{"g3":"SUPPORTING MATERIALS","value":-29724.64},{"g3":"SPARES","value":-64523.25},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-13519.94}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44164.98},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-47247.69},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-31799.2}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-33784.07},{"g3":"PROCUREMENT COST IMPORT","value":-20203.7},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2371032.81},{"g3":"CHIPS COST-RECYCLE","value":-34754.41},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-253.17},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-8309.72},{"g3":"STOCK ADJUSMENT","value":-239803.08},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-270340.02},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-66766.84},{"g3":"CHANGE OF MASTERBATCH STOCK","value":88527.83},{"g3":"MASTERBATCH WIP VALUATION","value":9231.93}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-58950.49},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-118093.58}]},"202303":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-39293.13},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-6897.68},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-136420.19}],"ENERGY COST":[{"g3":"POWER - PLN","value":-521836.52},{"g3":"POWER - MASTER BATCH","value":-2507.8},{"g3":"POWER - CNG","value":-13920.22}],"INCOME":[{"g3":"LOCAL SALES","value":3256204.11},{"g3":"EXPORT SALES","value":2415638.92},{"g3":"POP CORN SALES","value":12357.6},{"g3":"SALES RETURN","value":-15920.74},{"g3":"OTHER INCOME - Waste","value":18571.42},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1853.51}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-404015.08},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-21632.63},{"g3":"BONUS PROVISION - SOLO","value":-35445.59},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27006.68},{"g3":"EMPLOYEE COST-JAKARTA","value":-314317.26},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2024.95},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38180.44}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-42833.1},{"g3":"CHEMICALS","value":-119488.2},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1372.18},{"g3":"SUPERBA - COLOR","value":-1932.59},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-235980.97},{"g3":"SUPPORTING MATERIALS","value":-29857.74},{"g3":"SPARES","value":-57850.58},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-14434.49}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-42412.89},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-45595.02},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-44980.48}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-46697.14},{"g3":"PROCUREMENT COST IMPORT","value":-54858.77},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2734873.74},{"g3":"CHIPS COST-RECYCLE","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-37097.5},{"g3":"STOCK ADJUSMENT","value":343742.0},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-392715.59},{"g3":"BOUGHT OUT  VSY AND RMT","value":-45695.59}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-72534.25},{"g3":"CHANGE OF MASTERBATCH STOCK","value":109121.31},{"g3":"MASTERBATCH WIP VALUATION","value":594.57}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-51769.57},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-222030.94}]},"202304":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-39633.88},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-4269.63},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-142894.66}],"ENERGY COST":[{"g3":"POWER - PLN","value":-483316.25},{"g3":"POWER - MASTER BATCH","value":-2543.95},{"g3":"POWER - CNG","value":-18778.91}],"INCOME":[{"g3":"LOCAL SALES","value":2672659.49},{"g3":"EXPORT SALES","value":2154819.92},{"g3":"POP CORN SALES","value":17560.75},{"g3":"SALES RETURN","value":0.0},{"g3":"OTHER INCOME - Waste","value":14231.81},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1183.3}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-432527.13},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-23823.2},{"g3":"BONUS PROVISION - SOLO","value":-24552.7},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27386.8},{"g3":"EMPLOYEE COST-JAKARTA","value":-305086.31},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2039.27},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-36957.44}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-37803.13},{"g3":"CHEMICALS","value":-107779.44},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1881.31},{"g3":"SUPERBA - COLOR","value":-881.07},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-218162.84},{"g3":"SUPPORTING MATERIALS","value":-27217.33},{"g3":"SPARES","value":-59174.71},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-29713.78}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-45938.21},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-46146.63},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-32343.32}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-23642.75},{"g3":"PROCUREMENT COST IMPORT","value":-20458.86},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2260968.47},{"g3":"CHIPS COST-RECYCLE","value":-37219.51},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-15.88},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-20710.95},{"g3":"STOCK ADJUSMENT","value":489143.49},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-448765.92},{"g3":"BOUGHT OUT  VSY AND RMT","value":-10843.3}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-80490.91},{"g3":"CHANGE OF MASTERBATCH STOCK","value":148771.83},{"g3":"MASTERBATCH WIP VALUATION","value":-4107.91}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-43701.83},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-153784.75}]},"202305":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-35952.61},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-9364.59},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-96952.28}],"ENERGY COST":[{"g3":"POWER - PLN","value":-527918.2},{"g3":"POWER - MASTER BATCH","value":-2461.41},{"g3":"POWER - CNG","value":-34544.44}],"INCOME":[{"g3":"LOCAL SALES","value":3924463.35},{"g3":"EXPORT SALES","value":3191996.26},{"g3":"POP CORN SALES","value":25618.59},{"g3":"SALES RETURN","value":-7861.13},{"g3":"OTHER INCOME - Waste","value":16507.72},{"g3":"OTHER INCOME (Bank Interest and Others)","value":7389.64}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-431944.72},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-23482.71},{"g3":"BONUS PROVISION - SOLO","value":-25071.24},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27964.2},{"g3":"EMPLOYEE COST-JAKARTA","value":-312592.01},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2375.41},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37736.62}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-54358.41},{"g3":"CHEMICALS","value":-104204.16},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4509.52},{"g3":"SUPERBA - COLOR","value":-2622.29},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-243718.4},{"g3":"SUPPORTING MATERIALS","value":-27460.27},{"g3":"SPARES","value":-72988.98},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-13349.39}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-45304.61},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-50181.91},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-43316.47}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-33876.08},{"g3":"PROCUREMENT COST IMPORT","value":-30590.74},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2641433.66},{"g3":"CHIPS COST-RECYCLE","value":-32236.2},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-63.36},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":34571.02},{"g3":"STOCK ADJUSMENT","value":-1044148.2},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-373877.35},{"g3":"BOUGHT OUT  VSY AND RMT","value":-12446.22},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-83468.21},{"g3":"CHANGE OF MASTERBATCH STOCK","value":115805.36},{"g3":"MASTERBATCH WIP VALUATION","value":2933.13}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-60451.17},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-140234.46}]},"202306":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-50728.18},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-6609.43},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-116304.97}],"ENERGY COST":[{"g3":"POWER - PLN","value":-561040.64},{"g3":"POWER - MASTER BATCH","value":-2432.43},{"g3":"POWER - CNG","value":-17552.89}],"INCOME":[{"g3":"LOCAL SALES","value":3499654.67},{"g3":"EXPORT SALES","value":2566976.02},{"g3":"POP CORN SALES","value":14179.3},{"g3":"SALES RETURN","value":-9163.41},{"g3":"OTHER INCOME - Waste","value":13217.25},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1582.95}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-428365.06},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-23005.69},{"g3":"BONUS PROVISION - SOLO","value":-24645.5},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27556.95},{"g3":"EMPLOYEE COST-JAKARTA","value":-310758.27},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2360.05},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37187.54}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-27662.02},{"g3":"CHEMICALS","value":-117440.22},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1837.21},{"g3":"SUPERBA - COLOR","value":-1070.77},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-251001.42},{"g3":"SUPPORTING MATERIALS","value":-32260.52},{"g3":"SPARES","value":-61464.35},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-26509.48}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-52474.97},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-55957.38},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-30624.4}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-39981.24},{"g3":"PROCUREMENT COST IMPORT","value":-28789.26},{"g3":"PROCUREMENT COST MASTER BATCH","value":-5.3}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2909896.46},{"g3":"CHIPS COST-RECYCLE","value":-6199.52},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-62.76},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":1914.31},{"g3":"STOCK ADJUSMENT","value":224576.81},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-405454.24},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-86380.55},{"g3":"CHANGE OF MASTERBATCH STOCK","value":124366.33},{"g3":"MASTERBATCH WIP VALUATION","value":400.02}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-51385.26},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-203091.89}]},"202307":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-62664.46},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-7372.35},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-148607.7}],"ENERGY COST":[{"g3":"POWER - PLN","value":-570870.76},{"g3":"POWER - MASTER BATCH","value":-2853.63},{"g3":"POWER - CNG","value":-9266.25}],"INCOME":[{"g3":"LOCAL SALES","value":4031383.77},{"g3":"EXPORT SALES","value":2425801.84},{"g3":"POP CORN SALES","value":23099.95},{"g3":"SALES RETURN","value":0.0},{"g3":"OTHER INCOME - Waste","value":22378.15},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1947.13}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-410086.72},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-25115.51},{"g3":"BONUS PROVISION - SOLO","value":-24552.3},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27452.42},{"g3":"EMPLOYEE COST-JAKARTA","value":-349251.67},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2351.73},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37046.98}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-53483.32},{"g3":"CHEMICALS","value":-130751.25},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1063.95},{"g3":"SUPERBA - COLOR","value":-512.27},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-263112.16},{"g3":"SUPPORTING MATERIALS","value":-30763.95},{"g3":"SPARES","value":-58694.43},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-16677.41}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-41137.8},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-64159.99},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-49201.39}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-38815.56},{"g3":"PROCUREMENT COST IMPORT","value":-43904.54},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2893165.7},{"g3":"CHIPS COST-RECYCLE","value":-80453.89},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-77.18},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":3396.74},{"g3":"STOCK ADJUSMENT","value":-142786.87},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-335965.39},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-102570.99},{"g3":"CHANGE OF MASTERBATCH STOCK","value":155035.08},{"g3":"MASTERBATCH WIP VALUATION","value":-7617.56}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-62579.56},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-188536.88}]},"202308":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-58429.78},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-3366.48},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-140616.55}],"ENERGY COST":[{"g3":"POWER - PLN","value":-583165.58},{"g3":"POWER - MASTER BATCH","value":-2797.33},{"g3":"POWER - CNG","value":-24376.41}],"INCOME":[{"g3":"LOCAL SALES","value":3899398.78},{"g3":"EXPORT SALES","value":2358155.28},{"g3":"POP CORN SALES","value":7156.39},{"g3":"SALES RETURN","value":-80196.27},{"g3":"OTHER INCOME - Waste","value":12753.99},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1777.91}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-403204.8},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-27642.18},{"g3":"BONUS PROVISION - SOLO","value":-23651.63},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27348.67},{"g3":"EMPLOYEE COST-JAKARTA","value":-385403.62},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2347.83},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37342.37}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-39958.76},{"g3":"CHEMICALS","value":-123645.68},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4005.34},{"g3":"SUPERBA - COLOR","value":-2278.62},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-269975.91},{"g3":"SUPPORTING MATERIALS","value":-30229.6},{"g3":"SPARES","value":-69999.33},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-14966.76}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-49412.65},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-79261.42},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-39694.07}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-30847.33},{"g3":"PROCUREMENT COST IMPORT","value":-53238.08},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2719127.48},{"g3":"CHIPS COST-RECYCLE","value":-133068.38},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-96.16},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":10997.99},{"g3":"STOCK ADJUSMENT","value":269702.08},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-480429.7},{"g3":"BOUGHT OUT  VSY AND RMT","value":-27193.77},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-121570.55},{"g3":"CHANGE OF MASTERBATCH STOCK","value":162875.4},{"g3":"MASTERBATCH WIP VALUATION","value":5167.75}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-66639.62},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-165374.69}]},"202309":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-52390.89},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-9837.91},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-118034.85}],"ENERGY COST":[{"g3":"POWER - PLN","value":-552550.83},{"g3":"POWER - MASTER BATCH","value":-2518.8},{"g3":"POWER - CNG","value":-30622.28}],"INCOME":[{"g3":"LOCAL SALES","value":3586518.67},{"g3":"EXPORT SALES","value":2263965.6},{"g3":"POP CORN SALES","value":22864.07},{"g3":"SALES RETURN","value":-34525.61},{"g3":"OTHER INCOME - Waste","value":19158.26},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1541.15}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-399832.2},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-27184.51},{"g3":"BONUS PROVISION - SOLO","value":-25280.1},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27068.7},{"g3":"EMPLOYEE COST-JAKARTA","value":-382323.83},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-8141.97},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-35803.57}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-35025.6},{"g3":"CHEMICALS","value":-118017.1},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4759.23},{"g3":"SUPERBA - COLOR","value":-2518.6},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-259071.71},{"g3":"SUPPORTING MATERIALS","value":-33925.91},{"g3":"SPARES","value":-70064.93},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-10253.85}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44156.87},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-78785.16},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-41483.57}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-28342.36},{"g3":"PROCUREMENT COST IMPORT","value":-53744.68},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2822526.99},{"g3":"CHIPS COST-RECYCLE","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-9689.8},{"g3":"STOCK ADJUSMENT","value":395266.13},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-295800.74},{"g3":"BOUGHT OUT  VSY AND RMT","value":-30895.16},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-81831.43},{"g3":"CHANGE OF MASTERBATCH STOCK","value":124193.16},{"g3":"MASTERBATCH WIP VALUATION","value":-2975.2}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-55455.43},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-185822.52}]},"202310":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-42823.3},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-9228.92},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-115264.35}],"ENERGY COST":[{"g3":"POWER - PLN","value":-565650.23},{"g3":"POWER - MASTER BATCH","value":-2483.18},{"g3":"POWER - CNG","value":-37188.83}],"INCOME":[{"g3":"LOCAL SALES","value":3471627.93},{"g3":"EXPORT SALES","value":2365059.61},{"g3":"POP CORN SALES","value":12444.28},{"g3":"SALES RETURN","value":-6975.35},{"g3":"OTHER INCOME - Waste","value":15521.75},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1390.76}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-401390.39},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-26262.71},{"g3":"BONUS PROVISION - SOLO","value":-23003.51},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26568.34},{"g3":"EMPLOYEE COST-JAKARTA","value":-373373.14},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-8123.21},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-35141.74}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-43548.76},{"g3":"CHEMICALS","value":-128238.92},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5687.19},{"g3":"SUPERBA - COLOR","value":-3448.24},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-254819.82},{"g3":"SUPPORTING MATERIALS","value":-34671.93},{"g3":"SPARES","value":-61273.0},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-10681.41}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-45259.21},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-76278.67},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29536.04}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-28336.19},{"g3":"PROCUREMENT COST IMPORT","value":-33555.81},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-3148479.53},{"g3":"CHIPS COST-RECYCLE","value":-78888.59},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-75.83},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":93611.16},{"g3":"STOCK ADJUSMENT","value":802756.04},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-357995.69},{"g3":"BOUGHT OUT  VSY AND RMT","value":-8982.38},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-91555.86},{"g3":"CHANGE OF MASTERBATCH STOCK","value":163789.99},{"g3":"MASTERBATCH WIP VALUATION","value":-4243.05}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-55700.48},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-176644.12}]},"202311":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-29422.08},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-8466.61},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-114305.53}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-3406.09},{"g3":"POWER - PLN","value":-520713.32},{"g3":"POWER - MASTER BATCH","value":-2357.78},{"g3":"POWER - CNG","value":-16165.46}],"INCOME":[{"g3":"LOCAL SALES","value":2862683.47},{"g3":"EXPORT SALES","value":2134348.09},{"g3":"POP CORN SALES","value":5120.63},{"g3":"SALES RETURN","value":-474.03},{"g3":"OTHER INCOME - Waste","value":13826.92},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1166.37}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-377638.19},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-26222.95},{"g3":"BONUS PROVISION - SOLO","value":-22439.83},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25917.31},{"g3":"EMPLOYEE COST-JAKARTA","value":-378605.69},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-8249.32},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-34409.74}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-39651.86},{"g3":"CHEMICALS","value":-108740.65},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1700.0},{"g3":"SUPERBA - COLOR","value":-621.14},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-228460.79},{"g3":"SUPPORTING MATERIALS","value":-30420.63},{"g3":"SPARES","value":-70327.85},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-20897.66}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44509.37},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-55680.94},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-35655.07}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-29584.11},{"g3":"PROCUREMENT COST IMPORT","value":-25474.74},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2698732.21},{"g3":"CHIPS COST-RECYCLE","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-70479.49},{"g3":"STOCK ADJUSMENT","value":567900.23},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-272973.14},{"g3":"BOUGHT OUT  VSY AND RMT","value":-3298.75},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-74562.68},{"g3":"CHANGE OF MASTERBATCH STOCK","value":129204.09},{"g3":"MASTERBATCH WIP VALUATION","value":67.41}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-47012.83},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-133695.7}]},"202312":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-39787.15},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-12920.31},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-76916.42}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-10989.55},{"g3":"POWER - PLN","value":-489677.17},{"g3":"POWER - MASTER BATCH","value":-2224.45},{"g3":"POWER - CNG","value":-21550.55}],"INCOME":[{"g3":"LOCAL SALES","value":2747363.12},{"g3":"EXPORT SALES","value":2173117.22},{"g3":"POP CORN SALES","value":29439.04},{"g3":"SALES RETURN","value":-17527.56},{"g3":"OTHER INCOME - Waste","value":15109.54},{"g3":"OTHER INCOME (Bank Interest and Others)","value":98081.75}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-462391.23},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":230611.71},{"g3":"BONUS PROVISION - SOLO","value":-20477.55},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-64149.87},{"g3":"EMPLOYEE COST-JAKARTA","value":-760132.69},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":5626.07},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-77587.56}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-28014.84},{"g3":"CHEMICALS","value":-86959.56},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-3163.01},{"g3":"SUPERBA - COLOR","value":-1237.25},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-197690.26},{"g3":"SUPPORTING MATERIALS","value":-25172.46},{"g3":"SPARES","value":-47174.28},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-13691.25}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-41438.85},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-6971.05},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-35110.63}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-23084.87},{"g3":"PROCUREMENT COST IMPORT","value":-47549.22},{"g3":"PROCUREMENT COST MASTER BATCH","value":0.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2242241.64},{"g3":"CHIPS COST-RECYCLE","value":-62547.74},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-23639.13},{"g3":"STOCK ADJUSMENT","value":-210040.01},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-227996.9},{"g3":"BOUGHT OUT  VSY AND RMT","value":-4598.98},{"g3":"BOUGHT OUT RND YARN","value":-999.23}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-42804.96},{"g3":"CHANGE OF MASTERBATCH STOCK","value":74063.78},{"g3":"MASTERBATCH WIP VALUATION","value":1087.47}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-46560.71},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-268891.71}]},"202401":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-49519.88},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-519.72},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-51864.05}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-9025.85},{"g3":"POWER - PLN","value":-504605.74},{"g3":"POWER - MASTER BATCH","value":-1852.69},{"g3":"POWER - CNG","value":-32788.86}],"INCOME":[{"g3":"LOCAL SALES","value":3438041.67},{"g3":"EXPORT SALES","value":2556289.5},{"g3":"OTHER INCOME - Waste","value":15640.7},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1101.29}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-406556.78},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-6096.98},{"g3":"BONUS PROVISION - SOLO","value":-33324.94},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26757.91},{"g3":"EMPLOYEE COST-JAKARTA","value":-411961.99},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-2954.07},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-36826.54}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-47732.6},{"g3":"CHEMICALS","value":-90956.77},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5092.26},{"g3":"SUPERBA - COLOR","value":-3023.33},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-207284.65},{"g3":"SUPPORTING MATERIALS","value":-27626.83},{"g3":"SPARES","value":-68705.62},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-2914.87}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-42262.38},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-39853.05},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-43676.72}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-26015.69},{"g3":"PROCUREMENT COST IMPORT","value":-34576.82}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2330897.25},{"g3":"CHIPS COST-RECYCLE","value":-8448.96},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":18274.04},{"g3":"STOCK ADJUSMENT","value":-775676.72},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-340184.72}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-19868.77},{"g3":"CHANGE OF MASTERBATCH STOCK","value":33386.54},{"g3":"MASTERBATCH WIP VALUATION","value":-2102.81}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-54196.13},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-313164.74}]},"202402":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-52237.21},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-9283.62},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-68494.56}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8050.15},{"g3":"POWER - PLN","value":-438296.06},{"g3":"POWER - MASTER BATCH","value":-1758.37},{"g3":"POWER - CNG","value":-29988.13}],"INCOME":[{"g3":"LOCAL SALES","value":3370756.46},{"g3":"EXPORT SALES","value":2277316.93},{"g3":"POP CORN SALES","value":25890.74},{"g3":"SALES RETURN","value":-692.55},{"g3":"OTHER INCOME - Waste","value":11630.18},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1215.18}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-414854.32},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-4265.53},{"g3":"BONUS PROVISION - SOLO","value":-32529.17},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26114.2},{"g3":"EMPLOYEE COST-JAKARTA","value":-389104.46},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-6384.58},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-39270.57}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-38867.33},{"g3":"CHEMICALS","value":-84197.89},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-3882.4},{"g3":"SUPERBA - COLOR","value":-2001.96},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-179303.25},{"g3":"SUPPORTING MATERIALS","value":-33646.24},{"g3":"SPARES","value":-87383.4},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-25987.72}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-39242.9},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-41263.4},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-31438.28}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-19529.0},{"g3":"PROCUREMENT COST IMPORT","value":-19699.04}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2100624.01},{"g3":"CHIPS COST-RECYCLE","value":-11628.15},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":2556.87},{"g3":"STOCK ADJUSMENT","value":-832541.21},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-323593.11},{"g3":"BOUGHT OUT  VSY AND RMT","value":-5215.41}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-46763.4},{"g3":"CHANGE OF MASTERBATCH STOCK","value":63133.72},{"g3":"MASTERBATCH WIP VALUATION","value":382.94}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-53707.87},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-239420.95}]},"202403":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-61603.24},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-1195.15},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-125919.89}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8130.91},{"g3":"POWER - PLN","value":-513715.63},{"g3":"POWER - MASTER BATCH","value":-2347.14},{"g3":"POWER - CNG","value":-34337.25}],"INCOME":[{"g3":"LOCAL SALES","value":3533677.25},{"g3":"EXPORT SALES","value":2347540.98},{"g3":"POP CORN SALES","value":6026.58},{"g3":"SALES RETURN","value":-10472.83},{"g3":"OTHER INCOME - Waste","value":21152.16},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1842.74}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-401695.75},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5988.64},{"g3":"BONUS PROVISION - SOLO","value":-32970.53},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26319.15},{"g3":"EMPLOYEE COST-JAKARTA","value":-406211.9},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-6052.7},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-45789.91}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-45410.18},{"g3":"CHEMICALS","value":-95900.91},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5071.96},{"g3":"SUPERBA - COLOR","value":-1764.09},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-229480.18},{"g3":"SUPPORTING MATERIALS","value":-31417.77},{"g3":"SPARES","value":-63908.55},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-18475.21}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-37617.54},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-45281.27},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29573.18}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-29350.86},{"g3":"PROCUREMENT COST IMPORT","value":-32150.89}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2382125.92},{"g3":"CHIPS COST-RECYCLE","value":-30633.66},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-18765.19},{"g3":"STOCK ADJUSMENT","value":9757.66},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-592291.54},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":20.0},{"g3":"BOUGHT OUT RND YARN","value":-20.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-67436.24},{"g3":"CHANGE OF MASTERBATCH STOCK","value":114849.41},{"g3":"MASTERBATCH WIP VALUATION","value":-1039.29}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-53101.58},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-274700.26}]},"202404":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-39273.77},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-5047.99},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-92340.99}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-9024.33},{"g3":"POWER - PLN","value":-511432.32},{"g3":"POWER - MASTER BATCH","value":-2068.46},{"g3":"POWER - CNG","value":-33918.08}],"INCOME":[{"g3":"LOCAL SALES","value":3165182.19},{"g3":"EXPORT SALES","value":2377380.57},{"g3":"POP CORN SALES","value":0.0},{"g3":"SALES RETURN","value":-13806.9},{"g3":"OTHER INCOME - Waste","value":15480.4},{"g3":"OTHER INCOME (Bank Interest and Others)","value":3611.18}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-433732.14},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5488.2},{"g3":"BONUS PROVISION - SOLO","value":-24307.59},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26020.31},{"g3":"EMPLOYEE COST-JAKARTA","value":-399457.93},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-5083.21},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-45306.66}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-45132.41},{"g3":"CHEMICALS","value":-99008.79},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5931.05},{"g3":"SUPERBA - COLOR","value":-2919.96},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-208785.26},{"g3":"SUPPORTING MATERIALS","value":-26543.96},{"g3":"SPARES","value":-69370.22},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-14441.12}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-40188.86},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-54187.62},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-14966.04}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-28069.09},{"g3":"PROCUREMENT COST IMPORT","value":-25399.78}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2558222.94},{"g3":"CHIPS COST-RECYCLE","value":-74629.1},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":52501.1},{"g3":"STOCK ADJUSMENT","value":170418.56},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-367321.71},{"g3":"BOUGHT OUT  VSY AND RMT","value":-388.68},{"g3":"BOUGHT OUT TYB","value":-20.0},{"g3":"BOUGHT OUT RND YARN","value":20.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-55590.55},{"g3":"CHANGE OF MASTERBATCH STOCK","value":74985.71},{"g3":"MASTERBATCH WIP VALUATION","value":2523.97}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-47854.18},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-230540.46}]},"202405":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-32312.36},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-9069.93},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-65633.01}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8961.38},{"g3":"POWER - PLN","value":-550994.56},{"g3":"POWER - MASTER BATCH","value":-2054.18},{"g3":"POWER - CNG","value":-35981.89}],"INCOME":[{"g3":"LOCAL SALES","value":4249951.42},{"g3":"EXPORT SALES","value":2492618.94},{"g3":"POP CORN SALES","value":37680.47},{"g3":"SALES RETURN","value":-29424.89},{"g3":"OTHER INCOME - Waste","value":17416.78},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1971.93}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-425391.91},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5919.27},{"g3":"BONUS PROVISION - SOLO","value":-24809.13},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25386.17},{"g3":"EMPLOYEE COST-JAKARTA","value":-397778.38},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4912.31},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-44382.17}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-35623.3},{"g3":"CHEMICALS","value":-114168.93},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4448.59},{"g3":"SUPERBA - COLOR","value":-2190.74},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-263101.13},{"g3":"SUPPORTING MATERIALS","value":-38638.15},{"g3":"SPARES","value":-97173.19},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-12324.33}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-42743.98},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-54570.9},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-40598.75}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-41932.86},{"g3":"PROCUREMENT COST IMPORT","value":-33839.85}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-3042738.2},{"g3":"CHIPS COST-RECYCLE","value":-71516.48},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-21378.6},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-14677.99},{"g3":"STOCK ADJUSMENT","value":-153539.25},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-403279.3},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-64911.81},{"g3":"CHANGE OF MASTERBATCH STOCK","value":83971.57},{"g3":"MASTERBATCH WIP VALUATION","value":5877.27}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-61398.3},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-307314.83}]},"202406":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-36926.53},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-4498.93},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-112187.55}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-7966.96},{"g3":"POWER - PLN","value":-540803.41},{"g3":"POWER - MASTER BATCH","value":-1984.2},{"g3":"POWER - CNG","value":-33662.7}],"INCOME":[{"g3":"LOCAL SALES","value":4753795.96},{"g3":"EXPORT SALES","value":2025982.82},{"g3":"POP CORN SALES","value":0.0},{"g3":"SALES RETURN","value":-19303.49},{"g3":"OTHER INCOME - Waste","value":14672.97},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2925.65}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-417733.93},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5429.37},{"g3":"BONUS PROVISION - SOLO","value":-24808.81},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25379.93},{"g3":"EMPLOYEE COST-JAKARTA","value":-400799.77},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4739.03},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-44372.04}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-28992.1},{"g3":"CHEMICALS","value":-114232.3},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4561.37},{"g3":"SUPERBA - COLOR","value":-2637.12},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-235888.5},{"g3":"SUPPORTING MATERIALS","value":-34941.45},{"g3":"SPARES","value":-84890.72},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-7906.79}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-46986.38},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-56839.35},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-34956.0}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-36819.2},{"g3":"PROCUREMENT COST IMPORT","value":-31841.43}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2970858.12},{"g3":"CHIPS COST-RECYCLE","value":-11005.73},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-95310.95},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-27542.76},{"g3":"STOCK ADJUSMENT","value":-241721.99},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-425950.62},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-54585.53},{"g3":"CHANGE OF MASTERBATCH STOCK","value":89419.86},{"g3":"MASTERBATCH WIP VALUATION","value":-8253.08}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-67895.31},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-325555.18}]},"202407":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-37284.78},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-22564.37},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-100368.95}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8783.43},{"g3":"POWER - PLN","value":-540862.7},{"g3":"POWER - MASTER BATCH","value":-2306.03},{"g3":"POWER - CNG","value":-35168.93}],"INCOME":[{"g3":"LOCAL SALES","value":4757518.6},{"g3":"EXPORT SALES","value":2490859.49},{"g3":"POP CORN SALES","value":52468.49},{"g3":"SALES RETURN","value":-24442.83},{"g3":"OTHER INCOME - Waste","value":18743.93},{"g3":"OTHER INCOME (Bank Interest and Others)","value":3697.84}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-397165.98},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-4687.15},{"g3":"BONUS PROVISION - SOLO","value":-24019.79},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25120.27},{"g3":"EMPLOYEE COST-JAKARTA","value":-410330.45},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4519.66},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-43996.48}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-27673.88},{"g3":"CHEMICALS","value":-115587.88},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4776.5},{"g3":"SUPERBA - COLOR","value":-2197.49},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-260382.29},{"g3":"SUPPORTING MATERIALS","value":-50535.34},{"g3":"SPARES","value":-138979.22},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-15531.44}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-43986.66},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-57883.3},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-39734.78}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-37616.69},{"g3":"PROCUREMENT COST IMPORT","value":-62216.51}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-3107213.54},{"g3":"CHIPS COST-RECYCLE","value":-22022.05},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-5641.26},{"g3":"STOCK ADJUSMENT","value":-173325.31},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-596326.86},{"g3":"BOUGHT OUT  VSY AND RMT","value":-31102.4},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-76102.81},{"g3":"CHANGE OF MASTERBATCH STOCK","value":103374.81},{"g3":"MASTERBATCH WIP VALUATION","value":5636.13}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-65887.44},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-309628.98}]},"202408":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-32995.08},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-23561.06},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-147860.2}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8050.52},{"g3":"POWER - PLN","value":-555442.06},{"g3":"POWER - MASTER BATCH","value":-2456.2},{"g3":"POWER - CNG","value":-34054.78}],"INCOME":[{"g3":"LOCAL SALES","value":4500948.46},{"g3":"EXPORT SALES","value":2307079.79},{"g3":"POP CORN SALES","value":19197.31},{"g3":"SALES RETURN","value":-6548.28},{"g3":"OTHER INCOME - Waste","value":21765.41},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2742.13}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-397433.65},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5730.44},{"g3":"BONUS PROVISION - SOLO","value":-24140.25},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25275.74},{"g3":"EMPLOYEE COST-JAKARTA","value":-393171.8},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4788.63},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-44238.09}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-40710.66},{"g3":"CHEMICALS","value":-114773.31},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-6237.73},{"g3":"SUPERBA - COLOR","value":-4430.8},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-256906.93},{"g3":"SUPPORTING MATERIALS","value":-30325.42},{"g3":"SPARES","value":-91865.29},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-16398.76}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-41283.68},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-57290.92},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-36301.37}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-38641.53},{"g3":"PROCUREMENT COST IMPORT","value":-52172.08}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-3031404.31},{"g3":"CHIPS COST-RECYCLE","value":-31941.39},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-111.23},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":45988.88},{"g3":"STOCK ADJUSMENT","value":25011.11},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-572423.76},{"g3":"BOUGHT OUT  VSY AND RMT","value":-990.85},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":-642.36}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-79220.17},{"g3":"CHANGE OF MASTERBATCH STOCK","value":129263.62},{"g3":"MASTERBATCH WIP VALUATION","value":-422.9}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-62178.53},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-311894.09}]},"202409":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-48487.47},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-5248.5},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-117676.33}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-9732.39},{"g3":"POWER - PLN","value":-564570.46},{"g3":"POWER - MASTER BATCH","value":-2575.31},{"g3":"POWER - CNG","value":-25053.34}],"INCOME":[{"g3":"LOCAL SALES","value":4332718.8},{"g3":"EXPORT SALES","value":2257747.91},{"g3":"POP CORN SALES","value":17737.69},{"g3":"SALES RETURN","value":-32558.36},{"g3":"OTHER INCOME - Waste","value":13150.72},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2089.82}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-421905.28},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5266.66},{"g3":"BONUS PROVISION - SOLO","value":-25278.7},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26770.07},{"g3":"EMPLOYEE COST-JAKARTA","value":-424358.12},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4613.96},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-46668.69}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-25690.5},{"g3":"CHEMICALS","value":-111018.53},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-6130.93},{"g3":"SUPERBA - COLOR","value":-7972.69},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-258595.11},{"g3":"SUPPORTING MATERIALS","value":-43793.49},{"g3":"SPARES","value":-117757.34},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-11539.18}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-38498.63},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-55727.27},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-32156.76}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-40028.51},{"g3":"PROCUREMENT COST IMPORT","value":-58764.52}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2962960.78},{"g3":"CHIPS COST-RECYCLE","value":-16521.36},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-1911.69},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-1004.81},{"g3":"STOCK ADJUSMENT","value":280555.65},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-603741.38},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-75000.74},{"g3":"CHANGE OF MASTERBATCH STOCK","value":122066.89},{"g3":"MASTERBATCH WIP VALUATION","value":-2062.28}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-63330.93},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-310540.29}]},"202410":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-41112.92},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-8971.11},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-145707.07}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-11172.78},{"g3":"POWER - PLN","value":-600533.23},{"g3":"POWER - MASTER BATCH","value":-2723.72},{"g3":"POWER - CNG","value":-37700.71}],"INCOME":[{"g3":"LOCAL SALES","value":4466558.64},{"g3":"EXPORT SALES","value":2396317.15},{"g3":"POP CORN SALES","value":37994.45},{"g3":"SALES RETURN","value":-3757.88},{"g3":"OTHER INCOME - Waste","value":15997.7},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2362.77}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-429194.02},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-5266.91},{"g3":"BONUS PROVISION - SOLO","value":-25295.77},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-27249.3},{"g3":"EMPLOYEE COST-JAKARTA","value":-410742.28},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-4992.79},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-47124.44}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-13980.06},{"g3":"CHEMICALS","value":-107916.97},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5559.92},{"g3":"SUPERBA - COLOR","value":-5705.03},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-269392.65},{"g3":"SUPPORTING MATERIALS","value":-31430.66},{"g3":"SPARES","value":-107052.2},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-23425.08}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-45725.13},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-56729.43},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-45912.48}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-25453.51},{"g3":"PROCUREMENT COST IMPORT","value":-51641.88}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2914787.7},{"g3":"CHIPS COST-RECYCLE","value":-32553.88},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-54291.61},{"g3":"STOCK ADJUSMENT","value":42159.74},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-393745.43},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-98474.03},{"g3":"CHANGE OF MASTERBATCH STOCK","value":151435.79},{"g3":"MASTERBATCH WIP VALUATION","value":8672.12}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-56476.05},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-266578.54}]},"202411":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-43107.8},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-7716.15},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-115749.38}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8143.15},{"g3":"POWER - PLN","value":-542281.9},{"g3":"POWER - MASTER BATCH","value":-2350.31},{"g3":"POWER - CNG","value":-35355.18}],"INCOME":[{"g3":"LOCAL SALES","value":4066604.73},{"g3":"EXPORT SALES","value":2192738.65},{"g3":"POP CORN SALES","value":20966.18},{"g3":"SALES RETURN","value":-34849.42},{"g3":"OTHER INCOME - Waste","value":16282.61},{"g3":"OTHER INCOME (Bank Interest and Others)","value":3727.66}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-417575.09},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-10537.74},{"g3":"BONUS PROVISION - SOLO","value":-25120.3},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-26220.44},{"g3":"EMPLOYEE COST-JAKARTA","value":-415270.92},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-21537.72},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-45607.77}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-15600.96},{"g3":"CHEMICALS","value":-100054.15},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5206.05},{"g3":"SUPERBA - COLOR","value":-3820.98},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-247320.06},{"g3":"SUPPORTING MATERIALS","value":-34241.15},{"g3":"SPARES","value":-94605.23},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-14167.24}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-35858.3},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-51415.08},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-25629.6}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-24345.43},{"g3":"PROCUREMENT COST IMPORT","value":-69922.25}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2770461.61},{"g3":"CHIPS COST-RECYCLE","value":-38483.22},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-17781.36},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":36332.09},{"g3":"STOCK ADJUSMENT","value":5824.52},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-264308.38},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-69117.15},{"g3":"CHANGE OF MASTERBATCH STOCK","value":127045.86},{"g3":"MASTERBATCH WIP VALUATION","value":-9227.75}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-63238.88},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-250445.08}]},"202412":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-45772.06},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-12709.18},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-137067.38}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-6617.13},{"g3":"POWER - PLN","value":-548215.49},{"g3":"POWER - MASTER BATCH","value":-2480.25},{"g3":"POWER - CNG","value":-30010.42}],"INCOME":[{"g3":"LOCAL SALES","value":4078389.23},{"g3":"EXPORT SALES","value":2150514.29},{"g3":"POP CORN SALES","value":32762.22},{"g3":"SALES RETURN","value":-13259.29},{"g3":"OTHER INCOME - Waste","value":20534.59},{"g3":"OTHER INCOME (Bank Interest and Others)","value":3150.43}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-409308.73},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":34977.29},{"g3":"BONUS PROVISION - SOLO","value":-25380.66},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":60853.24},{"g3":"EMPLOYEE COST-JAKARTA","value":-602720.84},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":13024.44},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-48587.79}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-27774.15},{"g3":"CHEMICALS","value":-109931.91},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4955.15},{"g3":"SUPERBA - COLOR","value":-2914.44},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-267649.17},{"g3":"SUPPORTING MATERIALS","value":-37277.3},{"g3":"SPARES","value":-74125.74},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-12868.75}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-20032.15},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":43508.9},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-31534.12}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-24143.0},{"g3":"PROCUREMENT COST IMPORT","value":-43771.55}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2806455.99},{"g3":"CHIPS COST-RECYCLE","value":-32981.48},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":3940.85},{"g3":"STOCK ADJUSMENT","value":28011.88},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-210744.63},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT TYB","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-87694.39},{"g3":"CHANGE OF MASTERBATCH STOCK","value":134608.24},{"g3":"MASTERBATCH WIP VALUATION","value":-890.52}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-73228.25},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-310058.64}]},"202501":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-48530.53},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-3242.7},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-145820.3}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-6983.83},{"g3":"POWER - PLN","value":-549172.05},{"g3":"POWER - MASTER BATCH","value":-2349.92},{"g3":"POWER - CNG","value":-14664.87}],"INCOME":[{"g3":"LOCAL SALES","value":4263409.35},{"g3":"EXPORT SALES","value":1837306.62},{"g3":"POP CORN SALES","value":39394.26},{"g3":"SALES RETURN","value":-3360.01},{"g3":"OTHER INCOME - Waste","value":12793.06},{"g3":"OTHER INCOME (Bank Interest and Others)","value":5423.74}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-441506.25},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-14854.52},{"g3":"BONUS PROVISION - SOLO","value":-28314.95},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25522.83},{"g3":"EMPLOYEE COST-JAKARTA","value":-393516.49},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1279.77},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38149.6}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-46579.69},{"g3":"CHEMICALS","value":-110560.27},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-2400.28},{"g3":"SUPERBA - COLOR","value":-1376.93},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-256227.42},{"g3":"SUPPORTING MATERIALS","value":-32171.92},{"g3":"SPARES","value":-109081.21},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-15931.17}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-35550.13},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-39832.66},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-36873.75}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-23697.71},{"g3":"PROCUREMENT COST IMPORT","value":-46775.3}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2752409.16},{"g3":"CHIPS COST-RECYCLE","value":-71802.21},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-74.69},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-22368.86},{"g3":"STOCK ADJUSMENT","value":265041.56},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-360853.99},{"g3":"BOUGHT OUT  VSY AND RMT","value":-175.04}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-73629.57},{"g3":"CHANGE OF MASTERBATCH STOCK","value":131529.81},{"g3":"MASTERBATCH WIP VALUATION","value":-5532.89}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-61864.56},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-195844.09}]},"202502":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-50426.01},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-5613.19},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-99880.87}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-6808.3},{"g3":"POWER - PLN","value":-478451.85},{"g3":"POWER - MASTER BATCH","value":-2093.36},{"g3":"POWER - CNG","value":-11382.78}],"INCOME":[{"g3":"LOCAL SALES","value":4405763.26},{"g3":"EXPORT SALES","value":1356312.64},{"g3":"POP CORN SALES","value":24466.45},{"g3":"SALES RETURN","value":-1899.8},{"g3":"OTHER INCOME - Waste","value":14825.35},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1882.14}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-436104.95},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-14810.97},{"g3":"BONUS PROVISION - SOLO","value":-28119.85},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25370.56},{"g3":"EMPLOYEE COST-JAKARTA","value":-386888.5},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1173.15},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38620.94}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-40300.7},{"g3":"CHEMICALS","value":-96556.7},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1492.3},{"g3":"SUPERBA - COLOR","value":-765.56},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-212997.78},{"g3":"SUPPORTING MATERIALS","value":-33220.65},{"g3":"SPARES","value":-72735.02},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-28538.43}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-37452.99},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-40320.27},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29408.95}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-22964.22},{"g3":"PROCUREMENT COST IMPORT","value":-35619.87}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2440940.07},{"g3":"CHIPS COST-RECYCLE","value":-34759.64},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-100.03},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-6608.63},{"g3":"STOCK ADJUSMENT","value":-305847.46},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-231226.66},{"g3":"BOUGHT OUT  VSY AND RMT","value":-1322.75}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-72276.12},{"g3":"CHANGE OF MASTERBATCH STOCK","value":89182.83},{"g3":"MASTERBATCH WIP VALUATION","value":16865.35}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-65319.52},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-114185.78}]},"202503":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-35536.82},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-14028.24},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-142880.84}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-7775.34},{"g3":"POWER - PLN","value":-535350.81},{"g3":"POWER - MASTER BATCH","value":-3161.86},{"g3":"POWER - CNG","value":-9943.13}],"INCOME":[{"g3":"LOCAL SALES","value":3331647.12},{"g3":"EXPORT SALES","value":1335292.47},{"g3":"POP CORN SALES","value":21588.47},{"g3":"SALES RETURN","value":-2163.6},{"g3":"OTHER INCOME - Waste","value":12470.94},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1556.28}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-396033.79},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-14780.21},{"g3":"BONUS PROVISION - SOLO","value":-27765.32},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25104.99},{"g3":"EMPLOYEE COST-JAKARTA","value":-389099.95},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1065.77},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38330.97}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-40389.58},{"g3":"CHEMICALS","value":-105317.78},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-242.85},{"g3":"SUPERBA - COLOR","value":-211.22},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-251711.47},{"g3":"SUPPORTING MATERIALS","value":-37143.83},{"g3":"SPARES","value":-64331.04},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-9985.06}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-38839.66},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-40224.32},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-26988.35}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-28605.66},{"g3":"PROCUREMENT COST IMPORT","value":-55904.9}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2716633.78},{"g3":"CHIPS COST-RECYCLE","value":-91834.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-49.66},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":1763.59},{"g3":"STOCK ADJUSMENT","value":1229291.62},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-221815.96},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-132554.56},{"g3":"CHANGE OF MASTERBATCH STOCK","value":178901.5},{"g3":"MASTERBATCH WIP VALUATION","value":10205.19}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-55873.89},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-124889.29}]},"202504":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-36796.41},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-4564.81},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-135364.08}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8210.38},{"g3":"POWER - PLN","value":-514513.38},{"g3":"POWER - MASTER BATCH","value":-2658.99},{"g3":"POWER - CNG","value":-10734.32}],"INCOME":[{"g3":"LOCAL SALES","value":4021129.19},{"g3":"EXPORT SALES","value":1515749.26},{"g3":"POP CORN SALES","value":36900.76},{"g3":"SALES RETURN","value":0.0},{"g3":"OTHER INCOME - Waste","value":12869.07},{"g3":"OTHER INCOME (Bank Interest and Others)","value":13553.67},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":2559.12}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-444279.37},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-14677.56},{"g3":"BONUS PROVISION - SOLO","value":-26808.0},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-24867.37},{"g3":"EMPLOYEE COST-JAKARTA","value":-402677.1},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1062.51},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38074.4}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-34113.71},{"g3":"CHEMICALS","value":-106945.56},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-2157.16},{"g3":"SUPERBA - COLOR","value":-1007.71},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-235716.47},{"g3":"SUPPORTING MATERIALS","value":-23791.95},{"g3":"SPARES","value":-63466.79},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-9258.71}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44104.21},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-37787.46},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29784.42}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-27023.07},{"g3":"PROCUREMENT COST IMPORT","value":-41552.05}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2587452.64},{"g3":"CHIPS COST-RECYCLE","value":-80106.9},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":-145.27},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-2739.27},{"g3":"STOCK ADJUSMENT","value":269299.08},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-297334.89},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-86433.27},{"g3":"CHANGE OF MASTERBATCH STOCK","value":135315.87},{"g3":"MASTERBATCH WIP VALUATION","value":-15741.42}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-59748.75},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-113383.77}]},"202505":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":-2960.83}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-46782.55},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-4584.33},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-144640.27}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-7574.87},{"g3":"POWER - PLN","value":-540688.54},{"g3":"POWER - MASTER BATCH","value":-2845.44},{"g3":"POWER - CNG","value":-7324.78}],"INCOME":[{"g3":"LOCAL SALES","value":4884515.41},{"g3":"EXPORT SALES","value":1099961.94},{"g3":"POP CORN SALES","value":15829.21},{"g3":"SALES RETURN","value":-5821.92},{"g3":"OTHER INCOME - Waste","value":11100.5},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1679.51},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-421123.04},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-19793.83},{"g3":"BONUS PROVISION - SOLO","value":-26624.1},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-24572.58},{"g3":"EMPLOYEE COST-JAKARTA","value":-385761.98},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1260.97},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37347.65}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-48940.71},{"g3":"CHEMICALS","value":-110489.39},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-424.91},{"g3":"SUPERBA - COLOR","value":-330.04},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-245111.86},{"g3":"SUPPORTING MATERIALS","value":-24602.7},{"g3":"SPARES","value":-74521.39},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-9398.83}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44438.75},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-33264.37},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-27438.32}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-29595.37},{"g3":"PROCUREMENT COST IMPORT","value":-38110.55}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2626694.45},{"g3":"CHIPS COST-RECYCLE","value":-59598.43},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-73448.32},{"g3":"STOCK ADJUSMENT","value":14666.72},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-456067.9},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-91240.36},{"g3":"CHANGE OF MASTERBATCH STOCK","value":134068.17},{"g3":"MASTERBATCH WIP VALUATION","value":-2337.24}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-70901.7},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-98740.45}]},"202506":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":-8418.16}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-48804.99},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-6.0},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-114712.98}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-7360.68},{"g3":"POWER - PLN","value":-532686.4},{"g3":"POWER - MASTER BATCH","value":-2671.79},{"g3":"POWER - CNG","value":-12638.13}],"INCOME":[{"g3":"LOCAL SALES","value":4463635.02},{"g3":"EXPORT SALES","value":1429078.74},{"g3":"POP CORN SALES","value":13747.47},{"g3":"SALES RETURN","value":-4902.57},{"g3":"OTHER INCOME - Waste","value":14540.48},{"g3":"OTHER INCOME (Bank Interest and Others)","value":9205.92},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":4279.76}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-457302.36},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-20220.4},{"g3":"BONUS PROVISION - SOLO","value":-26759.54},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25376.81},{"g3":"EMPLOYEE COST-JAKARTA","value":-400885.74},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1295.18},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38435.57}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-17827.44},{"g3":"CHEMICALS","value":-102234.45},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1118.97},{"g3":"SUPERBA - COLOR","value":-793.54},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-237297.82},{"g3":"SUPPORTING MATERIALS","value":-27259.44},{"g3":"SPARES","value":-74064.04},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-13920.22}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-43949.83},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-33260.7},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-28598.22}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-29247.66},{"g3":"PROCUREMENT COST IMPORT","value":-24622.95}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2508509.93},{"g3":"CHIPS COST-RECYCLE","value":-41409.8},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":21747.28},{"g3":"STOCK ADJUSMENT","value":-72882.52},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-424257.08},{"g3":"BOUGHT OUT  VSY AND RMT","value":-0.58},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-101700.93},{"g3":"CHANGE OF MASTERBATCH STOCK","value":125093.31},{"g3":"MASTERBATCH WIP VALUATION","value":8638.27}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-69434.14},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-152528.98}]},"202507":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":0.0}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-51468.49},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":0.0},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-167050.66}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-8208.28},{"g3":"POWER - PLN","value":-534036.33},{"g3":"POWER - MASTER BATCH","value":-3511.64},{"g3":"POWER - CNG","value":-1213.04}],"INCOME":[{"g3":"LOCAL SALES","value":4530953.93},{"g3":"EXPORT SALES","value":1597601.87},{"g3":"POP CORN SALES","value":17171.19},{"g3":"SALES RETURN","value":-5799.8},{"g3":"OTHER INCOME - Waste","value":13451.66},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2251.11},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-446104.0},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-20621.37},{"g3":"BONUS PROVISION - SOLO","value":-26801.94},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25411.2},{"g3":"EMPLOYEE COST-JAKARTA","value":-402480.53},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1070.98},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38577.62}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-22790.21},{"g3":"CHEMICALS","value":-95300.47},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-1018.08},{"g3":"SUPERBA - COLOR","value":-338.25},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-231450.65},{"g3":"SUPPORTING MATERIALS","value":-29317.87},{"g3":"SPARES","value":-67070.63},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-21208.28}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44271.59},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-36718.22},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-34147.12}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-31828.21},{"g3":"PROCUREMENT COST IMPORT","value":-62672.66}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2602368.16},{"g3":"CHIPS COST-RECYCLE","value":-54814.87},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-2057.75},{"g3":"STOCK ADJUSMENT","value":-119607.07},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-367088.3},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-140962.67},{"g3":"CHANGE OF MASTERBATCH STOCK","value":213816.9},{"g3":"MASTERBATCH WIP VALUATION","value":-195.33}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-73482.36},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-120832.65}]},"202508":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":0.0}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-41256.86},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-948.39},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-171950.33}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-15827.15},{"g3":"POWER - PLN","value":-511480.69},{"g3":"POWER - MASTER BATCH","value":-2728.49},{"g3":"POWER - CNG","value":-29417.67}],"INCOME":[{"g3":"LOCAL SALES","value":4533164.08},{"g3":"EXPORT SALES","value":1341709.26},{"g3":"POP CORN SALES","value":15158.96},{"g3":"SALES RETURN","value":-4393.25},{"g3":"OTHER INCOME - Waste","value":11751.54},{"g3":"OTHER INCOME (Bank Interest and Others)","value":6667.33},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-432844.05},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-22489.26},{"g3":"BONUS PROVISION - SOLO","value":-26785.61},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25172.38},{"g3":"EMPLOYEE COST-JAKARTA","value":-408691.64},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1049.09},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38238.19}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-17467.43},{"g3":"CHEMICALS","value":-88481.92},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-3905.26},{"g3":"SUPERBA - COLOR","value":-2792.54},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-244344.96},{"g3":"SUPPORTING MATERIALS","value":-25211.51},{"g3":"SPARES","value":-82700.08},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-5132.69}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-46571.26},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-34890.99},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-29815.96}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-27929.92},{"g3":"PROCUREMENT COST IMPORT","value":-52584.25}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2205662.06},{"g3":"CHIPS COST-RECYCLE","value":-72166.52},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-28576.11},{"g3":"STOCK ADJUSMENT","value":-43282.45},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-725331.25},{"g3":"BOUGHT OUT  VSY AND RMT","value":0.0},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-144340.66},{"g3":"CHANGE OF MASTERBATCH STOCK","value":166287.32},{"g3":"MASTERBATCH WIP VALUATION","value":-3583.15}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-71951.65},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-126738.96}]},"202509":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":0.0}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-23155.14},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":0.0},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-99350.97}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-17981.88},{"g3":"POWER - PLN","value":-487285.24},{"g3":"POWER - MASTER BATCH","value":-2492.77},{"g3":"POWER - CNG","value":-19825.55}],"INCOME":[{"g3":"LOCAL SALES","value":3896209.29},{"g3":"EXPORT SALES","value":1623915.59},{"g3":"POP CORN SALES","value":11300.74},{"g3":"SALES RETURN","value":-20168.57},{"g3":"OTHER INCOME - Waste","value":19578.37},{"g3":"OTHER INCOME (Bank Interest and Others)","value":5011.91},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-438454.07},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-36239.7},{"g3":"BONUS PROVISION - SOLO","value":-26897.1},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-25220.1},{"g3":"EMPLOYEE COST-JAKARTA","value":-416545.06},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-11991.26},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38687.4}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-13743.23},{"g3":"CHEMICALS","value":-90462.91},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5910.53},{"g3":"SUPERBA - COLOR","value":-3949.63},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-226905.8},{"g3":"SUPPORTING MATERIALS","value":-27515.75},{"g3":"SPARES","value":-80091.28},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-8351.23}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-45340.67},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-38623.07},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-28631.17}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-12008.99},{"g3":"PROCUREMENT COST IMPORT","value":-47664.54}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-1872462.4},{"g3":"CHIPS COST-RECYCLE","value":-28035.09},{"g3":"CHIPS COST-FR","value":-2145.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":11825.96},{"g3":"STOCK ADJUSMENT","value":105886.68},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-1065236.16},{"g3":"BOUGHT OUT  VSY AND RMT","value":-57177.84},{"g3":"BOUGHT OUT RND YARN","value":-2002.26}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-98134.32},{"g3":"CHANGE OF MASTERBATCH STOCK","value":121259.67},{"g3":"MASTERBATCH WIP VALUATION","value":-13627.38}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-62152.9},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-159276.57}]},"202510":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":0.0}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-14750.36},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-1117.23},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-95140.77}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-17804.7},{"g3":"POWER - PLN","value":-477758.46},{"g3":"POWER - MASTER BATCH","value":-2463.4},{"g3":"POWER - CNG","value":-25780.35}],"INCOME":[{"g3":"LOCAL SALES","value":4435409.42},{"g3":"EXPORT SALES","value":1708909.66},{"g3":"POP CORN SALES","value":13485.61},{"g3":"SALES RETURN","value":-46628.07},{"g3":"OTHER INCOME - Waste","value":22390.46},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2229.97},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":1160.35}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-415404.11},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-40606.14},{"g3":"BONUS PROVISION - SOLO","value":-25385.28},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-24730.21},{"g3":"EMPLOYEE COST-JAKARTA","value":-406316.54},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-14981.41},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37625.39}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-20681.26},{"g3":"CHEMICALS","value":-95775.95},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-4419.76},{"g3":"SUPERBA - COLOR","value":-2064.22},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-234739.68},{"g3":"SUPPORTING MATERIALS","value":-25170.92},{"g3":"SPARES","value":-85595.06},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-9179.55}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-52510.79},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-35069.82},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-27620.15}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-12996.57},{"g3":"PROCUREMENT COST IMPORT","value":-95179.0}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2140349.85},{"g3":"CHIPS COST-RECYCLE","value":-1427.72},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":39228.74},{"g3":"STOCK ADJUSMENT","value":-451736.89},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-1007539.29},{"g3":"BOUGHT OUT  VSY AND RMT","value":-149259.31},{"g3":"BOUGHT OUT RND YARN","value":-409.35}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-94493.68},{"g3":"CHANGE OF MASTERBATCH STOCK","value":108809.21},{"g3":"MASTERBATCH WIP VALUATION","value":4634.72}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-73576.35},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-115028.0}]},"202511":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":0.0}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-30335.15},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-16220.35},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-113492.53}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-14582.31},{"g3":"POWER - PLN","value":-485079.13},{"g3":"POWER - MASTER BATCH","value":-2229.84},{"g3":"POWER - CNG","value":-31254.32}],"INCOME":[{"g3":"LOCAL SALES","value":4040093.02},{"g3":"EXPORT SALES","value":2080166.6},{"g3":"POP CORN SALES","value":11745.01},{"g3":"SALES RETURN","value":-32160.29},{"g3":"OTHER INCOME - Waste","value":20232.58},{"g3":"OTHER INCOME (Bank Interest and Others)","value":3145.52},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-413725.87},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-41615.54},{"g3":"BONUS PROVISION - SOLO","value":-25048.66},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-24789.66},{"g3":"EMPLOYEE COST-JAKARTA","value":-424649.79},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-14981.57},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-38089.86}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-30535.22},{"g3":"CHEMICALS","value":-91791.76},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5133.08},{"g3":"SUPERBA - COLOR","value":-1853.33},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-238768.13},{"g3":"SUPPORTING MATERIALS","value":-29522.27},{"g3":"SPARES","value":-76916.02},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-12736.39}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-46444.12},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-41403.37},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-24217.79}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-23055.41},{"g3":"PROCUREMENT COST IMPORT","value":-47498.37}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2303896.17},{"g3":"CHIPS COST-RECYCLE","value":-13305.77},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":1044.56},{"g3":"STOCK ADJUSMENT","value":-450842.52},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-577232.89},{"g3":"BOUGHT OUT  VSY AND RMT","value":-102368.18},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-72741.88},{"g3":"CHANGE OF MASTERBATCH STOCK","value":110427.82},{"g3":"MASTERBATCH WIP VALUATION","value":-649.37}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-66151.66},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-161853.91}]},"202512":{"BAD DEBT EXP":[{"g3":"BAD DEBT EXPENSES","value":11378.99}],"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-34597.7},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-35247.11},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-112826.7}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-14660.39},{"g3":"POWER - PLN","value":-517031.08},{"g3":"POWER - MASTER BATCH","value":-2406.17},{"g3":"POWER - CNG","value":-28232.7}],"INCOME":[{"g3":"LOCAL SALES","value":4276341.39},{"g3":"EXPORT SALES","value":1803049.25},{"g3":"POP CORN SALES","value":0.0},{"g3":"SALES RETURN","value":-47241.15},{"g3":"OTHER INCOME - Waste","value":15373.87},{"g3":"OTHER INCOME (Bank Interest and Others)","value":951.8},{"g3":"OTHER INCOME (JOB WORK/SUB-CONTRACT/MAKLON)","value":0.0}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-450266.79},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":214591.88},{"g3":"BONUS PROVISION - SOLO","value":-31215.99},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":262803.95},{"g3":"EMPLOYEE COST-JAKARTA","value":-315210.09},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-14981.5},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-36974.16}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-30982.34},{"g3":"CHEMICALS","value":-96699.78},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-6016.22},{"g3":"SUPERBA - COLOR","value":-3300.43},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-229550.94},{"g3":"SUPPORTING MATERIALS","value":-30332.98},{"g3":"SPARES","value":-86491.57},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-16457.5}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-50129.71},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":66222.04},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-35166.18}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-29642.7},{"g3":"PROCUREMENT COST IMPORT","value":-56418.25}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2295755.01},{"g3":"CHIPS COST-RECYCLE","value":-34698.69},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-5137.06},{"g3":"STOCK ADJUSMENT","value":-491753.76},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-516589.55},{"g3":"BOUGHT OUT  VSY AND RMT","value":-34940.77},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-106749.56},{"g3":"CHANGE OF MASTERBATCH STOCK","value":112153.53},{"g3":"MASTERBATCH WIP VALUATION","value":617.07}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-61622.42},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-150802.0}]},"202601":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-33672.8},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-2019.48},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-136322.84}],"ENERGY COST":[{"g3":"POWER - SUN ENERGY COST","value":-13653.08},{"g3":"POWER - PLN","value":-539272.52},{"g3":"POWER - MASTER BATCH","value":-2425.98},{"g3":"POWER - CNG","value":-29007.58}],"INCOME":[{"g3":"LOCAL SALES","value":4124533.56},{"g3":"EXPORT SALES","value":1592049.37},{"g3":"POP CORN SALES","value":20666.19},{"g3":"SALES RETURN","value":-19325.08},{"g3":"OTHER INCOME - Waste","value":14191.59},{"g3":"OTHER INCOME (Bank Interest and Others)","value":2879.01}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-487621.63},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-23696.63},{"g3":"BONUS PROVISION - SOLO","value":-28730.08},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-20110.83},{"g3":"EMPLOYEE COST-JAKARTA","value":-381385.27},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1070.13},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37566.82}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-51095.17},{"g3":"CHEMICALS","value":-99835.45},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-6183.54},{"g3":"SUPERBA - COLOR","value":-4344.89},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-262015.17},{"g3":"SUPPORTING MATERIALS","value":-35943.33},{"g3":"SPARES","value":-85074.31},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-11486.38}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-40988.43},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-44590.08},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-35688.69}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-17131.56},{"g3":"PROCUREMENT COST IMPORT","value":-52539.43}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2344770.63},{"g3":"CHIPS COST-RECYCLE","value":-71950.14},{"g3":"CHIPS COST-FR","value":-4105.5},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":4176.62},{"g3":"STOCK ADJUSMENT","value":189475.28},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-629306.41},{"g3":"BOUGHT OUT  VSY AND RMT","value":-330.0},{"g3":"BOUGHT OUT RND YARN","value":-225.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-115591.12},{"g3":"CHANGE OF MASTERBATCH STOCK","value":116802.91},{"g3":"MASTERBATCH WIP VALUATION","value":4350.15}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-67865.67},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-142859.45}]},"202602":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-37233.78},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-68.76},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-155907.78}],"ENERGY COST":[{"g3":"POWER - PLN","value":-504282.27},{"g3":"POWER - SUN ENERGY COST","value":-11098.72},{"g3":"POWER - HANK DYEING","value":-142.39},{"g3":"POWER - MASTER BATCH","value":-2649.66},{"g3":"POWER - CNG","value":-36252.3}],"INCOME":[{"g3":"LOCAL SALES","value":3637329.88},{"g3":"EXPORT SALES","value":1958807.71},{"g3":"POP CORN SALES","value":16327.59},{"g3":"SALES RETURN","value":-44234.62},{"g3":"OTHER INCOME - Waste","value":17710.06},{"g3":"OTHER INCOME (Bank Interest and Others)","value":902.89}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-468042.02},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-28261.25},{"g3":"BONUS PROVISION - SOLO","value":-29015.93},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-20106.04},{"g3":"EMPLOYEE COST-JAKARTA","value":-396587.72},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1070.43},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-37494.71}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-44833.65},{"g3":"CHEMICALS","value":-94878.92},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-6272.69},{"g3":"SUPERBA - COLOR","value":-3969.14},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-224901.21},{"g3":"SUPPORTING MATERIALS","value":-26542.36},{"g3":"SPARES","value":-92598.87},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-11858.15}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44282.76},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-46836.04},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-35744.42}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-16995.37},{"g3":"PROCUREMENT COST IMPORT","value":-62820.8}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-2112053.95},{"g3":"CHIPS COST-RECYCLE","value":-39708.22},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":2000.39},{"g3":"STOCK ADJUSMENT","value":-10424.57},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-563124.61},{"g3":"BOUGHT OUT  VSY AND RMT","value":-2753.1},{"g3":"BOUGHT OUT RND YARN","value":-933.77}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-125799.24},{"g3":"CHANGE OF MASTERBATCH STOCK","value":149934.57},{"g3":"MASTERBATCH WIP VALUATION","value":1114.89}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-60151.7},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-159238.42}]},"202603":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-24736.68},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-15303.04},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-127423.96}],"ENERGY COST":[{"g3":"POWER - PLN","value":-404974.03},{"g3":"POWER - SUN ENERGY COST","value":-13299.25},{"g3":"POWER - HANK DYEING","value":-26.69},{"g3":"POWER - MASTER BATCH","value":-2117.31},{"g3":"POWER - CNG","value":-33481.96}],"INCOME":[{"g3":"LOCAL SALES","value":2797063.31},{"g3":"EXPORT SALES","value":1575536.92},{"g3":"POP CORN SALES","value":0.0},{"g3":"SALES RETURN","value":-7587.31},{"g3":"OTHER INCOME - Waste","value":15073.03},{"g3":"OTHER INCOME (Bank Interest and Others)","value":1587.56}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-451237.07},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-28398.47},{"g3":"BONUS PROVISION - SOLO","value":-27359.97},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-20139.63},{"g3":"EMPLOYEE COST-JAKARTA","value":-396437.08},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1855.12},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-40716.96}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-37268.37},{"g3":"CHEMICALS","value":-73313.02},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5221.19},{"g3":"SUPERBA - COLOR","value":-2432.33},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-195369.29},{"g3":"SUPPORTING MATERIALS","value":-34786.44},{"g3":"SPARES","value":-86333.81},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-26296.04}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-44664.48},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-46194.96},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-25583.83}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-12756.17},{"g3":"PROCUREMENT COST IMPORT","value":-70267.91}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-1682199.6},{"g3":"CHIPS COST-RECYCLE","value":-18453.56},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-6650.94},{"g3":"STOCK ADJUSMENT","value":420522.11},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-525885.11},{"g3":"BOUGHT OUT  VSY AND RMT","value":-4232.5},{"g3":"BOUGHT OUT RND YARN","value":0.0}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-129282.48},{"g3":"CHANGE OF MASTERBATCH STOCK","value":148304.38},{"g3":"MASTERBATCH WIP VALUATION","value":10788.84}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-43601.54},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-178955.43}]},"202604":{"COLOR CONSUMPTION (SPG)":[{"g3":"MASTERBATCH - BLACK BOUGHT OUT","value":-15004.34},{"g3":"MASTERBATCH - COLOUR BOUGHT OUT","value":-3895.12},{"g3":"OWN MASTERBATCH CONSUMPTION","value":-194013.21}],"ENERGY COST":[{"g3":"POWER - PLN","value":-464746.08},{"g3":"POWER - SUN ENERGY COST","value":-15245.35},{"g3":"POWER - HANK DYEING","value":-8.77},{"g3":"POWER - MASTER BATCH","value":-3571.95},{"g3":"POWER - CNG","value":-39753.54}],"INCOME":[{"g3":"LOCAL SALES","value":4771335.06},{"g3":"EXPORT SALES","value":2125815.95},{"g3":"POP CORN SALES","value":0.0},{"g3":"SALES RETURN","value":-6307.8},{"g3":"OTHER INCOME - Waste","value":28432.59},{"g3":"OTHER INCOME (Bank Interest and Others)","value":798.05}],"MANPOWER":[{"g3":"EMPLOYEE COST-SOLO","value":-447081.14},{"g3":"EMPLOYEE SETTLEMENT COST-SOLO","value":-24272.05},{"g3":"BONUS PROVISION - SOLO","value":-22041.6},{"g3":"TERMINAL BENEFIT PROVISION - SOLO","value":-19861.12},{"g3":"EMPLOYEE COST-JAKARTA","value":-393541.84},{"g3":"EMPLOYEE SETTLEMENT COST-JAKARTA","value":-1900.86},{"g3":"TERMINAL AND BONUS  PROVISION-JAKARTA","value":-34468.26}],"MATERIAL CONSUMPTION":[{"g3":"SPANDEX","value":-19919.6},{"g3":"CHEMICALS","value":-83027.48},{"g3":"SUPERBA - SPIN FINISH, SOFTNER, OTH CHEMICALS","value":-5250.31},{"g3":"SUPERBA - COLOR","value":-2398.87},{"g3":"PAPER TUBES+ PACKING MATERIAL","value":-226948.81},{"g3":"SUPPORTING MATERIALS","value":-27656.36},{"g3":"SPARES","value":-95090.65},{"g3":"INDIRECT OPERATIONAL EXPENSE","value":-23378.04}],"OVERHEADS":[{"g3":"ADMINISTRATIVE EXPENSE -SOLO","value":-43211.22},{"g3":"ADMINISTRATIVE EXPENSE -JAKARTA","value":-48025.41},{"g3":"ADMINISTRATIVE EXPENSE -BANK CHARGES","value":-31661.61}],"PROCUREMENT COST":[{"g3":"PROCUREMENT COST LOCAL","value":-16304.76},{"g3":"PROCUREMENT COST IMPORT","value":-58099.63}],"PRODUCTION COST":[{"g3":"CHIPS COST","value":-1917791.5},{"g3":"CHIPS COST-RECYCLE","value":-79855.72},{"g3":"CHIPS COST-FR","value":0.0},{"g3":"COST OF SALE OF BOUGHT OUT POY AND FDY","value":0.0},{"g3":"LESS : INCR./DECR. CHIPS STOCK IN PROCESS","value":-12304.16},{"g3":"STOCK ADJUSMENT","value":-312665.85},{"g3":"BOUGHT OUT POY/FDY FOR ITY","value":-1014393.52},{"g3":"BOUGHT OUT  VSY AND RMT","value":-6181.64},{"g3":"BOUGHT OUT RND YARN","value":-671.55}],"R and D MASTERBATCH PRODUCTION":[{"g3":"DYES, PIGMENTS, PBT, DEVLPMENT EXP, SPARES ETC.","value":-196214.03},{"g3":"CHANGE OF MASTERBATCH STOCK","value":295493.14},{"g3":"MASTERBATCH WIP VALUATION","value":-14120.23}],"SELLING COST":[{"g3":"LOCAL TRANSPORTS","value":-62477.75},{"g3":"EXPORT COMM.,FREIGHT AND FORWARDING","value":-222631.99}]}}};
+
+// State
+const state = {
+  drillLevel: 1,
+  drillG2: null,
+  compare: 'MoM',
+  preset: 'YTD',
+  targetMonth: '202604',
+  viewMode: 'waterfall'
+};
+
+// Charts registry
+const charts = {};
+
+// Helpers
+function fmtMoney(v, opts={}) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  const abs = Math.abs(v);
+  let str;
+  if (abs >= 1e6) str = (v/1e6).toFixed(2) + 'M';
+  else if (abs >= 1e3) str = (v/1e3).toFixed(1) + 'K';
+  else str = v.toFixed(0);
+  return (opts.prefix||'$') + (v<0 ? '(' + str.replace('-','') + ')' : str);
+}
+function fmtPct(v) {
+  if (v === null || v === undefined || isNaN(v) || !isFinite(v)) return '—';
+  return (v>=0 ? '+' : '') + v.toFixed(1) + '%';
+}
+function periodLabel(p) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[parseInt(p.substr(4,2))-1] + ' ' + p.substr(0,4);
+}
+function getPeriodsInRange(preset) {
+  const all = DATA.periods;
+  const current = state.targetMonth;
+  const curIdx = all.indexOf(current);
+  if (preset === 'L3M') return all.slice(Math.max(0, curIdx-2), curIdx+1);
+  if (preset === 'L6M') return all.slice(Math.max(0, curIdx-5), curIdx+1);
+  if (preset === 'L12M') return all.slice(Math.max(0, curIdx-11), curIdx+1);
+  if (preset === 'YTD') {
+    const year = current.substr(0,4);
+    return all.filter(p => p.substr(0,4)===year && p<=current);
+  }
+  if (preset === 'THIS_YEAR') return all.filter(p => p.substr(0,4)===current.substr(0,4));
+  if (preset === 'LAST_YEAR') {
+    const ly = (parseInt(current.substr(0,4))-1).toString();
+    return all.filter(p => p.substr(0,4)===ly);
+  }
+  return all;
+}
+function prevPeriod(p, offset=1) {
+  const idx = DATA.periods.indexOf(p);
+  return idx>=offset ? DATA.periods[idx-offset] : null;
+}
+
+// Populate target month dropdown
+function initMonthPicker() {
+  const sel = document.getElementById('targetMonth');
+  sel.innerHTML = '';
+  DATA.periods.slice().reverse().forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p;
+    opt.textContent = periodLabel(p);
+    if (p === state.targetMonth) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function setCompare(mode) {
+  state.compare = mode;
+  document.querySelectorAll('.compare-btn').forEach(b => b.classList.remove('active'));
+  if (mode !== 'NONE') {
+    const el = document.getElementById('cmp-'+mode);
+    if (el) el.classList.add('active');
+  } else {
+    document.querySelector('.compare-btn').classList.add('active');
+  }
+  renderAll();
+}
+function onPresetChange() {
+  state.preset = document.getElementById('periodPreset').value;
+  renderTrend();
+}
+
+// KPI Calculation
+function renderKPIs() {
+  const cur = state.targetMonth;
+  const prev = prevPeriod(cur, 1);
+  const prevYoY = prevPeriod(cur, 12);
+  const curVal = DATA.ebitda_total[cur];
+  const prevVal = prev ? DATA.ebitda_total[prev] : null;
+  const yoyVal = prevYoY ? DATA.ebitda_total[prevYoY] : null;
+
+  document.getElementById('kpi-current').textContent = fmtMoney(curVal);
+  if (prevVal !== null) {
+    const delta = curVal - prevVal;
+    const pct = (delta/Math.abs(prevVal))*100;
+    const el = document.getElementById('kpi-mom');
+    el.className = 'kpi-delta ' + (delta>=0 ? 'positive' : 'negative');
+    el.innerHTML = '<span class="kpi-delta-arrow">' + (delta>=0?'▲':'▼') + '</span> ' +
+                   fmtMoney(Math.abs(delta)) + ' (' + fmtPct(pct) + ') vs ' + periodLabel(prev);
+  }
+
+  // YTD
+  const year = cur.substr(0,4);
+  const ytdPeriods = DATA.periods.filter(p => p.substr(0,4)===year && p<=cur);
+  const ytdVal = ytdPeriods.reduce((s,p) => s + (DATA.ebitda_total[p]||0), 0);
+  const ytdLastYearPeriods = DATA.periods.filter(p => p.substr(0,4)===(parseInt(year)-1).toString() && p.substr(4,2)<=cur.substr(4,2));
+  const ytdLastYearVal = ytdLastYearPeriods.reduce((s,p) => s + (DATA.ebitda_total[p]||0), 0);
+  document.getElementById('kpi-ytd').textContent = fmtMoney(ytdVal);
+  if (ytdLastYearVal !== 0) {
+    const delta = ytdVal - ytdLastYearVal;
+    const pct = (delta/Math.abs(ytdLastYearVal))*100;
+    const el = document.getElementById('kpi-ytd-yoy');
+    el.className = 'kpi-delta ' + (delta>=0 ? 'positive' : 'negative');
+    el.innerHTML = '<span class="kpi-delta-arrow">' + (delta>=0?'▲':'▼') + '</span> ' +
+                   fmtPct(pct) + ' vs YTD ' + (parseInt(year)-1);
+  }
+
+  // Avg L12M
+  const l12 = DATA.periods.slice(Math.max(0, DATA.periods.indexOf(cur)-11), DATA.periods.indexOf(cur)+1);
+  const avg = l12.reduce((s,p) => s + (DATA.ebitda_total[p]||0), 0) / l12.length;
+  document.getElementById('kpi-avg').textContent = fmtMoney(avg);
+  document.getElementById('kpi-avg-trend').innerHTML = 'Rolling 12-month average';
+  document.getElementById('kpi-avg-trend').className = 'kpi-delta';
+
+  // Best month
+  let bestVal = -Infinity, bestPer = '';
+  l12.forEach(p => {
+    if (DATA.ebitda_total[p] > bestVal) { bestVal = DATA.ebitda_total[p]; bestPer = p; }
+  });
+  document.getElementById('kpi-best').textContent = fmtMoney(bestVal);
+  document.getElementById('kpi-best-label').innerHTML = '🏆 ' + periodLabel(bestPer);
+  document.getElementById('kpi-best-label').className = 'kpi-delta';
+
+  // Sparklines
+  renderSparkline('spark-ebitda', l12.map(p => DATA.ebitda_total[p]||0), '#1F4E79');
+  const ytdEachYear = l12.map((p,i) => {
+    const yr = p.substr(0,4);
+    const pUpTo = DATA.periods.filter(x => x.substr(0,4)===yr && x<=p);
+    return pUpTo.reduce((s,x) => s + (DATA.ebitda_total[x]||0), 0);
+  });
+  renderSparkline('spark-ytd', ytdEachYear, '#534AB7');
+  renderSparkline('spark-avg', l12.map(p => DATA.ebitda_total[p]||0), '#1d9e75', true);
+}
+
+function renderSparkline(id, values, color, isArea=false) {
+  if (charts[id]) charts[id].dispose();
+  const el = document.getElementById(id);
+  if (!el) return;
+  charts[id] = echarts.init(el);
+  charts[id].setOption({
+    grid: { left: 0, right: 0, top: 4, bottom: 4 },
+    xAxis: { type: 'category', show: false, data: values.map((_,i)=>i) },
+    yAxis: { type: 'value', show: false, scale: true },
+    series: [{
+      type: 'line',
+      data: values,
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { color: color, width: 2 },
+      areaStyle: isArea ? { color: color, opacity: 0.15 } : null
+    }]
+  });
+}
+
+// Drill Path
+function renderBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  bc.innerHTML = '';
+  const items = [{ label: 'EBITDA Overview', level: 1, g2: null }];
+  if (state.drillLevel >= 2 && state.drillG2) {
+    items.push({ label: state.drillG2, level: 2, g2: state.drillG2 });
+  }
+  items.forEach((item, i) => {
+    const a = document.createElement('a');
+    a.className = 'breadcrumb-item' + (i === items.length-1 ? ' current' : '');
+    a.textContent = item.label;
+    if (i < items.length-1) {
+      a.onclick = () => { state.drillLevel = item.level; state.drillG2 = item.g2; renderAll(); };
+    }
+    bc.appendChild(a);
+    if (i < items.length-1) {
+      const sep = document.createElement('span');
+      sep.className = 'breadcrumb-sep';
+      sep.textContent = '›';
+      bc.appendChild(sep);
+    }
+  });
+}
+
+// Main Chart
+function renderMain() {
+  state.targetMonth = document.getElementById('targetMonth').value;
+  state.viewMode = document.getElementById('viewMode').value;
+  if (charts.main) charts.main.dispose();
+  const el = document.getElementById('mainChart');
+  charts.main = echarts.init(el);
+
+  const titleEl = document.getElementById('mainChartTitle');
+  const hintEl = document.getElementById('mainChartHint');
+
+  if (state.viewMode === 'waterfall') {
+    if (state.drillLevel === 1) {
+      titleEl.textContent = 'EBITDA Breakdown — ' + periodLabel(state.targetMonth);
+      hintEl.textContent = 'Click any bar to drill down to detail components';
+      renderWaterfall(state.targetMonth);
+    } else {
+      titleEl.textContent = state.drillG2 + ' — ' + periodLabel(state.targetMonth);
+      hintEl.textContent = 'Detail components of ' + state.drillG2 + '. Use breadcrumb to go back.';
+      renderG3Bar(state.targetMonth, state.drillG2);
+    }
+  } else if (state.viewMode === 'trend') {
+    titleEl.textContent = 'EBITDA Trend Over Time';
+    hintEl.textContent = 'Monthly EBITDA values across periods';
+    renderMainTrend();
+  } else {
+    titleEl.textContent = 'EBITDA by Component — ' + periodLabel(state.targetMonth);
+    hintEl.textContent = 'Component-level bar chart';
+    renderComponentBar(state.targetMonth);
+  }
+  renderTable();
+}
+
+function renderWaterfall(period) {
+  const items = DATA.ebitda_g2[period];
+  const total = items.reduce((s,it) => s + it.value, 0);
+
+  // Build waterfall data
+  let cumulative = 0;
+  const placeholders = [];
+  const positives = [];
+  const negatives = [];
+  const categories = items.map(it => it.g2);
+  categories.push('EBITDA');
+
+  items.forEach((it,i) => {
+    const v = it.value;
+    if (v >= 0) {
+      placeholders.push(cumulative);
+      positives.push(v);
+      negatives.push('-');
+    } else {
+      placeholders.push(cumulative + v);
+      positives.push('-');
+      negatives.push(-v);
+    }
+    cumulative += v;
+  });
+  placeholders.push(0);
+  positives.push('-');
+  negatives.push('-');
+  const totals = items.map(() => '-').concat([total]);
+
+  charts.main.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: function(params) {
+        const idx = params[0].dataIndex;
+        if (idx === items.length) {
+          return '<strong>EBITDA Total</strong><br/>Value: ' + fmtMoney(total);
+        }
+        const it = items[idx];
+        return '<strong>' + it.g2 + '</strong><br/>Value: ' + fmtMoney(it.value) +
+               '<br/><span style="color:#999;font-size:11px">Click to drill down</span>';
+      }
+    },
+    grid: { left: '3%', right: '4%', top: 30, bottom: 80, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: categories,
+      axisLabel: { interval: 0, rotate: 30, fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      axisLabel: { formatter: (v) => fmtMoney(v) }
+    },
+    series: [
+      { name: 'Placeholder', type: 'bar', stack: 'wf', itemStyle: { color: 'transparent' }, data: placeholders, silent: true },
+      { name: 'Increase', type: 'bar', stack: 'wf', itemStyle: { color: '#1d9e75' }, data: positives,
+        label: { show: true, position: 'top', formatter: (p) => p.value !== '-' ? fmtMoney(p.value) : '', fontSize: 10 } },
+      { name: 'Decrease', type: 'bar', stack: 'wf', itemStyle: { color: '#a32d2d' }, data: negatives,
+        label: { show: true, position: 'top', formatter: (p) => p.value !== '-' ? fmtMoney(-p.value) : '', fontSize: 10 } },
+      { name: 'Total', type: 'bar', stack: 'wf', itemStyle: { color: '#534AB7' }, data: totals,
+        label: { show: true, position: 'top', formatter: (p) => p.value !== '-' ? fmtMoney(p.value) : '', fontSize: 11, fontWeight: 'bold' } }
+    ]
+  });
+
+  charts.main.off('click');
+  charts.main.on('click', (params) => {
+    if (params.dataIndex < items.length) {
+      const g2 = items[params.dataIndex].g2;
+      if (DATA.ebitda_g3[period] && DATA.ebitda_g3[period][g2]) {
+        state.drillLevel = 2;
+        state.drillG2 = g2;
+        renderAll();
+      }
+    }
+  });
+}
+
+function renderG3Bar(period, g2) {
+  const items = DATA.ebitda_g3[period][g2] || [];
+  const sorted = items.slice().sort((a,b) => b.value - a.value);
+  charts.main.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => '<strong>' + params[0].name + '</strong><br/>Value: ' + fmtMoney(params[0].value)
+    },
+    grid: { left: '3%', right: '4%', top: 30, bottom: 30, containLabel: true },
+    xAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    yAxis: { type: 'category', data: sorted.map(s => s.g3), axisLabel: { fontSize: 11 } },
+    series: [{
+      type: 'bar',
+      data: sorted.map(s => ({
+        value: s.value,
+        itemStyle: { color: s.value >= 0 ? '#1d9e75' : '#a32d2d' }
+      })),
+      label: { show: true, position: 'right', formatter: (p) => fmtMoney(p.value), fontSize: 11 }
+    }]
+  });
+}
+
+function renderMainTrend() {
+  const periods = getPeriodsInRange(state.preset);
+  const values = periods.map(p => DATA.ebitda_total[p]);
+  charts.main.setOption({
+    tooltip: { trigger: 'axis', formatter: (params) => {
+      let s = '<strong>' + params[0].name + '</strong>';
+      params.forEach(p => { s += '<br/>' + p.seriesName + ': ' + fmtMoney(p.value); });
+      return s;
+    }},
+    grid: { left: '3%', right: '4%', top: 30, bottom: 60, containLabel: true },
+    xAxis: { type: 'category', data: periods.map(periodLabel), axisLabel: { rotate: 30, fontSize: 11 } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    series: [{
+      name: 'EBITDA',
+      type: 'line',
+      data: values,
+      smooth: true,
+      lineStyle: { width: 3, color: '#1F4E79' },
+      itemStyle: { color: '#1F4E79' },
+      areaStyle: { color: '#1F4E79', opacity: 0.1 },
+      markLine: { silent: true, data: [{ type: 'average', name: 'Avg' }], lineStyle: { color: '#534AB7' } }
+    }]
+  });
+}
+
+function renderComponentBar(period) {
+  const items = DATA.ebitda_g2[period];
+  const sorted = items.slice().sort((a,b) => b.value - a.value);
+  charts.main.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params) => '<strong>' + params[0].name + '</strong><br/>Value: ' + fmtMoney(params[0].value)
+    },
+    grid: { left: '3%', right: '4%', top: 30, bottom: 30, containLabel: true },
+    xAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    yAxis: { type: 'category', data: sorted.map(s => s.g2), axisLabel: { fontSize: 11 } },
+    series: [{
+      type: 'bar',
+      data: sorted.map(s => ({ value: s.value, itemStyle: { color: s.value >= 0 ? '#1d9e75' : '#a32d2d' } })),
+      label: { show: true, position: 'right', formatter: (p) => fmtMoney(p.value), fontSize: 11 }
+    }]
+  });
+}
+
+// Trend Chart with compare
+function renderTrend() {
+  if (charts.trend) charts.trend.dispose();
+  charts.trend = echarts.init(document.getElementById('trendChart'));
+  const periods = getPeriodsInRange(state.preset);
+  const current = periods.map(p => DATA.ebitda_total[p]);
+  const series = [{
+    name: 'Current Period',
+    type: 'bar',
+    data: current,
+    itemStyle: { color: (params) => params.value >= 0 ? '#1F4E79' : '#a32d2d' },
+    label: { show: false }
+  }];
+
+  if (state.compare !== 'NONE') {
+    let offset = 1;
+    if (state.compare === 'YoY') offset = 12;
+    else if (state.compare === 'QoQ') offset = 3;
+    else if (state.compare === 'R12') offset = 12;
+    const comparison = periods.map(p => {
+      const prev = prevPeriod(p, offset);
+      return prev ? DATA.ebitda_total[prev] : null;
+    });
+    series.push({
+      name: state.compare + ' Previous',
+      type: 'line',
+      data: comparison,
+      smooth: true,
+      lineStyle: { width: 2, type: 'dashed', color: '#85B7EB' },
+      itemStyle: { color: '#85B7EB' },
+      symbol: 'circle',
+      symbolSize: 6
+    });
+  }
+
+  charts.trend.setOption({
+    tooltip: { trigger: 'axis', formatter: (params) => {
+      let s = '<strong>' + params[0].name + '</strong>';
+      params.forEach(p => { s += '<br/>' + p.seriesName + ': ' + fmtMoney(p.value); });
+      return s;
+    }},
+    legend: { bottom: 0, left: 'center' },
+    grid: { left: '3%', right: '4%', top: 30, bottom: 60, containLabel: true },
+    xAxis: { type: 'category', data: periods.map(periodLabel), axisLabel: { rotate: 30, fontSize: 11 } },
+    yAxis: { type: 'value', axisLabel: { formatter: (v) => fmtMoney(v) } },
+    series: series
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById('dataTableBody');
+  tbody.innerHTML = '';
+  const cur = state.targetMonth;
+  const prev = prevPeriod(cur, 1);
+  const yoy = prevPeriod(cur, 12);
+  const items = state.drillLevel === 1 ? DATA.ebitda_g2[cur] :
+    (DATA.ebitda_g3[cur][state.drillG2] || []).map(x => ({ g2: x.g3, value: x.value }));
+
+  items.forEach(it => {
+    const tr = document.createElement('tr');
+    const curV = it.value;
+    let prevV = null, yoyV = null;
+    if (state.drillLevel === 1) {
+      const pItem = (DATA.ebitda_g2[prev]||[]).find(x => x.g2 === it.g2);
+      const yItem = (DATA.ebitda_g2[yoy]||[]).find(x => x.g2 === it.g2);
+      prevV = pItem ? pItem.value : null;
+      yoyV = yItem ? yItem.value : null;
+    } else {
+      const pItem = ((DATA.ebitda_g3[prev]||{})[state.drillG2]||[]).find(x => x.g3 === it.g2);
+      const yItem = ((DATA.ebitda_g3[yoy]||{})[state.drillG2]||[]).find(x => x.g3 === it.g2);
+      prevV = pItem ? pItem.value : null;
+      yoyV = yItem ? yItem.value : null;
+    }
+    const momDelta = (prevV !== null) ? curV - prevV : null;
+    const momPct = (prevV && prevV !== 0) ? (momDelta/Math.abs(prevV))*100 : null;
+    const yoyDelta = (yoyV !== null) ? curV - yoyV : null;
+    const yoyPct = (yoyV && yoyV !== 0) ? (yoyDelta/Math.abs(yoyV))*100 : null;
+
+    tr.innerHTML = '<td>' + it.g2 + '</td>' +
+                   '<td class="num">' + fmtMoney(curV) + '</td>' +
+                   '<td class="num ' + (momDelta>=0?'positive':'negative') + '">' + fmtMoney(momDelta) + '</td>' +
+                   '<td class="num ' + (momPct>=0?'positive':'negative') + '">' + fmtPct(momPct) + '</td>' +
+                   '<td class="num ' + (yoyDelta>=0?'positive':'negative') + '">' + fmtMoney(yoyDelta) + '</td>' +
+                   '<td class="num ' + (yoyPct>=0?'positive':'negative') + '">' + fmtPct(yoyPct) + '</td>';
+    if (state.drillLevel === 1 && DATA.ebitda_g3[cur] && DATA.ebitda_g3[cur][it.g2]) {
+      tr.onclick = () => { state.drillLevel = 2; state.drillG2 = it.g2; renderAll(); };
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+function renderAll() {
+  renderBreadcrumb();
+  renderKPIs();
+  renderMain();
+  renderTrend();
+}
+
+window.addEventListener('resize', () => {
+  Object.values(charts).forEach(c => c && c.resize());
+});
+
+// Init
+initMonthPicker();
+renderAll();
+</script>
+</body>
+</html>
