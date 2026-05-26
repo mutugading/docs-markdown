@@ -1,0 +1,431 @@
+{
+  "GET_dashboards": {
+    "request": "GET /api/v1/dashboards",
+    "headers": {
+      "Authorization": "Bearer eyJ..."
+    },
+    "response": {
+      "user": {
+        "user_id": 1042,
+        "user_name": "John Doe",
+        "role_code": "CFO"
+      },
+      "groups": [
+        {
+          "group_code": "FINANCE",
+          "group_name": "Finance",
+          "icon": "wallet",
+          "dashboards": [
+            {
+              "dashboard_code": "EBITDA",
+              "dashboard_title": "EBITDA Performance",
+              "chart_type": "waterfall",
+              "max_drill_level": 3
+            },
+            {
+              "dashboard_code": "NET_PROFIT",
+              "dashboard_title": "Net Profit Trend",
+              "chart_type": "bar",
+              "max_drill_level": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "GET_dashboard_config": {
+    "request": "GET /api/v1/dashboards/EBITDA/config",
+    "response": {
+      "dashboard_code": "EBITDA",
+      "dashboard_title": "EBITDA Performance",
+      "description": "Earnings Before Interest, Tax, Depreciation & Amortization",
+      "filter_type": "MIS",
+      "filter_group_1": "EBITDA",
+      "periode_grain": "MONTHLY",
+      "default_view": "monthly",
+      "drill_enabled": true,
+      "max_drill_level": 3,
+      "compare_modes": [
+        "MoM",
+        "QoQ",
+        "YoY",
+        "YTD",
+        "R12"
+      ],
+      "chart_config": {
+        "type": "waterfall",
+        "positive_color": "#1d9e75",
+        "negative_color": "#a32d2d",
+        "total_color": "#534AB7",
+        "x_axis_field": "group_2",
+        "y_axis_field": "display_value",
+        "show_total_bar": true,
+        "number_format": "currency_thousands",
+        "decimals": 1
+      },
+      "layout_config": {
+        "kpi_cards": [
+          {
+            "label": "Current Month EBITDA",
+            "metric": "current_value",
+            "compare": "MoM"
+          },
+          {
+            "label": "YTD EBITDA",
+            "metric": "ytd_value",
+            "compare": "YoY"
+          },
+          {
+            "label": "Avg Monthly (L12M)",
+            "metric": "rolling_12m_avg"
+          },
+          {
+            "label": "Best Month (L12M)",
+            "metric": "best_month"
+          }
+        ]
+      }
+    }
+  },
+  "GET_dashboard_data_level1": {
+    "request": "GET /api/v1/dashboards/EBITDA/data?period_from=2026-04-01&period_to=2026-04-30&grain=MONTHLY&level=1",
+    "response": {
+      "dashboard_code": "EBITDA",
+      "data_as_of": "2026-05-26T16:00:00Z",
+      "grain": "MONTHLY",
+      "level": 1,
+      "drill_path": [],
+      "compare_mode": "MoM",
+      "periode_label": "202604",
+      "periode_display": "Apr 2026",
+      "total_value": 1015881.07,
+      "data": [
+        {
+          "key": "INCOME",
+          "order": 1,
+          "label": "INCOME",
+          "value": 6920073.85,
+          "drillable": true
+        },
+        {
+          "key": "PRODUCTION COST",
+          "order": 2,
+          "label": "PRODUCTION COST",
+          "value": -3343863.94,
+          "drillable": true
+        },
+        {
+          "key": "COLOR CONSUMPTION (SPG)",
+          "order": 3,
+          "label": "COLOR CONSUMPTION (SPG)",
+          "value": -212912.67,
+          "drillable": true
+        },
+        {
+          "key": "MATERIAL CONSUMPTION",
+          "order": 4,
+          "label": "MATERIAL CONSUMPTION",
+          "value": -483670.12,
+          "drillable": true
+        },
+        {
+          "key": "R and D MASTERBATCH PRODUCTION",
+          "order": 5,
+          "label": "R and D MASTERBATCH PRODUCTION",
+          "value": 85158.88,
+          "drillable": true
+        },
+        {
+          "key": "ENERGY COST",
+          "order": 6,
+          "label": "ENERGY COST",
+          "value": -523325.69,
+          "drillable": true
+        },
+        {
+          "key": "PROCUREMENT COST",
+          "order": 7,
+          "label": "PROCUREMENT COST",
+          "value": -74404.39,
+          "drillable": true
+        },
+        {
+          "key": "MANPOWER",
+          "order": 8,
+          "label": "MANPOWER",
+          "value": -943166.87,
+          "drillable": true
+        },
+        {
+          "key": "OVERHEADS",
+          "order": 9,
+          "label": "OVERHEADS",
+          "value": -122898.24,
+          "drillable": true
+        },
+        {
+          "key": "SELLING COST",
+          "order": 11,
+          "label": "SELLING COST",
+          "value": -285109.74,
+          "drillable": true
+        }
+      ]
+    }
+  },
+  "GET_dashboard_drill_level2": {
+    "request": "GET /api/v1/dashboards/EBITDA/drill?parent=PRODUCTION%20COST&period_label=202604",
+    "response": {
+      "dashboard_code": "EBITDA",
+      "data_as_of": "2026-05-26T16:00:00Z",
+      "level": 2,
+      "drill_path": [
+        "EBITDA",
+        "PRODUCTION COST"
+      ],
+      "periode_label": "202604",
+      "total_value": -3343863.94,
+      "data": [
+        {
+          "key": "CHIPS COST",
+          "order": 1,
+          "label": "CHIPS COST",
+          "value": -1917791.5,
+          "drillable": false
+        },
+        {
+          "key": "CHIPS COST-RECYCLE",
+          "order": 2,
+          "label": "CHIPS COST-RECYCLE",
+          "value": -79855.72,
+          "drillable": false
+        },
+        {
+          "key": "CHIPS COST-FR",
+          "order": 3,
+          "label": "CHIPS COST-FR",
+          "value": 0.0,
+          "drillable": false
+        },
+        {
+          "key": "COST OF SALE OF BOUGHT OUT POY AND FDY",
+          "order": 4,
+          "label": "COST OF SALE OF BOUGHT OUT POY AND FDY",
+          "value": 0.0,
+          "drillable": false
+        },
+        {
+          "key": "LESS : INCR./DECR. CHIPS STOCK IN PROCESS",
+          "order": 5,
+          "label": "LESS : INCR./DECR. CHIPS STOCK IN PROCESS",
+          "value": -12304.16,
+          "drillable": false
+        },
+        {
+          "key": "STOCK ADJUSMENT",
+          "order": 6,
+          "label": "STOCK ADJUSMENT",
+          "value": -312665.85,
+          "drillable": false
+        },
+        {
+          "key": "BOUGHT OUT POY/FDY FOR ITY",
+          "order": 8,
+          "label": "BOUGHT OUT POY/FDY FOR ITY",
+          "value": -1014393.52,
+          "drillable": false
+        },
+        {
+          "key": "BOUGHT OUT  VSY AND RMT",
+          "order": 9,
+          "label": "BOUGHT OUT  VSY AND RMT",
+          "value": -6181.64,
+          "drillable": false
+        },
+        {
+          "key": "BOUGHT OUT RND YARN",
+          "order": 11,
+          "label": "BOUGHT OUT RND YARN",
+          "value": -671.55,
+          "drillable": false
+        }
+      ]
+    }
+  },
+  "GET_dashboard_compare_mom": {
+    "request": "GET /api/v1/dashboards/EBITDA/compare?period_from=2025-05-01&period_to=2026-04-30&compare=MoM",
+    "response": {
+      "dashboard_code": "EBITDA",
+      "data_as_of": "2026-05-26T16:00:00Z",
+      "grain": "MONTHLY",
+      "compare_mode": "MoM",
+      "data": [
+        {
+          "periode_label": "202505",
+          "periode_display": "May 2025",
+          "value": 316417.74,
+          "compare_value": 442291.89,
+          "delta_abs": -125874.15,
+          "delta_pct": -28.46
+        },
+        {
+          "periode_label": "202506",
+          "periode_display": "Jun 2025",
+          "value": 382569.71,
+          "compare_value": 316417.74,
+          "delta_abs": 66151.97,
+          "delta_pct": 20.91
+        },
+        {
+          "periode_label": "202507",
+          "periode_display": "Jul 2025",
+          "value": 483349.38,
+          "compare_value": 382569.71,
+          "delta_abs": 100779.67,
+          "delta_pct": 26.34
+        },
+        {
+          "periode_label": "202508",
+          "periode_display": "Aug 2025",
+          "value": 258003.86,
+          "compare_value": 483349.38,
+          "delta_abs": -225345.52,
+          "delta_pct": -46.62
+        },
+        {
+          "periode_label": "202509",
+          "periode_display": "Sep 2025",
+          "value": 141244.68,
+          "compare_value": 258003.86,
+          "delta_abs": -116759.18,
+          "delta_pct": -45.25
+        },
+        {
+          "periode_label": "202510",
+          "periode_display": "Oct 2025",
+          "value": -45057.45,
+          "compare_value": 141244.68,
+          "delta_abs": -186302.13,
+          "delta_pct": -131.9
+        },
+        {
+          "periode_label": "202511",
+          "periode_display": "Nov 2025",
+          "value": 139682.63,
+          "compare_value": -45057.45,
+          "delta_abs": 184740.08,
+          "delta_pct": 410.01
+        },
+        {
+          "periode_label": "202512",
+          "periode_display": "Dec 2025",
+          "value": 753354.82,
+          "compare_value": 139682.63,
+          "delta_abs": 613672.19,
+          "delta_pct": 439.33
+        },
+        {
+          "periode_label": "202601",
+          "periode_display": "Jan 2026",
+          "value": 189323.58,
+          "compare_value": 753354.82,
+          "delta_abs": -564031.24,
+          "delta_pct": -74.87
+        },
+        {
+          "periode_label": "202602",
+          "periode_display": "Feb 2026",
+          "value": 224957.64,
+          "compare_value": 189323.58,
+          "delta_abs": 35634.06,
+          "delta_pct": 18.82
+        },
+        {
+          "periode_label": "202603",
+          "periode_display": "Mar 2026",
+          "value": 124032.62,
+          "compare_value": 224957.64,
+          "delta_abs": -100925.02,
+          "delta_pct": -44.86
+        },
+        {
+          "periode_label": "202604",
+          "periode_display": "Apr 2026",
+          "value": 1015881.07,
+          "compare_value": 124032.62,
+          "delta_abs": 891848.45,
+          "delta_pct": 719.04
+        }
+      ]
+    }
+  },
+  "error_403": {
+    "request": "GET /api/v1/dashboards/EBITDA/data (user without role access)",
+    "response_status": 403,
+    "response": {
+      "error": {
+        "code": "FORBIDDEN",
+        "message": "You do not have access to this dashboard",
+        "details": {
+          "dashboard_code": "EBITDA",
+          "user_role": "OPS_MGR",
+          "required_roles": [
+            "CEO",
+            "CFO",
+            "COO",
+            "FINANCE_MGR",
+            "IT_LEADER"
+          ]
+        }
+      }
+    }
+  },
+  "error_404": {
+    "request": "GET /api/v1/dashboards/INVALID_CODE/data",
+    "response_status": 404,
+    "response": {
+      "error": {
+        "code": "DASHBOARD_NOT_FOUND",
+        "message": "Dashboard with code 'INVALID_CODE' not found or inactive"
+      }
+    }
+  },
+  "POST_upload_preview": {
+    "request": "POST /api/v1/upload/parse (multipart/form-data with .xlsx file)",
+    "response": {
+      "upload_id": 47,
+      "file_name": "ebitda_april_2026_correction.xlsx",
+      "file_size": 12698,
+      "uploaded_at": "2026-05-26T14:20:00Z",
+      "status": "PREVIEW",
+      "total_rows": 28,
+      "valid_rows": 25,
+      "invalid_rows": 3,
+      "will_overwrite": 11,
+      "net_impact": 1015881.07,
+      "errors": [
+        {
+          "row": 14,
+          "column": "TYPE",
+          "value": "FIN",
+          "issue": "Invalid module type",
+          "expected": "MIS, SALES, HR, INV, OPEX, PROD"
+        },
+        {
+          "row": 22,
+          "column": "VALUE",
+          "value": "N/A",
+          "issue": "Non-numeric value",
+          "expected": "Decimal number"
+        },
+        {
+          "row": 27,
+          "column": "PERIODE",
+          "value": "April-2026",
+          "issue": "Invalid format",
+          "expected": "YYYYMM"
+        }
+      ]
+    }
+  }
+}
