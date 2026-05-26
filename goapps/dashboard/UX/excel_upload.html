@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Excel Upload — Dashboard Data</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #1F4E79; --primary-light: #2E75B6; --accent: #534AB7;
+  --success: #1d9e75; --danger: #a32d2d; --warning: #BA7517;
+  --bg: #F4F7FB; --surface: #FFFFFF; --border: #E5E7EB;
+  --text: #1F2937; --text-secondary: #6B7280; --text-muted: #9CA3AF;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+.topbar { background: var(--primary); color: white; padding: 12px 24px;
+  display: flex; align-items: center; justify-content: space-between; }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
+.logo { font-weight: 700; font-size: 16px; }
+.topbar-nav { display: flex; gap: 4px; }
+.topbar-nav a { color: rgba(255,255,255,0.85); text-decoration: none;
+  padding: 6px 12px; border-radius: 4px; font-size: 13px; }
+.topbar-nav a:hover, .topbar-nav a.active { background: rgba(255,255,255,0.15); color: white; }
+.user-info { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent);
+  display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; }
+
+.main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+.page-header { margin-bottom: 24px; }
+.page-title h1 { font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.page-title .subtitle { font-size: 13px; color: var(--text-secondary); }
+
+.steps { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.step { flex: 1; min-width: 160px; padding: 12px 16px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; gap: 12px;
+  position: relative; }
+.step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--border);
+  color: var(--text-muted); display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.step.active .step-num { background: var(--primary); color: white; }
+.step.done .step-num { background: var(--success); color: white; }
+.step-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.step.active .step-label { color: var(--text); }
+.step.done .step-label { color: var(--success); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 24px; margin-bottom: 16px; }
+
+.btn { padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer;
+  font-size: 13px; font-weight: 600; background: white; color: var(--text); transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { background: var(--bg); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: white; }
+.btn-primary:hover { background: #163B5C; }
+.btn-success { background: var(--success); border-color: var(--success); color: white; }
+.btn-danger { background: var(--danger); border-color: var(--danger); color: white; }
+.btn-large { padding: 12px 24px; font-size: 14px; }
+
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.3px; }
+.form-select { width: 100%; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: 6px; font-size: 14px; font-family: inherit; background: white; }
+
+.drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 40px;
+  text-align: center; cursor: pointer; transition: all 0.15s; background: var(--bg); }
+.drop-zone:hover { border-color: var(--primary); background: #EEF2FF; }
+.drop-zone-icon { font-size: 48px; margin-bottom: 12px; }
+.drop-zone-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.drop-zone-hint { font-size: 12px; color: var(--text-muted); }
+
+.template-info { background: #EEF2FF; border-left: 4px solid var(--primary);
+  padding: 16px; border-radius: 6px; margin-bottom: 20px; }
+.template-info h3 { font-size: 14px; margin-bottom: 8px; color: var(--primary); }
+.template-info code { background: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;
+  font-family: 'Monaco', 'Consolas', monospace; }
+.template-info ul { margin-left: 20px; margin-top: 8px; font-size: 13px; }
+.template-info li { margin-bottom: 4px; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 20px; }
+.summary-card { background: var(--bg); border-radius: 8px; padding: 16px; }
+.summary-label { font-size: 11px; text-transform: uppercase; color: var(--text-secondary);
+  letter-spacing: 0.5px; font-weight: 600; margin-bottom: 4px; }
+.summary-value { font-size: 24px; font-weight: 700; }
+.summary-card.success .summary-value { color: var(--success); }
+.summary-card.danger .summary-value { color: var(--danger); }
+.summary-card.warning .summary-value { color: var(--warning); }
+
+.preview-table { width: 100%; border-collapse: collapse; font-size: 12px;
+  font-family: 'Monaco', 'Consolas', monospace; }
+.preview-table th { text-align: left; padding: 8px 10px; background: var(--bg);
+  font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; position: sticky; top: 0; }
+.preview-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.preview-table tr.invalid { background: #FEF2F2; }
+.preview-table tr.invalid td { color: var(--danger); }
+.preview-table .row-status { font-size: 16px; }
+.preview-table .row-status.valid { color: var(--success); }
+.preview-table .row-status.invalid { color: var(--danger); }
+
+.preview-wrapper { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab { padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--text-secondary); border-bottom: 2px solid transparent; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+.action-bar { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 20px; }
+
+.success-banner { background: linear-gradient(90deg, #DCFCE7, #BBF7D0); color: #166534;
+  padding: 20px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
+.success-banner h2 { font-size: 20px; margin-bottom: 8px; }
+.success-banner p { font-size: 14px; }
+.success-icon { font-size: 48px; margin-bottom: 12px; }
+
+.history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.history-table th { text-align: left; padding: 10px 12px; background: var(--bg);
+  font-weight: 600; color: var(--text-secondary); border-bottom: 1px solid var(--border);
+  font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+.history-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+
+.badge { display: inline-block; padding: 3px 8px; border-radius: 12px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.badge-success { background: #DCFCE7; color: #166534; }
+.badge-pending { background: #FEF3C7; color: #92400E; }
+.badge-cancelled { background: #F3F4F6; color: #4B5563; }
+
+.scenario-toggle { display: flex; gap: 8px; }
+.scenario-btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;
+  cursor: pointer; background: white; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.scenario-btn.active { border-color: var(--primary); background: #EEF2FF; color: var(--primary); }
+
+@media (max-width: 768px) {
+  .main { padding: 16px; }
+  .card { padding: 16px; }
+  .summary-value { font-size: 20px; }
+  .step { min-width: 140px; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="logo">📊 Executive Dashboard</span>
+    <nav class="topbar-nav">
+      <a href="ebitda_viewer.html">Dashboards</a>
+      <a href="admin_panel.html">Admin</a>
+      <a href="#" class="active">Upload Data</a>
+    </nav>
+  </div>
+  <div class="user-info">
+    <span>Finance Mgr</span>
+    <div class="avatar">FM</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <div class="page-title">
+      <h1>Excel Upload — Manual Data Entry</h1>
+      <div class="subtitle">Upload financial data ke dashboard untuk periode yang belum di-ETL dari ERP</div>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step done" id="s1">
+      <div class="step-num">✓</div>
+      <div class="step-label">1. Select Target</div>
+    </div>
+    <div class="step done" id="s2">
+      <div class="step-num">✓</div>
+      <div class="step-label">2. Upload File</div>
+    </div>
+    <div class="step active" id="s3">
+      <div class="step-num">3</div>
+      <div class="step-label">3. Preview & Validate</div>
+    </div>
+    <div class="step" id="s4">
+      <div class="step-num">4</div>
+      <div class="step-label">4. Confirm & Commit</div>
+    </div>
+  </div>
+
+  <!-- STEP 1 + 2 SUMMARY (top) -->
+  <div class="card" id="upload-summary">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px">
+      <div>
+        <div style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px">Upload Session</div>
+        <div style="font-size:14px"><strong>📄 ebitda_april_2026_correction.xlsx</strong> (12.4 KB)</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-top:2px">
+          Target: <strong>EBITDA Performance</strong> · Module: MIS · Grain: Monthly · Uploaded: 26 May 14:20
+        </div>
+      </div>
+      <button class="btn" onclick="alert('Discard staging session?')">✕ Cancel & Restart</button>
+    </div>
+  </div>
+
+  <!-- VALIDATION SUMMARY -->
+  <div class="card">
+    <h3 style="margin-bottom:16px; font-size:16px; color:var(--primary)">Validation Summary</h3>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-label">Total Rows</div>
+        <div class="summary-value">28</div>
+      </div>
+      <div class="summary-card success">
+        <div class="summary-label">Valid Rows</div>
+        <div class="summary-value">25</div>
+      </div>
+      <div class="summary-card danger">
+        <div class="summary-label">Invalid Rows</div>
+        <div class="summary-value">3</div>
+      </div>
+      <div class="summary-card warning">
+        <div class="summary-label">Will Overwrite</div>
+        <div class="summary-value">11</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-label">Net Impact</div>
+        <div class="summary-value" style="font-size:18px">+$1.02M</div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchPreviewTab('valid', this)">Valid (25)</div>
+      <div class="tab" onclick="switchPreviewTab('invalid', this)">Invalid (3)</div>
+      <div class="tab" onclick="switchPreviewTab('overwrite', this)">Will Overwrite (11)</div>
+    </div>
+
+    <div id="preview-valid" class="preview-wrapper">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Row</th>
+            <th>TYPE</th>
+            <th>GROUP_1</th>
+            <th>GROUP_2</th>
+            <th>GROUP_3</th>
+            <th>PERIODE</th>
+            <th>VALUE</th>
+            <th>UOM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="row-status valid">✓</span></td><td>2</td><td>MIS</td><td>EBITDA</td><td>INCOME</td><td>LOCAL SALES</td><td>202604</td><td>-4,878,200</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>3</td><td>MIS</td><td>EBITDA</td><td>INCOME</td><td>EXPORT SALES</td><td>202604</td><td>-2,807,450</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>4</td><td>MIS</td><td>EBITDA</td><td>INCOME</td><td>OTHER INCOME</td><td>202604</td><td>-29,600</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>5</td><td>MIS</td><td>EBITDA</td><td>PRODUCTION COST</td><td>CHIPS COST</td><td>202604</td><td>2,415,800</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>6</td><td>MIS</td><td>EBITDA</td><td>PRODUCTION COST</td><td>STOCK ADJUSTMENT</td><td>202604</td><td>282,679</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>7</td><td>MIS</td><td>EBITDA</td><td>MATERIAL CONSUMPTION</td><td>SPANDEX</td><td>202604</td><td>52,300</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>8</td><td>MIS</td><td>EBITDA</td><td>MATERIAL CONSUMPTION</td><td>CHEMICALS</td><td>202604</td><td>118,500</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>9</td><td>MIS</td><td>EBITDA</td><td>ENERGY COST</td><td>POWER - PLN</td><td>202604</td><td>510,200</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>10</td><td>MIS</td><td>EBITDA</td><td>MANPOWER</td><td></td><td>202604</td><td>952,446</td><td>USD</td></tr>
+          <tr><td><span class="row-status valid">✓</span></td><td>11</td><td>MIS</td><td>EBITDA</td><td>OVERHEADS</td><td></td><td>202604</td><td>111,676</td><td>USD</td></tr>
+          <tr><td colspan="9" style="text-align:center; padding:12px; color:var(--text-muted); font-style:italic">... 15 more valid rows ...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="preview-invalid" class="preview-wrapper" style="display:none">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Row</th>
+            <th>Issue</th>
+            <th>Column</th>
+            <th>Value Provided</th>
+            <th>Expected</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="invalid">
+            <td><span class="row-status invalid">✗</span></td>
+            <td>14</td>
+            <td>Invalid module type</td>
+            <td>TYPE</td>
+            <td>"FIN"</td>
+            <td>Must be: MIS, SALES, HR, INV, OPEX, PROD</td>
+          </tr>
+          <tr class="invalid">
+            <td><span class="row-status invalid">✗</span></td>
+            <td>22</td>
+            <td>Non-numeric VALUE</td>
+            <td>VALUE</td>
+            <td>"N/A"</td>
+            <td>Decimal number (negative allowed)</td>
+          </tr>
+          <tr class="invalid">
+            <td><span class="row-status invalid">✗</span></td>
+            <td>27</td>
+            <td>Invalid period format</td>
+            <td>PERIODE</td>
+            <td>"April-2026"</td>
+            <td>YYYYMM format (e.g., 202604)</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="padding:16px; text-align:center; background:var(--bg)">
+        <button class="btn">⬇ Download Error Report (Excel)</button>
+        <span style="margin-left:12px; font-size:12px; color:var(--text-muted)">Fix errors di file, lalu re-upload</span>
+      </div>
+    </div>
+
+    <div id="preview-overwrite" class="preview-wrapper" style="display:none">
+      <table class="preview-table">
+        <thead>
+          <tr>
+            <th>Row</th>
+            <th>GROUP_2</th>
+            <th>GROUP_3</th>
+            <th>PERIODE</th>
+            <th>Existing</th>
+            <th>New</th>
+            <th>Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>2</td><td>INCOME</td><td>LOCAL SALES</td><td>202604</td><td>-4,872,200</td><td>-4,878,200</td><td style="color:var(--danger)">-6,000</td></tr>
+          <tr><td>3</td><td>INCOME</td><td>EXPORT SALES</td><td>202604</td><td>-2,800,000</td><td>-2,807,450</td><td style="color:var(--danger)">-7,450</td></tr>
+          <tr><td>5</td><td>PRODUCTION COST</td><td>CHIPS COST</td><td>202604</td><td>2,400,000</td><td>2,415,800</td><td style="color:var(--success)">+15,800</td></tr>
+          <tr><td colspan="7" style="text-align:center; padding:12px; color:var(--text-muted); font-style:italic">... 8 more rows will be overwritten ...</td></tr>
+        </tbody>
+      </table>
+      <div style="padding:12px; background:#FEF3C7; color:#92400E; font-size:13px; border-radius:0 0 6px 6px">
+        ⚠ <strong>11 rows akan di-overwrite</strong> — data lama dari ETL_MIS (26 May 12:00) akan diganti oleh data dari Excel upload ini. Audit trail tetap tercatat di FM_SOURCE_ID dan FM_UPLOADED_BY.
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="action-bar">
+    <button class="btn" onclick="alert('Staging discarded. Tidak ada data yang berubah di FACT_METRIC.')">
+      ✕ Discard
+    </button>
+    <div style="display:flex; gap:12px">
+      <button class="btn" onclick="alert('Error report downloaded')">⬇ Download Errors</button>
+      <button class="btn btn-success btn-large" onclick="commitData()">
+        ✓ Confirm & Commit (25 valid rows)
+      </button>
+    </div>
+  </div>
+
+  <!-- COMMIT SUCCESS (hidden initially) -->
+  <div id="commit-success" style="display:none">
+    <div class="card success-banner">
+      <div class="success-icon">✅</div>
+      <h2>Upload Successful</h2>
+      <p>25 rows berhasil di-commit ke FACT_METRIC. EBITDA Apr 2026 telah ter-update.</p>
+      <div style="margin-top:16px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+        <a href="ebitda_viewer.html" class="btn btn-primary">📊 View EBITDA Dashboard</a>
+        <button class="btn" onclick="location.reload()">⬆ Upload Another File</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="card" style="margin-top:24px">
+    <h3 style="margin-bottom:16px; font-size:16px; color:var(--primary)">Recent Uploads</h3>
+    <table class="history-table">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Target Dashboard</th>
+          <th>Uploaded By</th>
+          <th>Uploaded At</th>
+          <th>Rows</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ebitda_march_2026_final.xlsx</td>
+          <td>EBITDA</td>
+          <td>Finance Mgr</td>
+          <td>15 May 09:42</td>
+          <td>28 / 28 committed</td>
+          <td><span class="badge badge-success">Committed</span></td>
+          <td><span style="color:var(--primary); cursor:pointer">📋</span></td>
+        </tr>
+        <tr>
+          <td>net_profit_q1_adj.xlsx</td>
+          <td>NET_PROFIT</td>
+          <td>Finance Mgr</td>
+          <td>10 May 14:18</td>
+          <td>12 / 12 committed</td>
+          <td><span class="badge badge-success">Committed</span></td>
+          <td><span style="color:var(--primary); cursor:pointer">📋</span></td>
+        </tr>
+        <tr>
+          <td>ebitda_correction_v2.xlsx</td>
+          <td>EBITDA</td>
+          <td>Finance Mgr</td>
+          <td>8 May 11:05</td>
+          <td>0 / 18 cancelled</td>
+          <td><span class="badge badge-cancelled">Cancelled</span></td>
+          <td><span style="color:var(--primary); cursor:pointer">📋</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- TEMPLATE INFO (collapsible/bottom) -->
+  <div class="card" style="margin-top:24px">
+    <h3 style="margin-bottom:12px; font-size:16px; color:var(--primary)">📥 Template & Format Reference</h3>
+    <div class="template-info">
+      <h3>Excel Template Requirements</h3>
+      <p style="font-size:13px">Template Excel harus mengikuti struktur kolom standar:</p>
+      <ul>
+        <li><code>TYPE</code> (required) — Module code: MIS, SALES, HR, INV, OPEX, PROD</li>
+        <li><code>GROUP_1</code> (required) — Top-level category, e.g., EBITDA, NET PROFIT</li>
+        <li><code>GROUP_2</code> (optional) — Sub-category, e.g., INCOME, PRODUCTION COST</li>
+        <li><code>GROUP_3</code> (optional) — Detail line item, e.g., LOCAL SALES</li>
+        <li><code>PERIODE_GRAIN</code> (required) — DAILY / MONTHLY / QUARTERLY / YEARLY</li>
+        <li><code>PERIODE</code> (required) — YYYYMM untuk monthly, YYYY-MM-DD untuk daily</li>
+        <li><code>VALUE</code> (required) — Numeric, negative allowed (accounting convention)</li>
+        <li><code>UOM</code> (optional) — USD, HOURS, PCS, PERSON</li>
+      </ul>
+      <div style="margin-top:12px">
+        <button class="btn btn-primary">⬇ Download Empty Template</button>
+        <button class="btn">📖 View Full Documentation</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchPreviewTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['valid','invalid','overwrite'].forEach(t => {
+    document.getElementById('preview-'+t).style.display = (t === name) ? 'block' : 'none';
+  });
+}
+
+function commitData() {
+  if (confirm('Commit 25 valid rows ke FACT_METRIC?\n\n• 14 rows akan di-INSERT (data baru)\n• 11 rows akan di-UPDATE (overwrite existing)\n• Materialized view akan di-refresh\n• Cache Redis akan di-invalidate\n\nLanjutkan?')) {
+    document.getElementById('upload-summary').style.display = 'none';
+    document.querySelectorAll('.card').forEach((c, i) => { if (i < 2 || i === 3) c.style.display = 'none'; });
+    document.querySelector('.action-bar').style.display = 'none';
+    document.querySelectorAll('.step').forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+    document.querySelectorAll('.step .step-num').forEach(n => n.textContent = '✓');
+    document.getElementById('commit-success').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+</script>
+</body>
+</html>
