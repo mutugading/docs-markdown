@@ -53,16 +53,8 @@ FROM
         FROM fv_sub_ac_tb_lc
     )
 WHERE
-    aper_cal_year = CASE
-        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'DD')) <= 5 THEN
-            TO_NUMBER(TO_CHAR(ADD_MONTHS(TO_DATE(SYSDATE, 'DD/MM/RRRR'), -1), 'RRRR'))
-        ELSE TO_NUMBER(TO_CHAR(TO_DATE(SYSDATE, 'DD/MM/RRRR'), 'RRRR'))
-    END
-    AND aper_cal_month = CASE
-        WHEN TO_NUMBER(TO_CHAR(SYSDATE, 'DD')) <= 5 THEN
-            TO_NUMBER(TO_CHAR(ADD_MONTHS(TO_DATE(SYSDATE, 'DD/MM/RRRR'), -1), 'MM'))
-        ELSE TO_NUMBER(TO_CHAR(TO_DATE(SYSDATE, 'DD/MM/RRRR'), 'MM'))
-    END
+    aper_cal_year = TO_NUMBER(TO_CHAR(ADD_MONTHS(to_date(sysdate,'DD/MM/RRRR'),-1),'RRRR'))
+    and aper_cal_month = TO_NUMBER(TO_CHAR(ADD_MONTHS(to_date(sysdate,'DD/MM/RRRR'),-1),'MM'))
     AND aper_cal_year <= TO_NUMBER(TO_CHAR(SYSDATE, 'RRRR'))
     AND MFMG_MAIN_ACNT = main_acnt_code
     AND NVL(MFMG_SUB_ACNT, 'NA') = NVL(ABAL_SUB_ACNT_CODE, 'NA')
