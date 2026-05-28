@@ -1,0 +1,30 @@
+# =====================================================================
+# Crontab for Executive Dashboard ETL
+# =====================================================================
+# Install with: crontab deploy/crontab.txt
+# Verify with:  crontab -l
+#
+# Schedule: 6x per day every 4 hours (00:00, 04:00, 08:00, 12:00, 16:00, 20:00 WIB)
+#
+# Notes:
+#   - Adjust path /opt/dashboard-etl if you install elsewhere
+#   - MAILTO sends any stdout (errors) to the address — use for safety net
+#     in addition to Slack notifications
+#   - Lock file in scripts/run_etl.sh prevents overlap if a previous run
+#     is still going (e.g. unusually slow Oracle response)
+# =====================================================================
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=it-ops@yourcompany.com
+
+# ----- MIS data (EBITDA + Net Profit): every 4 hours -----
+0 0,4,8,12,16,20 * * *  /opt/dashboard-etl/scripts/run_etl.sh ETL_MIS_EBITDA
+
+# Add additional jobs as they're built:
+# 0 0,4,8,12,16,20 * * *  /opt/dashboard-etl/scripts/run_etl.sh ETL_SALES_DAILY
+# 0 1,5,9,13,17,21 * * *  /opt/dashboard-etl/scripts/run_etl.sh ETL_HR_OVERTIME
+
+# ----- Daily housekeeping at 3 AM (after midnight ETL) -----
+# Optional: vacuum, archive old logs, etc.
+# 0 3 * * *  /opt/dashboard-etl/scripts/maintenance.sh

@@ -1,0 +1,80 @@
+# =====================================================================
+# ETL Worker Configuration
+# =====================================================================
+# Copy to config.yaml and customize for each environment (dev/staging/prod)
+# Environment variables (ETL_*) override values here
+
+oracle:
+  host: oracle-erp.internal
+  port: 1521
+  service_name: ERPPROD
+  user: etl_reader
+  password: CHANGE_ME              # OVERRIDE via ETL_ORACLE_PASS env var
+  schema: ERP_DATA                 # If query needs schema prefix
+  encoding: UTF-8
+  connection_timeout_sec: 30
+  fetch_arraysize: 1000            # Cursor fetch chunk size
+
+postgres:
+  host: localhost
+  port: 5432
+  database: dashboard_dev
+  user: etl_writer
+  password: CHANGE_ME              # OVERRIDE via ETL_PG_PASS env var
+  schema: public
+  connect_timeout_sec: 10
+  statement_timeout_sec: 600       # 10 min max per statement
+  pool_min: 1
+  pool_max: 3
+
+# Source identifier in DATA_SOURCE table — used as FM_SOURCE_ID lookup
+source_code: ERP_ORACLE
+
+# ETL job definitions (matches ETL_JOB.EJ_JOB_NAME)
+jobs:
+  ETL_MIS_EBITDA:
+    description: Pull EBITDA + Net Profit MIS data from Oracle to Postgres
+    target_fm_type: MIS
+    # Sign-flip rule: list GROUP_2 values yang harus di-flip (negated)
+    # untuk dapat FM_DISPLAY_VALUE yang display-friendly
+    sign_flip_groups:
+      - INCOME
+      - PRODUCTION COST
+      - COLOR CONSUMPTION (SPG)
+      - MATERIAL CONSUMPTION
+      - R and D MASTERBATCH PRODUCTION
+      - ENERGY COST
+      - PROCUREMENT COST
+      - MANPOWER
+      - OVERHEADS
+      - SELLING COST
+      - BAD DEBT EXP
+    upsert_batch_size: 500         # Tuples per INSERT statement
+    refresh_materialized_views: true
+    invalidate_cache_pattern: "dashboard:EBITDA:*,dashboard:NET_PROFIT:*"
+
+# Retry policy untuk Oracle connection failures
+retry:
+  max_attempts: 3
+  initial_delay_sec: 10
+  backoff_multiplier: 3            # 10s, 30s, 90s
+
+# Notification on failure
+notification:
+  enabled: true
+  slack_webhook_url: ""            # OVERRIDE via ETL_SLACK_WEBHOOK env var
+  email_to: []                     # Future: SMTP integration
+  notify_on_success: false         # Only notify on FAILED
+
+# Redis cache invalidation (optional, skip if Redis tidak ready)
+redis:
+  enabled: false
+  host: localhost
+  port: 6379
+  password: ""
+
+# Local file logging
+logging:
+  level: INFO
+  directory: logs
+  rotation_days: 30
