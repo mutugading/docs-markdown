@@ -1,490 +1,577 @@
-# Product Requirements Document
-## Short Leave Module — HRIS Add-on
+# PRD — Short Leave Module (HRIS Add-on)
 
-| | |
-|---|---|
-| **Document Version** | 1.0 (Draft) |
-| **Date** | May 28, 2026 |
-| **Module Type** | Add-on to existing HRIS |
-| **Status** | For Review |
+**Version:** 3.0 Final
+**Date:** 2026-05-21
+**Author:** IT Lead — HRIS Team
+**Status:** Approved for Development
+**Related Module:** Shift Status Change Module (shared Smart Workflow pattern)
 
 ---
 
-## 1. Overview
+## Executive Summary
+
+Modul Short Leave adalah add-on di sistem HRIS yang memungkinkan karyawan mengajukan ijin sebagian jam kerja dalam satu hari: datang terlambat (Late In), pulang awal (Early Out), ijin tengah hari (Permit), atau tugas luar (On Duty).
+
+Modul ini menggunakan **Dual-Track Workflow**: satu track untuk approval departemen (DRAFT → SUBMITTED → APPROVED → RELEASED) dan satu track paralel untuk verifikasi operasional (HR Verification + Security Confirmation). Kedua track berjalan independen — attendance marker di-apply saat RELEASED tanpa menunggu HR/Security, namun data dari HR dan Security dicatat sebagai audit trail.
+
+Modul ini mengikuti pattern HRIS standar (DRAFT/SUBMITTED/APPROVED/RELEASED) yang konsisten dengan modul Shift Status Change dan modul HRIS lainnya.
+
+---
+
+## 1. Background & Objective
 
 ### 1.1 Background
-HRIS existing sudah memiliki modul Employee Master, Working Schedule, Actual Attendance, Leave, Overtime, dan Change Shift, masing-masing dengan approval flow standar (Draft → Submit → Approve → Release). Saat ini belum ada mekanisme untuk meng-handle absence partial dalam satu hari kerja — yaitu situasi di mana karyawan tidak hadir penuh tapi juga tidak full-day leave.
 
-### 1.2 Problem Statement
-Karyawan kerap memerlukan ijin partial dalam satu hari kerja (datang terlambat, pulang awal, ijin di tengah jam kerja, atau on-duty di luar lokasi). Saat ini situasi ini tidak ter-record secara struktur, sehingga:
-- Sulit menelusuri alasan kekurangan jam kerja di attendance
-- Manager tidak punya tool formal untuk meng-approve permission jenis ini
-- HR dan payroll tidak punya data terstandar untuk decision dan analytics
+Kebutuhan karyawan untuk ijin sebagian jam kerja selama ini dilakukan secara informal (chat, email, lisan), menyebabkan:
+- Tidak ada record formal untuk justifikasi anomali attendance.
+- Sulit untuk reporting dan analisis pola short leave.
+- Security tidak punya visibilitas karyawan mana yang keluar dengan ijin approved.
+- HR kesulitan membedakan keterlambatan tanpa ijin dengan yang sudah disetujui.
 
-### 1.3 Objective
-Menyediakan modul Short Leave sebagai add-on HRIS untuk:
-- Menstandarkan request, approval, dan record absence partial dalam satu hari
-- Menyediakan marker informatif di attendance tanpa memodifikasi data IN/OUT actual
-- Mendukung analytics dan reporting bagi HR dan manager
+### 1.2 Objective
+
+1. Menyediakan kanal formal untuk pengajuan dan approval short leave.
+2. Mengintegrasikan record dengan modul attendance (attendance marker saat RELEASED).
+3. Memberikan visibilitas ke Security per site untuk karyawan yang keluar/masuk di luar jam normal.
+4. Menyediakan data audit trail lengkap dari HR dan Security.
+5. Konsisten dengan pattern Smart Workflow yang diterapkan di semua modul HRIS.
+
+### 1.3 Non-Objective
+
+- Modul ini tidak menggantikan modul Leave (cuti full day).
+- Modul ini tidak menangani limit kuota kuantitatif.
+- Modul ini tidak memodifikasi data tap-in/tap-out aktual dari mesin attendance.
+- HR Rejection dan Security track tidak memblokir attendance marker.
 
 ---
 
 ## 2. Scope
 
-### 2.1 In Scope
-- Master Short Leave Type
-- Create, submit, approve, release, reject, abort, delete request
-- Validasi konflik dengan modul lain (Leave, Overtime, Change Shift, Attendance)
-- Security verification untuk type mid-shift (Ijin Tengah Jam, On-Duty)
-- Linking ke attendance record saat Release (add-on marker, read-only)
-- Attachment upload sejak Draft
-- Reporting untuk Employee, Manager, dan HR
+### 2.1 In-Scope
 
-### 2.2 Out of Scope
-- Approval level configuration — menggunakan existing approval engine
-- Notification engine — menggunakan existing notification mechanism
-- Payroll calculation dampak jam hilang — consumer responsibility (payroll module)
-- Quota management per employee per type — defer ke future version
-- Bulk approve — defer ke future version
-- Auto re-sync ke attendance jika attendance ter-update setelah release
+- Form entry pengajuan oleh HR/Admin drafter.
+- Smart Workflow approval: L1 Submit → L2 Approve → HOD Release.
+- Attendance marker apply saat RELEASED.
+- HR Verification track (paralel sejak SUBMITTED).
+- Security Confirmation track per site (setelah HR VERIFIED).
+- Status composite untuk representasi dual-track di tabel utama.
+- Reporting dan audit trail.
+- Notifikasi per transisi status.
 
----
+### 2.2 Out-of-Scope
 
-## 3. Definitions
-
-| Term | Definition |
-|---|---|
-| Short Leave | Ijin tidak hadir partial dalam satu hari kerja (kurang dari full shift) |
-| Hours Lost | Durasi declared yang merepresentasikan jam hilang dari short leave (kecuali type on-duty) |
-| Release | Tahap akhir lifecycle yang membuat short leave record menjadi final dan ter-link ke attendance |
-| Drafter | User yang membuat request (biasanya employee yang bersangkutan) |
-| Add-on Marker | Catatan supplementary yang menempel ke attendance tanpa memodifikasi data IN/OUT actual |
-| Mid-Shift Type | Type short leave yang tidak melibatkan clock IN/OUT — yaitu Ijin Tengah Jam dan On-Duty Tengah Jam |
+- Mobile app native.
+- Auto-approval rules.
+- Reversal Request (koreksi via pengajuan baru).
 
 ---
 
-## 4. User Roles
+## 3. Business Rules
 
-| Role | Responsibility |
-|---|---|
-| Employee / Drafter | Membuat dan submit request; abort sebelum release |
-| Approver | Approve atau reject submitted request (multi-level, sesuai existing setup) |
-| Releaser | Release atau reject approved request (sesuai existing setup) |
-| Security | Update `actual_out_mid` dan `actual_in_back` untuk type mid-shift |
-| HR | View reporting, audit trail, rekap |
+### 3.1 Tipe Short Leave
 
-Konfigurasi approver dan releaser **menggunakan existing approval setup**, tidak di-redefine di modul ini.
+| Kode | Nama | Working Hour Impact | Security Input |
+|------|------|---------------------|---------------|
+| LATE_IN | Datang terlambat | Berkurang sesuai aktual tap-in | Jam masuk aktual |
+| EARLY_OUT | Pulang awal | Berkurang sesuai aktual tap-out | Jam keluar aktual |
+| PERMIT | Ijin tengah hari | Berkurang sebesar durasi ijin | Jam keluar + jam masuk kembali aktual |
+| ON_DUTY | Tugas luar tengah hari | Tidak berkurang (dihitung kerja) | Jam keluar + jam masuk kembali aktual |
+
+### 3.2 Aturan Umum
+
+1. **Drafter terbatas pada role HR/Admin** dengan delegated entry rights. Tidak ada self-service karyawan.
+2. **Drafter hanya membuat DRAFT** — tidak punya hak SUBMIT. Submit adalah aksi L1 Supervisor.
+3. Short leave tidak mengurangi kuota leave karyawan.
+4. Tidak ada limit kuantitatif sistem (jam/frekuensi). Kontrol via approval.
+5. Backdate diizinkan dengan justifikasi mandatory (cutoff: periode payroll aktif).
+6. Multiple short leave per hari diizinkan sebagai request terpisah, range jam tidak boleh overlap.
+7. Attachment opsional untuk semua tipe.
+8. Short leave hanya valid di working day sesuai working schedule karyawan.
+9. Short leave tidak dapat diajukan di tanggal yang sudah ada Leave full day approved.
+10. **Koreksi setelah RELEASED**: tidak ada Reversal Request. User ajukan request baru.
+
+### 3.3 Working Hour Calculation
+
+Urutan:
+1. Ambil attendance aktual (tap-in/tap-out) sebagai baseline.
+2. Cek short leave RELEASED di tanggal tersebut.
+3. Apply rule per tipe (lihat tabel 3.1).
+4. Hitung working hour final.
+
+Short leave tidak mengubah angka tap in-out. Short leave hanya menambah marker yang menjelaskan anomali. Calculation harus idempotent.
 
 ---
 
-## 5. Functional Requirements
+## 4. Dual-Track Workflow
 
-### 5.1 Short Leave Type Master
+### 4.1 Konsep
 
-Sistem menyediakan master Short Leave Type dengan attribute berikut:
+Short Leave menggunakan dua track yang berjalan secara paralel dan independen:
 
-| Attribute | Description |
-|---|---|
-| `type_code` | Unique identifier |
-| `type_name` | Display name |
-| `affects_clock_in` | Boolean — apakah type ini terkait dengan jam IN |
-| `affects_clock_out` | Boolean — apakah type ini terkait dengan jam OUT |
-| `is_mid_shift` | Boolean — true jika tidak melibatkan IN/OUT |
-| `is_work_activity` | Boolean — true jika durasi dianggap jam kerja (mis. on-duty) |
-| `attachment_required` | Boolean — apakah attachment wajib |
-| `requires_security_verification` | Boolean — apakah perlu validasi security |
-| `active` | Boolean — flag aktif/non-aktif |
+**Track 1 — Approval Track (Departemen)**
+Flow keputusan: DRAFT → SUBMITTED → APPROVED → RELEASED.
+Attendance marker di-apply saat RELEASED. Tidak menunggu Track 2.
 
-**Default Types yang harus di-seed:**
+**Track 2 — Verification Track (Operasional)**
+- **HR Sub-track**: aktif sejak SUBMITTED (paralel dengan approval chain).
+- **Security Sub-track**: aktif setelah HR VERIFIED.
+Kedua sub-track bersifat audit/record. Tidak memblokir attendance marker.
 
-| Type | affects_in | affects_out | is_mid_shift | is_work_activity | requires_security_verification |
-|---|---|---|---|---|---|
-| Datang Terlambat | ✓ | – | – | No | – |
-| Pulang Awal | – | ✓ | – | No | – |
-| Ijin Tengah Jam | – | – | ✓ | No | ✓ |
-| On-Duty Tengah Jam | – | – | ✓ | Yes | ✓ |
+### 4.2 Status Composite
 
-HR dapat menambahkan type baru di master selama kombinasi flag-nya valid.
+Tabel utama menyimpan 3 kolom status:
 
-### 5.2 Request Fields
+| Kolom | Nilai | Default |
+|-------|-------|---------|
+| `slr_approval_status` | DRAFT / SUBMITTED / APPROVED / RELEASED / REJECTED / ABORTED | DRAFT |
+| `slr_hr_status` | NULL / PENDING / VERIFIED / REJECTED | NULL |
+| `slr_security_status` | NULL / PENDING / CONFIRMED | NULL |
 
-| Field | Required | Editable | Notes |
-|---|---|---|---|
-| Employee | ✓ | Saat Draft | Auto-populate untuk self-service |
-| Short Leave Type | ✓ | Saat Draft | Dari master |
-| Leave Date | ✓ | Saat Draft | Harus ≥ tanggal hari ini saat creation |
-| Start Time | ✓ | Saat Draft | Format HH:mm |
-| End Time | ✓ | Saat Draft | Harus > Start Time |
-| Duration (Hours Lost) | Auto | – | Computed = End Time − Start Time, dalam menit |
-| Reason | ✓ | Saat Draft | Free text |
-| Attachment | Conditional | Saat Draft | Max 3 files; PDF/JPG/PNG; max 2MB per file. Mandatory jika type punya `attachment_required = true` |
-| Actual Out (Mid) | – | Security only | Diisi oleh security untuk type mid-shift |
-| Actual In (Back) | – | Security only | Diisi oleh security untuk type mid-shift |
+**Trigger perubahan status**:
 
-### 5.3 State Machine
+| Event | slr_approval_status | slr_hr_status | slr_security_status |
+|-------|--------------------|--------------|--------------------|
+| Drafter create | DRAFT | NULL | NULL |
+| L1 Submit | SUBMITTED | PENDING | NULL |
+| L2 Approve | APPROVED | (tidak berubah) | NULL |
+| HOD Release | RELEASED | (tidak berubah) | (tidak berubah) |
+| HR Verify | (tidak berubah) | VERIFIED | PENDING |
+| HR Reject | (tidak berubah) | REJECTED | NULL |
+| Security Confirm | (tidak berubah) | (tidak berubah) | CONFIRMED |
+| Any Reject (approval) | REJECTED | NULL | NULL |
+| Drafter Abort | ABORTED | NULL | NULL |
 
-#### 5.3.1 States
-- **Draft** — record baru dibuat, belum di-submit
-- **Submitted** — sudah di-submit, menunggu approval
-- **Approved** — sudah di-approve, menunggu release
-- **Released** — final, ter-link ke attendance, immutable
-- **Rejected** — final, tidak bisa di-resubmit
-- **Aborted** — dibatalkan oleh drafter, final
+### 4.3 Aktor & Aksi per Status
 
-#### 5.3.2 Allowed Transitions
+| Status | Aksi | Aktor | Catatan |
+|--------|------|-------|---------|
+| DRAFT | Create | Drafter (HR/Admin) | Tidak bisa Submit |
+| DRAFT | Hard delete | Drafter | Record dihapus permanen |
+| SUBMITTED | Submit | L1 Supervisor | Trigger HR track aktif |
+| APPROVED | Approve | L2 Manager | |
+| RELEASED | Release | HOD | Apply attendance marker |
+| HR PENDING | Verify / Reject | HR Verifier | Paralel sejak SUBMITTED |
+| SECURITY PENDING | Confirm | Security per site | Setelah HR VERIFIED |
+| REJECTED | Reject | L1 / L2 / HOD | Final, approval chain |
+| ABORTED | Abort | Drafter | Sebelum RELEASED |
 
-| From State | Action | By Role   | To State |
-|---|---|-----------|---|
-| Draft | Submit | Submitter | Submitted |
-| Draft | Delete | Drafter   | (record dihapus, hard delete) |
-| Draft | Abort | Drafter   | Aborted |
-| Submitted | Approve | Approver  | Approved |
-| Submitted | Reject | Approver  | Rejected |
-| Submitted | Abort | Drafter   | Aborted |
-| Submitted | Update actual time | Security  | Submitted (data update only) |
-| Approved | Release | Releaser  | Released |
-| Approved | Reject | Releaser  | Rejected |
-| Approved | Abort | Drafter   | Aborted |
-| Approved | Update actual time | Security  | Approved (data update only) |
-| Released | — | —         | — (immutable) |
-| Rejected | — | —         | — (final) |
-| Aborted | — | —         | — (final) |
+### 4.4 Aturan REJECT & ABORT
 
-#### 5.3.3 State Machine Diagram
+**REJECT di approval track (L1/L2/HOD)**:
+- `slr_approval_status` = REJECTED (final).
+- `slr_hr_status` dan `slr_security_status` di-set NULL.
+- Note mandatory dari rejecter.
+- HR track yang sedang berjalan dihentikan.
+
+**REJECT di HR track**:
+- `slr_hr_status` = REJECTED.
+- `slr_approval_status` **tidak berubah** — approval chain tetap berjalan.
+- Attendance marker tetap apply saat RELEASED.
+- Security track tidak dibuka (karena HR tidak VERIFIED).
+- HR Rejection bersifat catatan audit. Manager/HOD dapat melihat ini saat review.
+
+**Security tidak bisa REJECT** — hanya CONFIRM dengan input jam aktual.
+
+**ABORT oleh Drafter**:
+- Valid di status SUBMITTED dan APPROVED.
+- Setelah RELEASED, tidak bisa abort.
+- Reason mandatory.
+- Notifikasi ke approver yang sudah approve.
+
+**Hard Delete DRAFT**:
+- Record dihapus permanen dari database.
+- Tidak ada audit log untuk DRAFT yang dihapus.
+- Konfirmasi dialog sebelum delete.
+
+### 4.5 Smart Workflow Skip
+
+| Skip Type | Kondisi |
+|-----------|---------|
+| SKIP_SELF | Approver di level itu adalah drafter |
+| SKIP_SUBORDINATE | Approver adalah bawahan dari drafter di hirarki |
+| SKIP_NO_APPROVER | Tidak ada user valid di level itu untuk karyawan target |
+
+Semua skip tercatat di `slr_approval` dengan `sla_action = SKIP` dan `sla_skip_reason`.
+
+**Special case — Top Position**:
+Bila semua level ter-skip dan tidak ada atasan untuk eskalasi (top position), transaksi auto-RELEASED dengan peer notification.
+
+---
+
+## 5. Security Confirmation Detail
+
+### 5.1 Security per Site
+
+Security yang berhak confirm adalah Security **sesuai site/plant karyawan**. Setiap site memiliki inbox terpisah. Sistem menentukan site berdasarkan lokasi kerja karyawan di master data.
+
+### 5.2 Field Input Security per Tipe
+
+| Tipe | Field Security |
+|------|---------------|
+| LATE_IN | `sls_actual_start_time` (jam masuk aktual) |
+| EARLY_OUT | `sls_actual_end_time` (jam keluar aktual) |
+| PERMIT | `sls_actual_end_time` + `sls_actual_start_time` (jam keluar & kembali) |
+| ON_DUTY | `sls_actual_end_time` + `sls_actual_start_time` (jam keluar & kembali) |
+
+### 5.3 Discrepancy Handling
+
+Jam aktual dari Security bisa berbeda dari jam yang diajukan. Sistem mencatat selisih (`sls_duration_diff_minutes`) untuk keperluan audit dan reporting. Tidak ada auto-action berdasarkan selisih — flagging untuk review HR/Manager saja.
+
+---
+
+## 6. Functional Requirements
+
+### 6.1 Entry oleh Drafter
+- FR-01: Drafter (HR/Admin) dapat membuat DRAFT: NIK, tanggal, tipe, jam mulai, jam selesai, alasan.
+- FR-02: Auto-populate nama karyawan, departemen, posisi, site dari NIK.
+- FR-03: Sistem tampilkan shift karyawan di tanggal tersebut dan preview working hour impact.
+- FR-04: Sistem tampilkan preview Smart Workflow (level mana akan di-skip).
+- FR-05: **Drafter tidak punya button Submit** — hanya Save Draft.
+- FR-06: Drafter dapat hard delete DRAFT dengan konfirmasi dialog.
+- FR-07: Drafter dapat abort SUBMITTED atau APPROVED dengan reason mandatory.
+- FR-08: Field alasan mandatory. Bila backdated, field backdate justification mandatory.
+- FR-09: Attachment opsional, max 2MB, format jpg/png/pdf.
+
+### 6.2 Validasi
+- FR-10: Tanggal short leave tidak boleh di hari libur/off sesuai working schedule.
+- FR-11: Tidak boleh ada Leave full day APPROVED/RELEASED di tanggal sama.
+- FR-12: Range jam tidak boleh overlap dengan short leave aktif lain di tanggal sama.
+- FR-13: Jam mulai/selesai harus dalam range jam shift karyawan.
+- FR-14: Backdate hanya sampai cutoff date periode payroll aktif.
+- FR-15: LATE_IN: jam mulai = jam mulai shift. EARLY_OUT: jam selesai = jam selesai shift.
+- FR-16: from_type dan to_type tidak boleh sama (validasi tipe).
+
+### 6.3 Approval Track (L1/L2/HOD)
+- FR-17: L1 Supervisor memiliki inbox DRAFT yang menunggu submission.
+- FR-18: L1 dapat Submit (→ SUBMITTED, trigger HR track) atau Reject.
+- FR-19: L2 Manager memiliki inbox SUBMITTED yang menunggu approval.
+- FR-20: L2 dapat Approve (→ APPROVED) atau Reject.
+- FR-21: HOD memiliki inbox APPROVED yang menunggu release.
+- FR-22: HOD dapat Release (→ RELEASED, apply attendance marker) atau Reject.
+- FR-23: Reject di level manapun memerlukan note mandatory.
+
+### 6.4 Attendance Marker (saat RELEASED)
+- FR-24: Saat HOD release, sistem otomatis create record di `short_leave_attendance_impact`.
+- FR-25: Marker per tipe sesuai business rules (LATE_IN/EARLY_OUT mengurangi WH, PERMIT mengurangi, ON_DUTY tidak).
+- FR-26: Marker hanya valid bila ada attendance record di tanggal tersebut. Bila tidak ada, flag "abnormal" untuk review.
+
+### 6.5 HR Verification Track
+- FR-27: HR Verifier memiliki inbox PENDING (slr_hr_status = PENDING) sejak SUBMITTED.
+- FR-28: HR dapat melihat detail request, shift karyawan, attendance history 7 hari, short leave history 30 hari.
+- FR-29: HR dapat Verify (slr_hr_status → VERIFIED, trigger Security track) atau Reject (slr_hr_status → REJECTED, approval chain tidak terpengaruh).
+- FR-30: HR Reject memerlukan note mandatory.
+- FR-31: Approval chain yang sedang berjalan tidak diblokir oleh HR status.
+
+### 6.6 Security Confirmation Track
+- FR-32: Security per site memiliki inbox PENDING (slr_security_status = PENDING) setelah HR VERIFIED.
+- FR-33: Security input jam aktual sesuai tipe (lihat section 5.2).
+- FR-34: Sistem menghitung `sls_duration_diff_minutes` antara jam diajukan vs aktual.
+- FR-35: Security Confirm (slr_security_status → CONFIRMED). Security tidak bisa REJECT.
+- FR-36: Security hanya bisa confirm setelah slr_hr_status = VERIFIED.
+
+### 6.7 Notifikasi
+- FR-37: Notifikasi ke L1 saat ada DRAFT baru.
+- FR-38: Notifikasi ke L2 saat SUBMITTED.
+- FR-39: Notifikasi ke HOD saat APPROVED.
+- FR-40: Notifikasi ke HR saat SUBMITTED (HR track mulai).
+- FR-41: Notifikasi ke Security site saat HR VERIFIED (Security track mulai).
+- FR-42: Notifikasi ke karyawan target saat RELEASED.
+- FR-43: Notifikasi ke drafter saat REJECTED dengan note.
+- FR-44: Notifikasi ke Manager/HOD saat HR Reject (untuk awareness, bukan blocking).
+
+### 6.8 Reporting
+- FR-45: Report short leave per karyawan dengan filter periode dan tipe.
+- FR-46: Report agregat per departemen.
+- FR-47: Report discrepancy: daftar transaksi dengan selisih jam aktual Security vs jam diajukan.
+- FR-48: Report HR Rejection: transaksi yang di-reject HR untuk audit compliance.
+- FR-49: Report pending track: berapa transaksi RELEASED tapi belum HR VERIFIED / Security CONFIRMED.
+- FR-50: Export ke Excel/CSV.
+
+---
+
+## 7. Data Model
+
+### 7.1 Tabel Utama
+
+**`short_leave_request` (slr_)**
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| slr_id | BIGINT PK | |
+| slr_doc_no | VARCHAR(20) | Format SL-YYYY-NNNN, unique |
+| slr_employee_id | VARCHAR FK | Karyawan target |
+| slr_site_id | VARCHAR FK | Site/plant karyawan |
+| slr_type | VARCHAR(20) | LATE_IN / EARLY_OUT / PERMIT / ON_DUTY |
+| slr_leave_date | DATE | |
+| slr_start_time | TIME | Jam mulai yang diajukan |
+| slr_end_time | TIME | Jam selesai yang diajukan |
+| slr_duration_minutes | INT | Computed |
+| slr_reason | VARCHAR(500) | Mandatory |
+| slr_backdate_reason | VARCHAR(500) | Mandatory bila backdated |
+| slr_attachment_url | VARCHAR(255) | Optional |
+| slr_approval_status | VARCHAR(20) | DRAFT/SUBMITTED/APPROVED/RELEASED/REJECTED/ABORTED |
+| slr_hr_status | VARCHAR(20) | NULL/PENDING/VERIFIED/REJECTED |
+| slr_security_status | VARCHAR(20) | NULL/PENDING/CONFIRMED |
+| slr_is_backdated | BOOLEAN | |
+| slr_abort_reason | VARCHAR(500) | Mandatory bila ABORTED |
+| slr_submitted_at | TIMESTAMP | Nullable |
+| slr_approved_at | TIMESTAMP | Nullable |
+| slr_released_at | TIMESTAMP | Nullable |
+| slr_hr_acted_at | TIMESTAMP | Nullable |
+| slr_security_confirmed_at | TIMESTAMP | Nullable |
+| slr_created_by | VARCHAR FK | Drafter |
+| slr_created_at | TIMESTAMP | |
+| slr_updated_at | TIMESTAMP | |
+
+**`short_leave_approval` (sla_)**
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| sla_id | BIGINT PK | |
+| sla_slr_id | BIGINT FK | |
+| sla_level | VARCHAR(20) | L1_SUBMIT / L2_APPROVE / HOD_RELEASE |
+| sla_approver_id | VARCHAR FK | |
+| sla_action | VARCHAR(10) | SUBMIT / APPROVE / RELEASE / REJECT / SKIP |
+| sla_skip_reason | VARCHAR(30) | SKIP_SELF / SKIP_SUBORDINATE / SKIP_NO_APPROVER |
+| sla_note | VARCHAR(500) | Mandatory bila REJECT |
+| sla_acted_at | TIMESTAMP | |
+
+**`short_leave_hr_verification` (slh_)**
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| slh_id | BIGINT PK | |
+| slh_slr_id | BIGINT FK | One-to-one |
+| slh_verifier_id | VARCHAR FK | HR yang verify/reject |
+| slh_action | VARCHAR(10) | VERIFY / REJECT |
+| slh_note | VARCHAR(500) | Mandatory bila REJECT |
+| slh_acted_at | TIMESTAMP | |
+
+**`short_leave_security` (sls_)**
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| sls_id | BIGINT PK | |
+| sls_slr_id | BIGINT FK | One-to-one |
+| sls_site_id | VARCHAR FK | Site yang confirm |
+| sls_confirmer_id | VARCHAR FK | Security yang input |
+| sls_actual_start_time | TIME | Nullable — jam masuk aktual (LATE_IN, PERMIT, ON_DUTY) |
+| sls_actual_end_time | TIME | Nullable — jam keluar aktual (EARLY_OUT, PERMIT, ON_DUTY) |
+| sls_duration_diff_minutes | INT | Computed: selisih durasi aktual vs diajukan |
+| sls_note | VARCHAR(500) | Opsional |
+| sls_confirmed_at | TIMESTAMP | |
+
+**`short_leave_attendance_impact` (sli_)**
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| sli_id | BIGINT PK | |
+| sli_slr_id | BIGINT FK | |
+| sli_attendance_id | BIGINT FK | |
+| sli_marker | VARCHAR(20) | LATE_IN / EARLY_OUT / PERMIT / ON_DUTY |
+| sli_affected_minutes | INT | |
+| sli_reduce_working_hour | BOOLEAN | False untuk ON_DUTY |
+| sli_created_at | TIMESTAMP | |
+
+### 7.2 Indeks
+
+- `short_leave_request`: index `(slr_employee_id, slr_leave_date)`, `(slr_approval_status)`, `(slr_hr_status)`, `(slr_security_status)`, `(slr_site_id)`.
+- `short_leave_approval`: index `(sla_slr_id)`, `(sla_approver_id, sla_acted_at)`.
+- `short_leave_security`: index `(sls_slr_id)`, `(sls_site_id, sls_confirmed_at)`.
+
+### 7.3 Query Penting
+
+```sql
+-- Transaksi belum HR Verified meski sudah Released
+SELECT * FROM short_leave_request
+WHERE slr_approval_status = 'RELEASED'
+AND slr_hr_status = 'PENDING';
+
+-- Discrepancy jam aktual Security > 15 menit
+SELECT slr.slr_doc_no, slr.slr_type,
+       slr.slr_start_time, slr.slr_end_time,
+       sls.sls_actual_start_time, sls.sls_actual_end_time,
+       sls.sls_duration_diff_minutes
+FROM short_leave_request slr
+JOIN short_leave_security sls ON sls.sls_slr_id = slr.slr_id
+WHERE ABS(sls.sls_duration_diff_minutes) > 15;
+
+-- Transaksi HR Rejected (untuk audit)
+SELECT slr.*, slh.slh_note, slh.slh_acted_at
+FROM short_leave_request slr
+JOIN short_leave_hr_verification slh ON slh.slh_slr_id = slr.slr_id
+WHERE slr.slr_hr_status = 'REJECTED';
+```
+
+---
+
+## 8. UI/UX
+
+### 8.1 Halaman & Komponen
+
+1. **Short Leave List** — list view dengan filter, status composite badge (3 status sekaligus).
+2. **New Request Form** — drafter entry, hanya Save Draft.
+3. **Request Detail** — timeline dual-track: approval chain di kiri, HR+Security track di kanan.
+4. **L1 Submit Inbox** — DRAFT pending submission.
+5. **L2 Approval Inbox** — SUBMITTED pending approval.
+6. **HOD Release Inbox** — APPROVED pending release.
+7. **HR Verification Inbox** — slr_hr_status = PENDING.
+8. **Security Confirmation Inbox** — slr_security_status = PENDING, per site.
+9. **Reports & Analytics**.
+
+### 8.2 Status Badge di List View
+
+Setiap baris di list view menampilkan 3 badge kecil:
 
 ```
-         ┌──────────────────────────────────────────┐
-         │                                          │
-         │     [delete]                             │
-         │        ▼                                 │
-         │      (gone)                              │
-         │                                          │
-    ┌────┴────┐    submit    ┌───────────┐  approve  ┌──────────┐  release  ┌──────────┐
-    │  Draft  ├─────────────►│ Submitted ├──────────►│ Approved ├──────────►│ Released │
-    └────┬────┘              └─────┬─────┘           └─────┬────┘           └──────────┘
-         │                         │                       │                  (immutable)
-         │ abort                   │ reject                │ reject
-         │                         │                       │
-         │                         ▼                       ▼
-         │                    ┌──────────┐           ┌──────────┐
-         │                    │ Rejected │           │ Rejected │
-         │                    └──────────┘           └──────────┘
-         │
-         │                    ┌──────────┐           ┌──────────┐
-         └───────────────────►│ Aborted  │◄──────────┤ Aborted  │
-                              └──────────┘           └──────────┘
-                                   ▲
-                                   │ abort (from Submitted or Approved)
+[Released] [HR: Verified] [Sec: Pending]
+[Approved] [HR: Pending]  [-]
+[Rejected] [-]            [-]
 ```
 
-### 5.4 Creation Rules
+### 8.3 Status Color Coding
 
-- `leave_date` harus ≥ tanggal hari ini (server timezone)
-- Backdate creation **tidak diperbolehkan**
-- Same-day creation diperbolehkan
-- Drafter bisa save sebagai Draft tanpa langsung submit
-- Attachment bisa ditambahkan sejak Draft
-- Multiple short leave dalam satu hari diperbolehkan selama slot waktunya tidak overlap
+| Status | Warna |
+|--------|-------|
+| DRAFT | Gray |
+| SUBMITTED | Blue (light) |
+| APPROVED | Blue |
+| RELEASED | Teal |
+| HR PENDING | Purple (light) |
+| HR VERIFIED | Purple |
+| HR REJECTED | Red (muted) |
+| SEC PENDING | Orange (light) |
+| SEC CONFIRMED | Orange |
+| REJECTED (approval) | Red |
+| ABORTED | Amber |
 
-### 5.5 Submit Validation (Conflict Check)
+### 8.4 Timeline Display di Request Detail
 
-Saat Submit, sistem menjalankan validasi konflik. Validasi yang sama dijalankan ulang saat **Approve** dan **Release**.
+Detail page menampilkan dua kolom timeline:
 
-#### 5.5.1 Hard Reject (block transition)
-- Ada full-day Leave (Approved/Released) di tanggal yang sama untuk employee tersebut
-- Ada short leave lain (Submitted/Approved/Released) dengan slot waktu overlap
-- Ada Overtime (Approved/Released) dengan slot waktu overlap
-- Tanggal adalah day off atau public holiday per existing working schedule (kecuali ada policy override)
+**Kiri — Approval Track:**
+- DRAFT — Created by Siti Rahayu (HR Admin), 2026-05-22 08:30
+- SUBMITTED — Submitted by Bambang (L1 Spv), 2026-05-22 09:05
+- APPROVED — Approved by Catur (L2 Mgr), 2026-05-22 09:30
+- RELEASED — Released by Indra (HOD), 2026-05-22 10:00 ✓ Marker applied
 
-#### 5.5.2 Soft Warning (boleh lanjut, inform user)
-- Ada Change Shift yang masih pending untuk tanggal yang sama
-- Approved Change Shift menggeser jadwal → short leave akan di-evaluate terhadap shift baru
-
-### 5.6 Approval & Rejection
-
-- **Approval flow dan approver chain mengikuti existing setup**
-- Reject di level apa saja bersifat **final** — record tidak bisa di-resubmit, drafter harus create record baru
-- Reason wajib di-isi saat Reject
-- Re-validasi konflik dijalankan saat Approve
-
-### 5.7 Security Verification
-
-Untuk type dengan `requires_security_verification = true` (Ijin Tengah Jam, On-Duty Tengah Jam):
-
-- Security role dapat update field `actual_out_mid` dan `actual_in_back` selama record berada di state **Submitted** atau **Approved**
-- Update ini **tidak mengubah status** record (tetap di state saat ini)
-- Field ini bersifat **informational** dan akan ditampilkan di attendance link saat Release
-- Security verification **tidak gating** — release tetap boleh dilakukan walau security belum update
-- Setelah Released, field ini juga frozen (tidak bisa di-update lagi)
-
-### 5.8 Release Behavior
-
-Saat transisi Approved → Released:
-
-#### 5.8.1 Auto-Compare Validation (soft warning, tidak block)
-
-| Type | Validasi |
-|---|---|
-| Datang Terlambat | Compare `short_leave.end_time` dengan `attendance.actual_in` di `leave_date`. Jika `actual_in > end_time`, set warning flag dengan note "actual in melebihi declared end" |
-| Pulang Awal | Compare `short_leave.start_time` dengan `attendance.actual_out`. Jika `actual_out < start_time`, set warning flag dengan note "actual out lebih cepat dari declared start" |
-| Ijin Tengah Jam | Tidak ada auto-compare |
-| On-Duty Tengah Jam | Tidak ada auto-compare |
-
-Warning di-store di field `release_warning_flag` dan `release_warning_note` di record short leave, dan ter-display di UI untuk audit. Releaser tetap bisa proceed.
-
-#### 5.8.2 Create Attendance Link
-- Insert ke `attendance_short_leave_link` (composite reference)
-- Attendance record sendiri **tidak dimodifikasi**
-- Marker ter-display di UI attendance (via JOIN ke link table)
-
-#### 5.8.3 Data Snapshot
-- Semua field di-freeze
-- Tidak ada auto re-sync jika attendance ter-update di kemudian hari
-
-#### 5.8.4 Future-Dated Release
-Jika `leave_date` masih di masa depan saat Release, link belum dibuat secara fisik. Link akan ter-bind saat attendance record untuk `leave_date` pertama kali ter-generate. (Implementasi: bisa pakai trigger di attendance generation, atau pakai virtual join via query.)
-
-### 5.9 Reject
-
-- Bisa terjadi di state **Submitted** (oleh Approver) atau **Approved** (oleh Releaser)
-- Bersifat **final**
-- Tidak bisa di-resubmit dari record yang sama
-- Reason wajib di-isi
-- Audit log mencatat: rejected_by, rejected_at, rejected_reason
-
-### 5.10 Abort
-
-- Dilakukan oleh **Drafter**
-- Allowed dari state **Draft, Submitted, atau Approved**
-- **Tidak boleh** dari state Released
-- Bersifat **final**
-- Audit log mencatat: aborted_at
-
-### 5.11 Delete
-
-- Hanya allowed dari state **Draft**
-- Hanya oleh Drafter
-- Hard delete (record tidak masuk audit history)
+**Kanan — Verification Track:**
+- HR PENDING since 2026-05-22 09:05
+- HR VERIFIED — Anita (HR), 2026-05-22 10:15 · Note: attendance match
+- SEC PENDING since 2026-05-22 10:15
+- SEC CONFIRMED — Security Gate A, 2026-05-22 10:47 · Keluar 10:02 aktual
 
 ---
 
-## 6. Integration with Existing Modules
+## 9. Edge Cases & Handling
 
-### 6.1 Actual Attendance Module
-- **Model: Add-on, bukan modifier**
-- Short leave **TIDAK** mengubah field `actual_in`, `actual_out`, atau `total_work_hours` di attendance
-- Link via tabel `attendance_short_leave_link` yang di-populate saat Release
-- UI attendance dapat JOIN ke link table untuk menampilkan marker "✱ Short Leave: [type] [durasi]"
-- Consumer modules (payroll, report) yang aggregate "hours lost" dengan menjumlahkan short leave records yang `is_work_activity = false`
-
-### 6.2 Leave Module
-- Validasi konflik di Submit/Approve/Release
-- Short leave tidak boleh overlap dengan full-day leave yang sudah Approved/Released
-
-### 6.3 Overtime Module
-- Validasi konflik di Submit/Approve/Release
-- Short leave tidak boleh overlap dengan overtime yang sudah Approved/Released
-
-### 6.4 Change Shift Module
-- Pending change shift → soft warning
-- Approved change shift → short leave di-evaluate terhadap shift baru (jadwal kerja yang berlaku)
-
-### 6.5 Working Schedule
-- Day off dan public holiday di-check saat validasi
-- Short leave umumnya tidak diperbolehkan di hari off; jika ada exception, perlu policy override
-
-### 6.6 Approval Engine
-- **Menggunakan existing approval setup** (multi-level, role mapping, escalation)
-- Tidak ada konfigurasi tambahan di modul ini
-
-### 6.7 Notification Engine
-- **Menggunakan existing notification mechanism**
-- Event yang di-trigger: Submit, Approve, Reject, Release, Abort
-- Channel notification (email/in-app/push) mengikuti existing setup
+| # | Edge Case | Handling |
+|---|-----------|----------|
+| 1 | HOD release tapi HR belum verify | Diizinkan. Attendance marker apply. HR track tetap pending. |
+| 2 | HR reject setelah HOD release | Diizinkan. HR rejection bersifat catatan. Marker tidak di-revoke. |
+| 3 | Security confirm tapi approval chain masih SUBMITTED | Tidak bisa — Security baru bisa setelah HR VERIFIED, dan HR baru bisa setelah SUBMITTED. Tetapi tidak ada syarat harus RELEASED. |
+| 4 | Security confirm jam aktual = 00:00 atau tidak masuk akal | Validasi range: jam aktual harus dalam range waktu yang wajar ± 4 jam dari jam yang diajukan. |
+| 5 | Karyawan tidak hadir sama sekali tapi ada short leave | Marker di-flag "abnormal" bila tidak ada attendance record. |
+| 6 | Overlapping short leave di hari sama | Validasi saat save: block bila range jam overlap. |
+| 7 | Short leave di hari libur/off | Block di validasi. |
+| 8 | Backdate setelah payroll closed | Block, arahkan ke adjustment manual HR. |
+| 9 | HR reject lalu approval chain RELEASED | Marker tetap apply. HR rejection tercatat untuk audit. Flag di reporting. |
+| 10 | Drafter abort saat HR sudah VERIFIED | Abort diizinkan (sebelum RELEASED). HR track di-reset (slr_hr_status = NULL). Security track di-reset. |
+| 11 | Hard delete DRAFT yang sudah ada HR activity | Tidak mungkin — HR track baru aktif saat SUBMITTED, bukan DRAFT. Hard delete DRAFT aman. |
+| 12 | Multiple short leave per hari | Diizinkan sebagai request terpisah. Validasi overlap jam. |
+| 13 | Security berbeda site mengkonfirmasi | Block — Security hanya bisa confirm untuk site yang sesuai slr_site_id. |
+| 14 | HOD release tapi Security belum punya inbox | Security tetap punya inbox (slr_security_status masih PENDING bila HR sudah VERIFIED). |
+| 15 | Top position (no superior) self-entry oleh HR Admin | Smart workflow handle, auto-RELEASED dengan peer notification. |
 
 ---
 
-## 7. Data Model (Conceptual)
+## 10. Acceptance Criteria
 
-### 7.1 `short_leave_type` (Master)
-| Field                          | Type | Notes |
-|--------------------------------|---|---|
-| slt_id                         | PK | |
-| slt_type_code                  | string, unique | |
-| slt_type_name                  | string | |
-| slt_affects_clock_in           | boolean | |
-| slt_affects_clock_out          | boolean | |
-| slt_is_mid_shift               | boolean | |
-| slt_is_work_activity               | boolean | |
-| slt_attachment_required            | boolean | |
-| slt_requires_security_verification | boolean | |
-| slt_active                         | boolean | |
+### 10.1 Functional
+- Drafter tidak punya button Submit. Hanya Save Draft.
+- Approval chain berjalan sesuai Smart Workflow dengan skip yang tercatat.
+- Attendance marker apply saat HOD Release, tidak menunggu HR/Security.
+- HR track aktif sejak SUBMITTED, HR dapat Verify atau Reject tanpa memblokir approval.
+- Security track aktif setelah HR VERIFIED, Security input jam aktual sesuai tipe.
+- Security per site — inbox terpisah per site.
+- HR Reject tidak me-revoke attendance marker yang sudah ter-apply.
+- Drafter abort di SUBMITTED/APPROVED mereset semua track (HR/Security).
 
-### 7.2 `short_leave_request` (Header)
-| Field                | Type | Notes |
-|----------------------|---|---|
-| slr_id               | PK | |
-| slr_employee_id          | FK → employee | |
-| slr_type_id              | FK → short_leave_type | |
-| slr_status               | enum | Draft / Submitted / Approved / Released / Rejected / Aborted |
-| slr_leave_date           | date | |
-| slr_start_time           | time | |
-| slr_end_time             | time | |
-| slr_duration_minutes     | int | Computed |
-| slr_reason               | text | |
-| slr_actual_out_mid       | time, nullable | Diisi oleh security |
-| slr_actual_in_back       | time, nullable | Diisi oleh security |
-| slr_release_warning_flag | boolean, default false | |
-| slr_release_warning_note | text, nullable | |
-| slr_rejected_reason      | text, nullable | |
-| slr_created_by           | FK → user | |
-| slr_created_at           | timestamp | |
-| slr_submitted_at         | timestamp, nullable | |
-| slr_approved_at          | timestamp, nullable | |
-| slr_released_at          | timestamp, nullable | |
-| slr_rejected_at          | timestamp, nullable | |
-| slr_aborted_at           | timestamp, nullable | |
-
-### 7.3 `short_leave_attachment`
-| Field          | Type | Notes |
-|----------------|---|---|
-| sla_id         | PK | |
-| sla_short_leave_id | FK → short_leave_request | |
-| sla_file_name      | string | |
-| sla_file_path      | string | |
-| sla_file_size      | int | |
-| sla_uploaded_by    | FK → user | |
-| sla_uploaded_at    | timestamp | |
-
-### 7.4 `attendance_short_leave_link`
-| Field            | Type | Notes |
-|------------------|---|---|
-| sll_id           | PK | |
-| sll_attendance_id    | FK → attendance | |
-| sll_short_leave_id   | FK → short_leave_request | |
-| sll_type_id          | FK → short_leave_type | Denormalized for query speed |
-| sll_duration_minutes | int | Denormalized snapshot |
-| sll_is_work_activity | boolean | Denormalized for query speed |
-| sll_linked_at        | timestamp | |
-
-### 7.5 `short_leave_audit_log`
-| Field          | Type | Notes |
-|----------------|---|---|
-| slal_id        | PK | |
-| slal_short_leave_id | FK → short_leave_request | |
-| slal_event          | enum | Created / Submitted / Approved / Rejected / Released / Aborted / Security Updated |
-| slal_from_state     | enum, nullable | |
-| slal_to_state       | enum, nullable | |
-| slal_actor_user_id  | FK → user | |
-| slal_actor_role     | string | |
-| slal_event_at       | timestamp | |
-| slal_note           | text, nullable | |
+### 10.2 Non-Functional
+- Form entry response < 1 detik.
+- Approval list dapat handle 500+ pending tanpa pagination issue.
+- Audit trail lengkap untuk semua transisi status di 3 kolom status.
+- Security inbox filtered per site, tidak ada cross-site visibility.
 
 ---
 
-## 8. Reporting Requirements
+## 11. Dependencies
 
-### 8.1 Personal View (Employee)
-- History short leave milik sendiri dengan filter periode dan status
-- Detail tiap record (termasuk attachment, audit trail)
-- Sortable by leave_date
-
-### 8.2 Manager View
-- List short leave pending approval untuk team
-- History approved/released team dengan filter periode
-- Filter per employee, per type, per status
-- Counter: total short leave per employee per periode
-
-### 8.3 HR View
-- Rekap per employee per periode:
-  - Total durasi short leave (split by work-activity vs hours-lost)
-  - Count per type
-  - Breakdown approved vs rejected vs aborted
-- Rekap per department / unit
-- Drill-down ke detail record
-- Export ke spreadsheet (CSV/XLSX)
+- Modul Employee Master (data karyawan, posisi, supervisor, site).
+- Modul Working Schedule (shift assignment).
+- Modul Attendance (tap-in/out data, attendance record).
+- Modul Leave (validasi konflik full day leave).
+- Approval Engine (Smart Workflow generic, future phase).
+- Notification service.
+- File storage service.
 
 ---
 
-## 9. Business Rules Summary
+## 12. Risks & Mitigations
 
-| ID | Rule                                                                                 |
-|---|--------------------------------------------------------------------------------------|
-| BR-01 | `slr_leave_date` saat creation harus ≥ tanggal hari ini (server timezone)            |
-| BR-02 | Approve dan Release boleh backdate (selama attendance period belum closed)           |
-| BR-03 | Released record bersifat immutable — tidak bisa di-abort, reject, atau delete        |
-| BR-04 | Reject bersifat final di level manapun; tidak bisa di-resubmit dari record yang sama |
-| BR-05 | Edit setelah Submit tidak diperbolehkan; harus Abort + Create baru                   |
-| BR-06 | Delete hanya allowed di state Draft (hard delete)                                    |
-| BR-07 | Short leave tidak modify data attendance; hanya add-on link                          |
-| BR-08 | Auto-compare validation di Release bersifat soft warning, tidak block                |
-| BR-09 | Security verification tidak gating release                                           |
-| BR-10 | Tidak ada auto re-sync setelah Release jika attendance ter-update                    |
-| BR-11 | Attachment wajib jika `type.slt_attachment_required = true`                          |
-| BR-12 | Max 3 attachments per request; PDF/JPG/PNG; ≤ 2 MB per file                          |
-| BR-13 | Multiple short leave dalam satu hari diperbolehkan selama slot tidak overlap         |
-| BR-14 | Approval level configuration menggunakan existing setup                              |
-| BR-15 | Notification mechanism menggunakan existing setup                                    |
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| HR reject tapi marker sudah apply, karyawan tidak notice | Medium | Medium | Notifikasi ke Manager saat HR reject, flag di reporting |
+| Security salah input jam | Medium | Low | Discrepancy report, Security bisa edit sebelum shift berakhir |
+| Security inbox tidak diperiksa (jam tidak tercatat) | Medium | Low | Notifikasi escalation bila pending > N jam |
+| Confusion 3 status sekaligus di UI | Medium | Medium | Status composite badge yang clear di list view |
+| Drafter delete DRAFT tidak sengaja | Low | Low | Konfirmasi dialog, tidak ada undo |
 
 ---
 
-## 10. Non-Functional Requirements
+## Appendix A — Glossary
 
-| Category | Requirement                                                                                                                             |
-|---|-----------------------------------------------------------------------------------------------------------------------------------------|
-| Performance | Response time ≤ 2 detik untuk submit/approve/release pada record tunggal                                                                |
-| Audit | Semua perubahan state ter-log dengan timestamp, actor user, dan actor role                                                              |
-| Security | Field `slr_actual_out_mid` & `slr_actual_in_back` hanya editable oleh role Security; release hanya oleh role Releaser sesuai existing setup |
-| Data Retention | Mengikuti existing HRIS retention policy                                                                                                |
-| Localization | UI mendukung bahasa yang sama dengan existing HRIS                                                                                      |
-| Compatibility | Berintegrasi dengan modul existing tanpa breaking change                                                                                |
-
----
-
-## 11. Out of Scope (Future Considerations)
-
-1. **Quota management** per employee per type (mis. max 10 jam Ijin Tengah Jam per bulan)
-2. **Bulk approve** untuk approver
-3. **Mobile-specific UI optimization** di luar UI existing
-4. **Direct integration dengan payroll calculation** untuk auto-deduction
-5. **Auto re-sync attendance changes** ke short leave record yang sudah Released
-6. **Multi-day short leave** (jika ada use case)
-7. **Recurring short leave** (mis. tiap Senin terlambat 30 menit karena alasan tetap)
+| Istilah | Definisi |
+|---------|----------|
+| Drafter | HR/Admin yang entry pengajuan. Tidak punya hak Submit. |
+| Dual-Track | Dua track paralel: Approval Track (Dept) dan Verification Track (HR+Security). |
+| Attendance Marker | Record di tabel attendance_impact yang menandai short leave RELEASED. |
+| slr_approval_status | Status track approval departemen di tabel utama. |
+| slr_hr_status | Status track HR di tabel utama. |
+| slr_security_status | Status track Security di tabel utama. |
+| Status Composite | 3 kolom status di tabel utama yang merepresentasikan kedua track. |
+| Discrepancy | Selisih antara jam yang diajukan vs jam aktual dari Security. |
+| Site | Lokasi/plant tempat karyawan bertugas. Security inbox dipisah per site. |
+| Smart Workflow | Pattern approval dengan auto-skip berdasarkan kondisi drafter-approver. |
 
 ---
 
-## 12. Open Items / Assumptions
+## Appendix B — Test Scenarios
 
-| # | Item | Current Assumption | Action |
-|---|---|---|---|
-| OI-01 | Backdate boundary untuk Approve/Release | Sampai attendance period closing | Konfirmasi mechanism closing existing |
-| OI-02 | Timezone untuk validasi "today" | Server timezone, single timezone | Konfirmasi jika ada employee multi-region |
-| OI-03 | Release setelah attendance closing | Block + manual adjustment di luar modul | Align ke HR / Finance policy |
-| OI-04 | Self-service vs admin create | Employee bisa create untuk diri sendiri; HR/admin bisa create on-behalf | Konfirmasi role mapping |
-| OI-05 | Default behavior public holiday | Hard reject submit | Konfirmasi jika ada policy override |
-| OI-06 | Mid-shift permit overlap dengan istirahat | Durasi dihitung apa adanya (tidak dipotong jam istirahat) | Konfirmasi ke HR |
-
----
-
-## 13. Acceptance Criteria (High-Level)
-
-Modul dianggap selesai jika:
-
-1. Drafter bisa create, save draft, submit, abort short leave sesuai state machine
-2. Approver bisa approve atau reject sesuai existing approval setup
-3. Releaser bisa release atau reject; auto-compare warning ter-trigger sesuai aturan
-4. Security bisa update actual time untuk type mid-shift
-5. Released record ter-link ke attendance dan marker visible di UI attendance
-6. Attendance data IN/OUT tidak berubah karena short leave
-7. Konflik validation ter-trigger sesuai matrix
-8. Audit log mencatat semua transisi state
-9. Reporting menampilkan rekap sesuai requirement di section 8
-10. Reject dan Abort bersifat final, tidak bisa di-undo
+| # | Scenario | Expected |
+|---|----------|----------|
+| 1 | Drafter save DRAFT untuk karyawan PERMIT | DRAFT created, slr_hr_status NULL, slr_security_status NULL |
+| 2 | L1 Submit | slr_approval_status SUBMITTED, slr_hr_status PENDING, notif ke L2 dan HR |
+| 3 | HR Verify sebelum L2 Approve | Diizinkan, slr_hr_status VERIFIED, slr_security_status PENDING |
+| 4 | Security Confirm sebelum HOD Release | Diizinkan, slr_security_status CONFIRMED |
+| 5 | L2 Approve setelah Security sudah Confirm | Diizinkan, slr_approval_status APPROVED |
+| 6 | HOD Release | slr_approval_status RELEASED, attendance marker apply |
+| 7 | HR Reject saat slr_approval_status APPROVED | slr_hr_status REJECTED, slr_approval_status tetap APPROVED, notif ke Manager |
+| 8 | HOD Release setelah HR Reject | Marker tetap apply. HR rejection tercatat. |
+| 9 | L1 Reject DRAFT | slr_approval_status REJECTED, HR/Security track di-reset |
+| 10 | Drafter abort SUBMITTED | slr_approval_status ABORTED, slr_hr_status NULL (reset) |
+| 11 | Drafter abort APPROVED (HR sudah VERIFIED) | slr_approval_status ABORTED, slr_hr_status NULL, slr_security_status NULL |
+| 12 | Security konfirmasi PERMIT: jam keluar 13:05 (diajukan 13:00) | sls_actual_end_time 13:05, sls_duration_diff_minutes +5 |
+| 13 | Security dari site berbeda coba confirm | Block: site tidak match |
+| 14 | Drafter hard delete DRAFT | Record dihapus permanen, tidak ada audit |
+| 15 | Top position (no superior), HR Admin entry | Smart skip all levels, auto-RELEASED, peer notification |
+| 16 | Overlap dengan Leave full day | Block di validasi saat save |
+| 17 | Short leave di hari off | Block di validasi |
+| 18 | Backdate setelah payroll closed | Block di validasi |
+| 19 | LATE_IN: jam mulai bukan jam mulai shift | Block di validasi |
+| 20 | Security confirm LATE_IN: input jam masuk aktual 08:17 (diajukan 08:00) | sls_actual_start_time 08:17, diff +17 menit |
 
 ---
 
-## 14. Revision History
+## Document Control
 
-| Version | Date | Author | Notes |
-|---|---|---|---|
-| 1.0 | May 28, 2026 | (TBD — IT Leader) | Initial draft, hasil brainstorming |
+| Version | Date | Author | Changes |
+|---------|------|--------|---------|
+| 1.0 | 2026-05-21 | IT Lead | Initial draft |
+| 2.0 | 2026-05-21 | IT Lead | Smart Workflow, ERD dengan prefix |
+| 3.0 | 2026-05-21 | IT Lead | Major revision. Align dengan pattern HRIS standar (DRAFT/SUBMITTED/APPROVED/RELEASED). Drafter HR/Admin, tidak ada self-service karyawan. Dual-Track Workflow: Approval Track (Dept) paralel dengan Verification Track (HR + Security). Status Composite 3 kolom. Security per site input jam aktual sesuai tipe. Attendance marker apply saat RELEASED tanpa menunggu HR/Security. |
