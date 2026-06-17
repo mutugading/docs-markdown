@@ -1,293 +1,620 @@
-# Phase C — Costing Calculation Engine: Brainstorm & Design Decision
+# Phase C — Calculation Engine: Migration Notes & Gap Analysis
 
-> **Dokumen ini:** Ringkasan diskusi arsitektur untuk migrasi `pkg_yarn_calculation` (Oracle PL/SQL) ke Go service di `goapps-backend`. Dibuat sebagai bahan diskusi dengan developer sebelum eksekusi.
+> **Dokumen ini:** Suplemen diskusi arsitektur migrasi `pkg_yarn_calculation` Oracle → Go.
+> Dibuat sebagai bahan alignment developer sebelum mulai implementasi engine.
 >
-> **Audience:** Developer `goapps-backend` (Finance service)
-> **Tanggal:** Juni 2026
-> **Status:** 🟡 Menunggu keputusan desain
+> **Baca dulu (wajib sebelum baca ini):**
+> - [`CALCULATION_ENGINE_BLUEPRINT.md`](./CALCULATION_ENGINE_BLUEPRINT.md) — arsitektur resmi engine (6-stage pipeline)
+> - [`PRD_PhaseCProductCalculation.md`](./PRD_PhaseCProductCalculation.md) — PRD lengkap Phase C
+> - [`ERD_Master.md`](./ERD_Master.md) — 34 tabel, prefix registry
+>
+> **Status:** 🟡 Dua gap di ERD perlu diselesaikan sebelum coding Stage 3 & 4
 
 ---
 
-## Konteks: Apa yang akan dipindah?
+## 1. Keputusan Desain yang Sudah Terkunci
 
-Di sistem Oracle lama ada dua package utama yang menangani kalkulasi costing benang:
+Dari PRD §3.2 Non-Goals dan Blueprint Design Goals — tidak perlu didiskusikan lagi:
 
-| Package Oracle | Fungsi |
+| Keputusan | Status | Referensi |
+|---|---|---|
+| Formula **hardcode di Go**, bukan data-driven/DSL | ✅ Terkunci | PRD §3.2 Non-Goals |
+| Tidak ada custom formula editor untuk end-user | ✅ Terkunci | PRD §3.2 Non-Goals |
+| Tidak ada per-product formula override | ✅ Terkunci | PRD §3.2 Non-Goals |
+| Target performa: 12.000 products × 125 params < 2 menit | ✅ Terkunci | Blueprint §1 |
+| Arsitektur 6-stage pipeline | ✅ Terkunci | Blueprint §2 |
+| Trigger: Cron + Admin manual button | ✅ Terkunci | Blueprint §3.1 |
+
+---
+
+## 2. Rekonsiliasi Nama Tabel
+
+> ⚠️ Dokumen sebelumnya (`design-master-data-costing.md`) pakai nama tabel dari sistem
+> Laravel (`mst_parameter`, `cost_product_applicable_param`, dll). Nama yang benar untuk
+> Costing Suite ada di `ERD_Master.md`.
+
+| Nama di brainstorm sebelumnya | Nama yang benar (ERD) | Prefix |
+|---|---|---|
+| `mst_parameter` | `cost_parameter_master` | `CPRM_` |
+| `cost_product_applicable_param` | tidak ada — tidak dipakai di Costing Suite | — |
+| `cost_product_parameter` | `cost_product_parameter` | `CPP_` ✅ sama |
+| `cost_calculation_result` | `cost_calculation_result` | `CCRE_` ✅ sama |
+| `cost_calculation_run` | `cost_calculation_run` | `CCR_` ✅ sama |
+
+---
+
+## 3. Mapping Oracle → Sistem Baru (nama yang benar)
+
+| Konsep Oracle | Tabel / Layer Baru | Kolom | Keterangan |
+|---|---|---|---|
+| `CST_YARN_LEFT` | `cost_product_master` | `CPM_*` | Master produk |
+| `CST_YARN_TOP` (param def) | `cost_parameter_master` | `CPRM_*` | Definisi parameter |
+| `CYC_FORMULA_TYPE` | `cost_parameter_master` | `CPRM_formula_type` ← **GAP** | Tipe handler Go |
+| `CYC_PROCESS_SEQ` | `cost_parameter_master` | `CPRM_calc_seq` ← **GAP** | Urutan eksekusi |
+| `CYC_DATA_VALUE` (static) | `cost_product_parameter` | `CPP_value_numeric/text` | Nilai static per produk |
+| `CYC_DATA_VALUE` (period) | `cost_product_parameter_period` | `CPPP_value_numeric/text` | Nilai dynamic per period |
+| `CYC_DATA_VALUE` (hasil) | `cost_calculation_result` | `CCRE_param_values JSONB` | Snapshot hasil |
+| `CST_YARN_FILTER` | Request context | `[]productSysID` | Scope per run |
+| `vIdMkt / vIdVal` | Go enum | `PricingType` | `MARKETING \| VALUATION` |
+| `vPeriodCostingGrpItem` | Run parameter | `period string` (YYYYMM) | Sudah ada di PRD |
+
+---
+
+## 4. Gap yang Perlu Diselesaikan
+
+### Gap 1 — `CPRM_formula_type` dan `CPRM_calc_seq` belum ada di ERD
+
+ERD saat ini tidak mendefinisikan dua kolom ini di `cost_parameter_master`. Tanpa ini:
+- Engine tidak tahu handler mana yang dipanggil per param
+- Engine tidak tahu urutan eksekusi (dependency order per param)
+
+**Migration yang perlu ditambah:**
+
+```sql
+-- Migration: add formula_type and calc_seq to cost_parameter_master
+ALTER TABLE cost_parameter_master
+    ADD COLUMN CPRM_formula_type VARCHAR(30) NOT NULL DEFAULT 'INITIAL_VALUE',
+    ADD COLUMN CPRM_calc_seq     INTEGER     NOT NULL DEFAULT 0;
+
+COMMENT ON COLUMN cost_parameter_master.CPRM_formula_type IS
+    'Go handler type. Values: INITIAL_VALUE, ARITHMETIC, RM_RATE, MASTER_LOOKUP, INTERMINGLING, IF_CONDITION, FROM_MARKETING';
+
+COMMENT ON COLUMN cost_parameter_master.CPRM_calc_seq IS
+    'Execution order within a product calculation. Lower = runs first. Must respect dependency chain.';
+
+-- Index untuk Stage 3 Dispatcher loop
+CREATE INDEX idx_cprm_calc_seq
+    ON cost_parameter_master(CPRM_calc_seq, CPRM_formula_type)
+    WHERE CPRM_param_category = 'CALCULATED' AND CPRM_is_active = TRUE;
+```
+
+**Action item:** Tambahkan ke `phase_c_ddl.sql` dan update `ERD_Master.md` §2 (prefix registry CPRM_).
+
+---
+
+### Gap 2 — Struktur `cost_calculation_result` belum jelas
+
+ERD menyebut `CCRE_param_values JSONB` di Flow 4 dan tiga kolom agregat di index hint:
+`CCRE_captive_cost`, `CCRE_delivery_cost`, `CCRE_calc_status`. Tapi struktur lengkapnya
+belum terdefinisi.
+
+**Pertanyaan yang perlu dijawab sebelum coding Stage 5 (Batch Writer):**
+
+> Apakah `cost_calculation_result` menyimpan **1 row per product per run** (hasil agregat
+> + JSONB snapshot semua 125 param), atau **1 row per param per product per run** seperti
+> Oracle `CST_YARN_CALCULATION`?
+
+Implikasinya berbeda:
+
+| Opsi | Struktur | Pro | Con |
+|---|---|---|---|
+| **A — 1 row per product** | `CCRE_param_values JSONB {param_code: value, ...}` | Simple, 1 write per product | Sulit query individual param, JSONB query lambat |
+| **B — 1 row per param** | `(run_id, product_id, param_code, value)` | Mudah query per param, debuggable | 12K × 125 = 1.5M rows per run |
+| **C — Hybrid** | 1 row per product + JSONB snapshot (sesuai hint di ERD Flow 4) | Balance antara query speed dan storage | JSONB sebagai audit snapshot, agregat untuk dashboard |
+
+**Rekomendasi:** Opsi C — sesuai hint yang sudah ada di ERD. Struktur yang disarankan:
+
+```sql
+-- Proposed: cost_calculation_result (CCRE_)
+CREATE TABLE cost_calculation_result (
+    CCRE_result_id       BIGSERIAL    PRIMARY KEY,
+    CCRE_run_id          BIGINT       NOT NULL REFERENCES cost_calculation_run(CCR_run_id),
+    CCRE_product_sys_id  BIGINT       NOT NULL REFERENCES cost_product_master(CPM_product_sys_id),
+    CCRE_period          VARCHAR(6)   NOT NULL,            -- YYYYMM
+
+    -- Agregat outputs (fast query untuk dashboard & Phase A)
+    CCRE_captive_cost    NUMERIC(20,6),
+    CCRE_delivery_cost   NUMERIC(20,6),
+    CCRE_vb1_cost        NUMERIC(20,6),                   -- Volume Bucket 1
+    CCRE_vb2_cost        NUMERIC(20,6),
+    CCRE_vb3_cost        NUMERIC(20,6),
+    CCRE_vb4_cost        NUMERIC(20,6),
+    CCRE_vb5_cost        NUMERIC(20,6),
+
+    -- Status & audit
+    CCRE_calc_status     VARCHAR(20)  NOT NULL,            -- SUCCESS, PARTIAL, FAILED
+    CCRE_error_message   TEXT,
+    CCRE_calc_duration_ms INTEGER,
+
+    -- Snapshot semua 125 param values (audit trail, debugging)
+    CCRE_param_values    JSONB        NOT NULL DEFAULT '{}',
+
+    CCRE_is_active       BOOLEAN      NOT NULL DEFAULT FALSE,
+    CCRE_created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+
+    UNIQUE (CCRE_run_id, CCRE_product_sys_id)
+);
+```
+
+**Action item:** Konfirmasi dengan arsitek, lalu update `phase_c_ddl.sql` dan `ERD_Master.md`.
+
+---
+
+## 5. Cara Kerja Oracle `process()` → Pemetaan ke Pipeline
+
+Oracle menjalankan ini per produk (sequential):
+
+```
+[Pre-process]
+  pRefrshValParam()      ← sync Yarn Rate / captive chain SEBELUM loop utama
+  pCkYarnWithoutLoss()   ← null-kan loss formula untuk produk exempt
+
+[Main loop — ordered by PROCESS_SEQ]
+  FOR EACH param IN cost_parameter_master
+      WHERE product applicable
+      ORDER BY CPRM_calc_seq ASC:
+
+    dispatch ke Go handler berdasarkan CPRM_formula_type
+    accumulate result ke values map
+    END
+
+[Post-process]
+  aggregate totals → CCRE_captive_cost, CCRE_delivery_cost, dll
+  batch write → cost_calculation_result
+```
+
+Pemetaan ke Blueprint 6-stage pipeline:
+
+| Blueprint Stage | Oracle Equivalent |
 |---|---|
-| `MGTAPPS.pkg_yarn_calculation` | Engine kalkulasi utama — procedure `process()` yang loop semua formula per produk |
-| `MGTAPPS.pkg_yarn_valuation` | Helper lookup — ambil MB name, chip rate, dozing, packing type, dll per produk |
+| Stage 1: Data Loader | Load `cost_parameter_master`, `cost_product_parameter`, `cost_product_parameter_period`, master rates |
+| Stage 2: Dep Resolver | Topological sort products (POY→PTY→TTY→MEL) + sort params by `CPRM_calc_seq` |
+| Stage 3: Dispatcher | `map[FormulaType]HandlerFunc` — dispatch berdasarkan `CPRM_formula_type` |
+| Stage 4: Calculator | Go handlers — mirror logic dari `pkg_yarn_calculation.process()` |
+| Stage 5: Batch Writer | Bulk upsert ke `cost_calculation_result` |
+| Stage 6: Audit & Status | Update `CCR_status`, write `cost_audit_log` |
 
-Yang akan dimigrasi ke Go adalah **seluruh logic kalkulasi** ini, berjalan di `goapps-backend` (Finance service).
-
----
-
-## Mapping: Oracle → Sistem Baru
-
-| Konsep Oracle | Tabel/Layer Baru | Keterangan |
-|---|---|---|
-| `CST_YARN_LEFT` (product row) | `cost_product_master` | Master produk yang dihitung |
-| `CST_YARN_TOP` (param definition) | `mst_parameter` | Definisi parameter |
-| `CST_YARN_CALCULATION` (cell value) | `cost_product_parameter` | Nilai per param per produk |
-| `CYC_FORMULA_TYPE` | `mst_parameter.formula_type` ← **kolom baru** | Tipe kalkulasi per param |
-| `CYC_PROCESS_SEQ` | `mst_parameter.calc_seq` ← **kolom baru** | Urutan eksekusi |
-| `CYC_DATA_VALUE` | `cpp_value_numeric` / `cpp_value_text` | Hasil kalkulasi |
-| `CST_YARN_FILTER` (scope) | Request context (productSysIDs) | Filter produk yang dikalkulasi |
-| `vIdMkt` / `vIdVal` (package var) | `pricing_type` enum: `MARKETING` / `VALUATION` | Mode harga |
-| `vPeriodCostingGrpItem` | `period time.Time` parameter | Periode untuk rate lookup |
+Pre-process (`pRefrshValParam`, `pCkYarnWithoutLoss`) → masuk sebelum Stage 1 atau bagian awal Stage 2.
 
 ---
 
-## Cara Kerja Oracle `process()` — Yang Perlu Ditiru
+## 6. Formula Types → Go Handlers
 
-```
-procedure process(pUserId, pPRS_TYPE, pCYFH_IS_EDIT):
+Semua ini adalah Go handler functions di `internal/finance/costing/handlers/`.
+Tidak ada formula editor, tidak ada DSL — sesuai PRD Non-Goals.
 
-  1. pRefrshValParam()          -- sync Yarn Rate / Multi-Yarn chain SEBELUM loop
-  2. pCkYarnWithoutLoss()       -- null-kan loss formula untuk produk exempt
-  3. pValuationProcess()        -- copy Marketing → Valuation records (jika REFRESH=Y)
+| `CPRM_formula_type` | Go Handler | File | Params yang pakai |
+|---|---|---|---|
+| `ARITHMETIC` | `handleArithmetic` | `handlers/arithmetic.go` | Grade weights, packing cost, utility/kg, RM norms |
+| `RM_RATE` | `handleRawMaterial` | `handlers/raw_material.go` | `RM_RATE`, `RM_LANDED_COST` |
+| `MASTER_LOOKUP` | `handleMasterLookup` | `handlers/master_lookup.go` | `MC_NAME`, `MC_SPEED`, packing codes |
+| `INTERMINGLING` | `handleIntermingling` | `handlers/intermingling.go` | `INTERMINGLE_COST` |
+| `IF_CONDITION` | `handleConditional` | `handlers/conditional.go` | `RP_DOZING`, `MB_COST` |
+| `FROM_MARKETING` | `handleFromMarketing` | `handlers/from_marketing.go` | Semua param Valuation yang copy dari Marketing |
+| `INITIAL_VALUE` | `handleInitialValue` | `handlers/initial_value.go` | Pass-through nilai INPUT/RATE |
 
-  4. FOR EACH row IN CST_YARN_CALCULATION
-        WHERE product IN (CST_YARN_FILTER)
-        ORDER BY CYC_PROCESS_SEQ, CYC_LEFT_NO, CYC_TOP_NO:
-
-       evaluate CYC_FORMULA_TYPE → hasilkan vDataValue
-       UPDATE CYC_DATA_VALUE = vDataValue   ← update in-place per row
-       COMMIT per row
-
-  5. pkgYarnLeftTot.process()   -- agregat totals per LEFT record
-```
-
-**Kunci:** eksekusi **ordered by `PROCESS_SEQ`** — ini yang membuat formula bisa referensi hasil formula sebelumnya. Mirip topological sort.
-
----
-
-## Formula Types yang Ada (12 jenis)
-
-| Formula Type | Kompleksitas | Keterangan |
-|---|---|---|
-| `INITIAL_VALUE` | Rendah | Literal dari `CYC_FORMULA_SCRIPT` |
-| `FROM_DATA` | Rendah | Copy value dari param lain (via `CST_YARN_SAME_ROWS`) |
-| `FORMULA_DATA` | Sedang | Aritmatika: `op1 operator op2 operator op3` (via `CST_YARN_FORMULA_CALC`) |
-| `IF_CONDITION` | Tinggi | Conditional branch (via `CST_YARN_IFCOND_HDR/DTL`) |
-| `RAW_MATERIAL` | Tinggi | 3 sub-tipe: Store Rate / Captive Cost / Multi-Yarn |
-| `FROM_MASTER_YARN` | Sedang | Lookup kolom dari `CST_MST_YARN` |
-| `FROM_MASTER_MACHINE` | Sedang | Lookup kolom dari `CST_MST_MACHINE` |
-| `FROM_BOX_BOBIN_COST` | Sedang | Lookup dari `CST_MST_BOX_BOBIN_COST` |
-| `FROM_PRODUCT_GRADE` | Sedang | Lookup dari `CST_MST_PRODUCT_GRADE` |
-| `FROM_MASTER_BATCH_DATA` | Tinggi | Lookup dari MB spinning master |
-| `INTERMENGLING DATA` | Rendah | Lookup `CST_YARN_MST_INTERMINGLING` / 100 |
-| `FROM_MARKETING_COST` | Sedang | Copy dari session Marketing ke Valuation |
-
----
-
-## Gap: Apa yang Belum Ada
-
-File `formula_engine.go` yang sudah dibuat sebelumnya **bukan** equivalent Oracle package. Itu adalah satu pure function besar `Calculate()` yang hardcode semua kalkulasi sekaligus. Yang belum ada:
-
-```
-❌ FormulaType enum + handler map (dispatcher)
-❌ Execution loop ordered by calc_seq — iterasi per-param seperti Oracle process()
-❌ mst_parameter tidak punya: formula_type, calc_seq (kolom baru dibutuhkan)
-❌ Per-param evaluation: EvaluateParam(param_code, product) yang bisa dipanggil satuan
-❌ Pre-process hooks: RefreshValParam(), CheckWithoutLoss()
-❌ Post-process hook: aggregasi totals
-```
-
----
-
-## Keputusan Desain Utama: Option A vs Option B
-
-### Option A — Formula Hardcode di Go
-
-Setiap `param_code` punya dedicated handler function di Go. `mst_parameter` hanya menyimpan `formula_type` dan `calc_seq` untuk routing, bukan logic formula.
+### Handler paling kompleks: `RM_RATE`
 
 ```go
-// Engine dispatch berdasarkan formula_type yang dibaca dari DB
-handlers := map[FormulaType]HandlerFunc{
-    FormulaTypeArithmetic:    handleArithmetic,    // grade weights, packing cost, dll
-    FormulaTypeRawMaterial:   handleRawMaterial,   // store/captive/multi-yarn
-    FormulaTypeIntermingling: handleIntermingling, // lookup master
-    FormulaTypeMasterLookup:  handleMasterLookup,  // yarn/machine/packing master
-    FormulaTypeIfCondition:   handleIfCondition,   // conditional
-    FormulaTypeFromMarketing: handleFromMarketing, // copy dari Marketing session
+// handlers/raw_material.go
+func (h *RawMaterialHandler) Handle(ctx context.Context, p Param, vals Values) (float64, error) {
+    component := h.resolver.GetComponent(ctx, p.ProductSysID) // dari cost_product_order_component
+
+    switch component.RMType {
+    case "Store Rate":
+        // Lookup dari cost_master_data untuk period aktif
+        // MARKETING → CMSD_market_rate
+        // VALUATION → CMSD_landed_cost
+        return h.masterData.GetRate(ctx, component.ERPItemID, p.Period, p.PricingType)
+
+    case "Captive Cost":
+        // Fetch CCRE_delivery_cost dari upstream product
+        // ← inilah yang butuh topological order: upstream harus selesai dulu
+        return h.results.GetDeliveryCost(ctx, component.RMProductSysID, p.Period)
+
+    case "Multi-Yarn":
+        // Weighted average dari beberapa komponen upstream
+        total := 0.0
+        for _, comp := range component.Components {
+            cost, err := h.results.GetDeliveryCost(ctx, comp.ProductSysID, p.Period)
+            if err != nil { return 0, err }
+            total += cost * comp.SharePct / 100
+        }
+        return total, nil
+    }
 }
-
-// Eksekusi loop — data-driven ordering
-params, _ := repo.GetCalculatedParams(ctx, productID) // ordered by calc_seq
-for _, param := range params {
-    handler := handlers[param.FormulaType]
-    result  := handler(ctx, param, valuesAccumulator)
-    valuesAccumulator[param.ParamCode] = result
-}
-```
-
-**Plus:**
-- Type-safe — compiler tangkap error formula
-- Mudah unit-test — pure function, no DB
-- Performa maksimal, zero overhead eval
-- Complex logic (captive chain, IF_CONDITION) natural di Go
-- Cocok dengan golangci-lint + testify yang sudah ada di repo
-
-**Minus:**
-- Tambah parameter baru = tulis Go + redeploy
-- Finance/Engineering tidak bisa self-service ubah formula
-
----
-
-### Option B — Data-Driven: Formula sebagai String di DB
-
-Tambah kolom `formula_script` ke `mst_parameter`. Go evaluasi string expression saat runtime menggunakan library seperti [`expr-lang/expr`](https://github.com/expr-lang/expr).
-
-```sql
--- mst_parameter tambah kolom:
-ALTER TABLE mst_parameter
-  ADD COLUMN formula_type   VARCHAR(30),  -- 'ARITHMETIC', 'RM_RATE', 'HARDCODED', ...
-  ADD COLUMN formula_script TEXT,          -- "AX_WT * AE_PERC / AX_PERC"
-  ADD COLUMN calc_seq       INTEGER;       -- urutan eksekusi
-
--- Contoh data:
--- AE_WT    | ARITHMETIC | "AX_WT * AE_PERC / AX_PERC"    | 20
--- RM_NORMS | ARITHMETIC | "1.0 / (1.0 - WASTE_PCT / 100)" | 10
--- RM_RATE  | HARDCODED  | "handleRawMaterial"             | 50  ← Go handler
--- MB_COST  | ARITHMETIC | "MB_RATE * MB_DOZING_PCT / 100" | 30
-```
-
-**Plus:**
-- Formula arithmetic sederhana bisa diubah tanpa redeploy
-- Formula visible di DB — bisa di-audit Finance/Engineering
-- Tambah param baru: cukup INSERT ke `mst_parameter`
-- Lebih dekat spirit Oracle (formula tersimpan di data)
-
-**Minus:**
-- Butuh expression evaluator library (dependency tambahan)
-- Formula complex tetap hardcode di Go → hybrid anyway
-- Runtime error — salah ketik formula di DB baru ketahuan saat run, bukan saat compile
-- Lebih sulit di-test — harus seed DB dulu sebelum test
-- Security risk jika ada bug di evaluator
-
----
-
-## Perbandingan Ringkas
-
-| Aspek | Option A | Option B |
-|---|---|---|
-| Ubah formula | PR + redeploy | Edit DB (jika arithmetic) |
-| Siapa yang bisa ubah | Developer | Developer (+ Finance jika ada UI admin) |
-| Testability | Mudah — pure function | Lebih sulit — butuh DB seed |
-| Type safety | Compile-time | Runtime only |
-| Kompleksitas implementasi | Rendah | Sedang–Tinggi |
-| Formula complex (captive, IF) | Di Go handler | Tetap di Go handler |
-| Dependency tambahan | Tidak | Ya (evaluator library) |
-
----
-
-## Pertanyaan Kunci untuk Diskusi
-
-> **Siapa yang akan mengubah formula costing, dan seberapa sering?**
-
-- Kalau jawabannya **hanya developer via PR** → pilih **Option A**. Option B tidak memberikan nilai tambah nyata karena kamu tetap butuh migration SQL setiap ubah `formula_script`, efektifnya sama dengan ubah Go code tapi tanpa compile-time safety.
-
-- Kalau jawabannya **Finance/Engineering bisa self-service** → Option B worth it, tapi perlu scope tambahan: UI admin untuk edit formula, validasi syntax sebelum save, audit log perubahan formula.
-
----
-
-## Rekomendasi Sementara
-
-**Mulai dengan Option A, tapi buat struktur yang bisa evolve ke Option B.**
-
-Konkretnya:
-1. Tambah kolom `formula_type` dan `calc_seq` ke `mst_parameter` — **tanpa** `formula_script` dulu
-2. Engine loop data-driven berdasarkan `calc_seq` dari DB
-3. Dispatch ke Go handler berdasarkan `formula_type`
-4. Logic kalkulasi tetap di Go — type-safe, testable
-5. Kalau nanti butuh self-service formula, tambah `formula_script` bertahap **hanya untuk** `ARITHMETIC` type yang sederhana
-
-Dengan ini: execution order fleksibel dari DB, tapi kalkulasi tetap aman di Go.
-
----
-
-## Perubahan Schema yang Dibutuhkan (Minimal)
-
-```sql
--- Tambah ke mst_parameter (migration baru)
-ALTER TABLE mst_parameter
-  ADD COLUMN formula_type  VARCHAR(30) DEFAULT 'HARDCODED',
-  ADD COLUMN calc_seq      INTEGER     NOT NULL DEFAULT 0;
-
--- formula_type values:
--- 'ARITHMETIC'      — simple math, nanti bisa evolve ke formula_script
--- 'RM_RATE'         — raw material rate (store/captive/multi-yarn)
--- 'MASTER_LOOKUP'   — lookup dari master table (yarn, machine, packing)
--- 'INTERMINGLING'   — lookup intermingling master / 100
--- 'IF_CONDITION'    — conditional logic
--- 'FROM_MARKETING'  — copy dari Marketing ke Valuation
--- 'INITIAL_VALUE'   — literal / input dari user
--- 'HARDCODED'       — special case, Go handler spesifik
-
--- Index untuk performa execution loop
-CREATE INDEX idx_mst_parameter_calc_seq ON mst_parameter(calc_seq, formula_type)
-  WHERE param_category = 'CALCULATED';
 ```
 
 ---
 
-## Struktur File yang Perlu Dibuat di `goapps-backend`
+## 7. Topological Order untuk Batch Run (Stage 2)
+
+Urutan yang wajib diikuti — upstream harus selesai sebelum downstream:
+
+```
+Level 1 (no upstream): POY, FDY, SDY
+Level 2 (depends POY): PTY, DTY, ATY
+Level 3 (depends PTY): TTY, TCM, TCY
+Level 4 (depends PTY): MEL
+```
+
+Di dalam satu level, produk bisa diproses **parallel** via goroutines (sesuai Blueprint).
+Antar level harus **sequential** (tunggu level sebelumnya selesai).
+
+---
+
+## 8. Suggested File Structure (Detail Stage 3 & 4)
+
+Suplemen dari Blueprint — detail untuk Dispatcher dan Calculator:
 
 ```
 internal/finance/costing/
-├── domain.go           -- types: FormulaType, ParamValues, ProductCostInput/Result
-├── engine.go           -- CostingEngine struct, Run(ctx, productID, period) loop
-├── dispatcher.go       -- handlers map[FormulaType]HandlerFunc
-├── handlers/
-│   ├── arithmetic.go   -- handleArithmetic (grade weights, packing, utilities)
-│   ├── raw_material.go -- handleRawMaterial (store rate / captive / multi-yarn)
-│   ├── master.go       -- handleMasterLookup (yarn, machine, packing master)
-│   ├── intermingling.go-- handleIntermingling
-│   └── conditional.go  -- handleIfCondition
-├── runner.go           -- RunProduct(), RunBatch() dengan topological order
-├── pre_process.go      -- RefreshValParam(), CheckWithoutLoss()
-├── engine_test.go      -- unit tests per handler
-└── service.go          -- CostingService (wires repo + engine)
+├── engine/
+│   ├── run_manager.go         ← sudah di Blueprint
+│   ├── pipeline.go            ← orchestrate 6 stages
+│   ├── dep_resolver.go        ← Stage 2: topological sort products + params
+│   ├── dispatcher.go          ← Stage 3: map[FormulaType]HandlerFunc
+│   └── batch_writer.go        ← Stage 5: bulk upsert cost_calculation_result
+│
+├── handlers/                  ← Stage 4: satu file per formula type
+│   ├── arithmetic.go
+│   ├── raw_material.go        ← paling kompleks, 3 sub-mode
+│   ├── master_lookup.go
+│   ├── intermingling.go
+│   ├── conditional.go
+│   ├── from_marketing.go
+│   └── initial_value.go
+│
+├── pre_process/
+│   ├── refresh_val_param.go   ← mirror pRefrshValParam(): sync captive chain
+│   └── check_no_loss.go       ← mirror pCkYarnWithoutLoss()
+│
+└── engine_test.go             ← unit tests per handler (reference values dari Oracle)
 ```
 
 ---
 
-## Execution Order (Topological) untuk RunBatch
+## 9. Checklist Sebelum Mulai Coding
 
-```
-Seq 1: POY, FDY, SDY          — tidak ada upstream dependency
-Seq 2: PTY, DTY, ATY          — depends on POY (captive RM)
-Seq 3: TTY, TCM, TCY          — depends on PTY
-Seq 4: MEL                    — depends on PTY (+ MB rate)
-```
-
-Mirrors `pValuationProcess()` di Oracle yang juga process POY dulu sebelum PTY.
+> Lihat **§12** untuk checklist lengkap yang sudah diupdate termasuk master tables.
 
 ---
 
-## Files yang Sudah Ada (Jangan Dihapus)
+## 10. Files dari Sesi Sebelumnya
 
-| File | Status | Catatan |
+| File | Gunakan untuk | Catatan |
 |---|---|---|
-| `formula_engine.go` | Perlu refactor | Jadikan `handlers/arithmetic.go` — logic kalkulasinya sudah benar, tinggal dipecah per handler |
-| `formula_engine_service.go` | Perlu refactor | Jadikan `service.go` + `runner.go` |
-| `formula_engine_test.go` | Keep | Test cases sudah valid, tinggal adjust import path |
-| `01_seed_mst_parameter.sql` | Keep + extend | Tambah `formula_type` dan `calc_seq` ke INSERT statement |
-| `costing_phase_c_master_data.xlsx` | Keep | Template input data, sudah lengkap 120 params |
+| `formula_engine.go` | Referensi logic kalkulasi | Pindahkan logic ke `handlers/`, rename `mst_parameter` → `cost_parameter_master` |
+| `formula_engine_test.go` | Test cases dengan reference values PTY MELANGE | Keep, adjust struct names |
+| `01_seed_mst_parameter.sql` | Seed 120 params | Rename kolom ke prefix `CPRM_`, tambah `CPRM_formula_type` + `CPRM_calc_seq` |
+| `costing_phase_c_master_data.xlsx` | Template input data master | Masih valid |
 
 ---
 
-## Next Steps Setelah Diskusi
 
-- [ ] Sepakati Option A atau B (atau hybrid)
-- [ ] Buat migration: tambah `formula_type` + `calc_seq` ke `mst_parameter`
-- [ ] Update seed SQL dengan nilai `formula_type` dan `calc_seq` per param
-- [ ] Buat `engine.go` dengan execution loop
-- [ ] Buat `dispatcher.go` + folder `handlers/`
-- [ ] Refactor `formula_engine.go` → pecah ke per-handler
-- [ ] Integrasi dengan `goapps-backend` Finance service (gRPC endpoint + DB repo)
 
 ---
 
-*Dibuat dari sesi diskusi Claude AI — Juni 2026*
-*Repo referensi: `mutugading/docs-markdown`*
+## 11. Master Tables yang Dibutuhkan untuk Calculation Engine
+
+> Hasil analisis dari `costing_parameter_product.xlsx` (data Oracle) dan `cst_rm_cost` (data sistem baru).
+> Setiap tabel diklasifikasikan: **WAJIB DIBUAT**, **PARTIAL**, **EMBEDDED**, atau **TIDAK PERLU**.
+
+### 11.1 Tabel `cst_rm_cost` — Sudah Ada ✅
+
+Tabel ini sudah ada di sistem baru dan merupakan pengganti `CST_GRP_CONSUMP_HEAD` Oracle.
+Dipakai oleh handler `RM_RATE` (Store Rate) dan `OIL_RATE`.
+
+**Struktur kolom yang relevan untuk engine:**
+
+| Kolom | Tipe | Keterangan | Dipakai Engine |
+|---|---|---|---|
+| `rm_cost_id` | UUID | Primary key | — |
+| `period` | VARCHAR(6) | Format YYYYMM | ✅ Filter by period |
+| `rm_code` | VARCHAR | Kode grup item (Oracle format `202006xxx`) | ✅ Join key dari BOM component |
+| `group_head_id` | UUID | Link ke group master | ⚠️ Perlu konfirmasi |
+| `rm_name` | VARCHAR | Nama item (e.g. `DYE0000012`) | Info only |
+| `cost_val` | NUMERIC | **Valuation rate** — setara `CGCH_MARKET_RATE2_FIX` Oracle | ✅ `RM_RATE` untuk VALUATION |
+| `cost_mark` | NUMERIC | **Marketing rate** — setara `CGCH_MARKET_RATE1_FIX` Oracle | ✅ `RM_RATE` untuk MARKETING |
+| `cost_sim` | NUMERIC | Simulation rate — semua 0 saat ini | Future use |
+| `uom_code` | VARCHAR | Unit of measure | Info only |
+
+**Kolom lain yang ada tapi tidak dipakai engine saat ini:**
+`cons_rate`, `stores_rate`, `dept_rate`, `po_rate_1/2/3` — semua 0, belum populated.
+`sl_rate`, `sp_rate`, `sr_rate`, `pp_rate`, `pr_rate`, `cl_rate`, `cr_rate` — duplikat/variant dari `cost_val`/`cost_mark`, tidak diperlukan engine.
+`marketing_freight_rate`, `marketing_duty_pct`, `marketing_transport_rate` — komponen breakdown, 0-1 rows non-null.
+
+**Cara engine menggunakan `cst_rm_cost`:**
+
+```go
+// handlers/raw_material.go — Store Rate subtype
+func (h *RMHandler) getStoreRate(ctx context.Context,
+    rmCode string, period string, pricingType PricingType) (float64, error) {
+
+    var costVal, costMark float64
+    err := h.db.QueryRow(ctx,
+        `SELECT cost_val, cost_mark
+         FROM cst_rm_cost
+         WHERE rm_code = $1 AND period = $2`,
+        rmCode, period,
+    ).Scan(&costVal, &costMark)
+
+    if err != nil {
+        return 0, fmt.Errorf("cst_rm_cost: rm_code=%s period=%s: %w", rmCode, period, err)
+    }
+
+    if pricingType == PricingTypeValuation {
+        return costVal, nil   // cost_val → VALUATION
+    }
+    return costMark, nil      // cost_mark → MARKETING
+}
+```
+
+**⚠️ Pertanyaan yang perlu dikonfirmasi developer:**
+
+1. **`rm_code` format** — masih pakai kode numerik Oracle (`202006xxx`). Di BOM Phase B (`cost_product_order_component`), komponen RM menyimpan key format apa? Harus sama agar join bisa dilakukan.
+2. **`cost_val = 0` untuk 128 dari 320 item** — ini normal (item yang belum ada valuation rate) atau data belum lengkap? Engine perlu tahu policy: fallback ke `cost_mark`, atau produk yang depend ke RM ini otomatis `PARTIAL`?
+3. **`group_head_id`** — UUID ini link ke tabel mana? Di Oracle ini `CGH_SYS_ID` dari `CST_GRP_HEAD`. Apakah ada tabel `cst_rm_group` atau sejenisnya di sistem baru?
+4. **`sl_rate` vs `cost_val`** — berbeda di 2 item (max diff 0.046 untuk item SD). Mana source of truth untuk VALUATION? → Gunakan `cost_val`.
+
+---
+
+### 11.2 Master Tables yang WAJIB Dibuat (Belum Ada di ERD)
+
+Empat tabel ini langsung dipanggil oleh formula handlers. Tanpa ini engine tidak bisa jalan.
+
+---
+
+#### `cost_master_machine` (CMM_)
+
+**Pengganti:** `CST_MST_MACHINE` Oracle (103 rows, 25 cols)
+**Dipakai oleh:** formula type `From_Master_Machine` → 12 params: `NO_OF_POSITION`, `NO_OF_END`, `POWER_PER_DAY`, `MANPOWER_PER_DAY`, `OVERHEAD_PER_HEAD`, `SPARESCOST_PER_DAY`, `CHANGE_OVER_QLTY_LOSS`, `VOLUME_BUCKET_1_QTY` s/d `VOLUME_BUCKET_5_QTY`
+
+```sql
+CREATE TABLE cost_master_machine (
+    CMM_machine_id     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMM_machine_code   VARCHAR(30)  NOT NULL UNIQUE,   -- e.g. 'BT-D', 'A2-8-S'
+    CMM_machine_desc   VARCHAR(100),
+    CMM_ends           INTEGER      NOT NULL,           -- No. of ends
+    CMM_positions      INTEGER      NOT NULL,           -- No. of positions
+    CMM_power          NUMERIC(20,6),                   -- Power cost/day (USD)
+    CMM_manpower       NUMERIC(20,6),                   -- Manpower cost/day (USD)
+    CMM_overhead       NUMERIC(20,6),                   -- Overhead cost/day (USD)
+    CMM_spares         NUMERIC(20,6),                   -- Spares cost/day (USD)
+    CMM_kgs_lost_change NUMERIC(20,6),                  -- Kg lost per machine changeover
+    CMM_vb1            NUMERIC(20,6),                   -- Volume bucket 1 qty threshold
+    CMM_vb2            NUMERIC(20,6),
+    CMM_vb3            NUMERIC(20,6),
+    CMM_vb4            NUMERIC(20,6),
+    CMM_vb5            NUMERIC(20,6),
+    CMM_is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMM_created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMM_created_by     VARCHAR(50),
+    CMM_updated_at     TIMESTAMPTZ,
+    CMM_updated_by     VARCHAR(50)
+);
+```
+
+> **Kolom Oracle yang TIDAK perlu dimigrate:** `CMM_POY_BOBBIN_WEIGHT`, `CMM_BOX_COST`, `CMM_CAPTIVE_PER_BOBBIN`, `CMM_BOBBIN_PER_TROLLY`, `CMM_WEIGHTAGE` — tidak dipakai di calculation engine.
+
+---
+
+#### `cost_master_packing` (CMP_)
+
+**Pengganti:** `CST_MST_BOX_BOBIN_COST` Oracle (68 rows, 14 cols)
+**Dipakai oleh:** formula type `From_Box_Bobin_Cost` → 6 params: `CAPTIVE_PACK_CODE`, `CAPTIVE_BOB_RATE`, `CAPTIVE_BOX_RATE`, `DELIVERY_PACK_CODE`, `DELIVERY_BOB_RATE`, `DELIVERY_BOX_RATE`
+
+```sql
+CREATE TABLE cost_master_packing (
+    CMP_packing_id     UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMP_type_code      VARCHAR(50)  NOT NULL UNIQUE,    -- e.g. 'T-H', 'T-H CAP', 'N-Jumbo Box'
+    CMP_bbn_reuse      NUMERIC(10,4),                   -- Bobbins per box (reuse count)
+    CMP_box_reuse      NUMERIC(10,4),                   -- Box reuse count
+    -- Marketing rates
+    CMP_box_cost_mkt   NUMERIC(20,6),                   -- Box cost (USD) — Marketing
+    CMP_bobin_cost_mkt NUMERIC(20,6),                   -- Bobbin cost (USD) — Marketing
+    -- Valuation rates (dari kolom _VAL Oracle — mayoritas null, perlu dikonfirmasi)
+    CMP_box_cost_val   NUMERIC(20,6),                   -- Box cost (USD) — Valuation
+    CMP_bobin_cost_val NUMERIC(20,6),                   -- Bobbin cost (USD) — Valuation
+    CMP_is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMP_created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMP_created_by     VARCHAR(50),
+    CMP_updated_at     TIMESTAMPTZ,
+    CMP_updated_by     VARCHAR(50)
+);
+```
+
+> **⚠️ Perlu konfirmasi:** Di Oracle ada kolom `CMBBC_BOBIN_COST_VAL` dan `CMBBC_BOX_COST_VAL` tapi mayoritas NULL. Apakah packing rate juga berbeda MKT vs VAL? Jika tidak, `CMP_box_cost_val` dan `CMP_bobin_cost_val` bisa dihapus dan cukup pakai satu rate saja.
+
+---
+
+#### `cost_master_intermingling` (CMI_)
+
+**Pengganti:** `CST_YARN_MST_INTERMINGLING` Oracle (19 rows, 7 cols)
+**Dipakai oleh:** formula type `Intermengling Data` → param `INTERMINGLING`
+**Logic engine:** `INTERMINGLING = lookup(CMI_value) / 100`
+
+```sql
+CREATE TABLE cost_master_intermingling (
+    CMI_id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMI_type_code      VARCHAR(30)  NOT NULL UNIQUE,    -- e.g. 'HIM', 'SIM', 'LIM', 'IM', 'NIM'
+    CMI_description    VARCHAR(100) NOT NULL,            -- Full description
+    CMI_value          NUMERIC(10,4) NOT NULL,           -- Value in % (e.g. 6.8 for HIM)
+                                                         -- Engine uses: CMI_value / 100
+    CMI_is_active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMI_created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMI_created_by     VARCHAR(50),
+    CMI_updated_at     TIMESTAMPTZ,
+    CMI_updated_by     VARCHAR(50)
+);
+```
+
+**Seed data (19 rows dari Oracle):**
+
+```sql
+INSERT INTO cost_master_intermingling (CMI_type_code, CMI_description, CMI_value) VALUES
+('HIM',           'HIM',                6.80),
+('HTDH_HIM',      'HTDH HIM',           7.80),
+('HCDH_HIM',      'HCDH HIM',           7.80),
+('HT_HIM',        'HT HIM',             7.80),
+('LTY_HIM',       'LTY HIM',            7.80),
+('LTH',           'LTH',                7.80),
+('HCSH_NIM',      'HCSH NIM',           1.00),
+('LIM',           'LIM',                2.40),
+('IM',            'IM',                 5.44),
+('HIMD',          'HIMD',               7.50),
+('HT_IM',         'HT IM',              6.44),
+('IM_BSY',        'IM BSY',             6.80),
+('BSY',           'BSY',                6.80),
+('NIM',           'NIM',                0.00),  -- No Intermingling
+('SIM',           'SIM',                3.00),
+('ANN',           'ANN',                7.00),
+('ACD_CA',        'ACD-CA(1100-2500)',  10.72),
+('ARD_CA',        'ARD-CA(600-1100)',   10.13),
+('AMD_CA',        'AMD-CA(250-600)',     8.26);
+```
+
+---
+
+#### `cost_master_product_grade` (CMPG_)
+
+**Pengganti:** `CST_MST_PRODUCT_GRADE` Oracle (40 rows, 11 cols)
+**Dipakai oleh:** formula type `From_Product_Grade` → 4 params: `STD_VALUE_LOSS`, `VALUE_LOSS`, `NON_STD_SPECIAL_PROD`, `BC_SPECIAL_PROD`
+**Logic engine:** lookup berdasarkan yarn type/description → dapatkan BC%, NS loss%, recovery rate
+
+```sql
+CREATE TABLE cost_master_product_grade (
+    CMPG_grade_id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMPG_grade_code       VARCHAR(30)  NOT NULL UNIQUE,  -- e.g. 'Type 5 NS', 'Type 5 BC'
+    CMPG_detail_product   VARCHAR(100),                   -- Product description match
+    CMPG_grade_type       VARCHAR(10)  NOT NULL,          -- 'NS' | 'BC' | 'POY_BC' | 'SPCL'
+    CMPG_std_selling_price NUMERIC(10,4),                 -- Standard selling price (USD/kg)
+    CMPG_loss_pct         NUMERIC(10,4),                  -- Loss % (e.g. 0.05 = 5%)
+    CMPG_sp_value         NUMERIC(10,4),                  -- SP value / recovery factor
+    CMPG_seq_no           INTEGER,
+    CMPG_is_active        BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMPG_created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMPG_created_by       VARCHAR(50),
+    CMPG_updated_at       TIMESTAMPTZ,
+    CMPG_updated_by       VARCHAR(50)
+);
+
+-- Index untuk lookup by product description
+CREATE INDEX idx_cmpg_grade_type ON cost_master_product_grade(CMPG_grade_type, CMPG_is_active);
+```
+
+---
+
+### 11.3 Master Tables PARTIAL (Dibuat tapi Hanya Kolom yang Dibutuhkan)
+
+---
+
+#### `cost_master_mb_head` (CMBH_)
+
+**Pengganti:** `CST_MST_BATCH_HEAD` Oracle (4.169 rows, 50 cols — hanya butuh 6 kolom)
+**Dipakai oleh:** formula type `From_Master_Batch_Data` → param `MB_RATE_MKT`
+**Relevan untuk:** produk type `MEL` (Melange) saja
+
+```sql
+CREATE TABLE cost_master_mb_head (
+    CMBH_mb_id         UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMBH_oracle_sys_id VARCHAR(30)  UNIQUE,              -- Original Oracle CMBH_SYS_ID (untuk migration)
+    CMBH_mb_costing    VARCHAR(100) NOT NULL,             -- MB costing name (key lookup)
+    CMBH_mgt_name      VARCHAR(100),                      -- MGT name / shade name
+    CMBH_denier        NUMERIC(10,2),
+    CMBH_filament      INTEGER,
+    CMBH_dozing        NUMERIC(10,4),                     -- Dozing rate %
+    CMBH_is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMBH_created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMBH_created_by    VARCHAR(50),
+    CMBH_updated_at    TIMESTAMPTZ,
+    CMBH_updated_by    VARCHAR(50)
+);
+```
+
+> Dari 50 kolom Oracle, hanya 6 yang dibutuhkan engine. Kolom operasional (lot_no, date_run, approve_by, entry_status, dll) tidak perlu dimigrate.
+
+---
+
+#### `cost_master_mb_spin` (CMBS_)
+
+**Pengganti:** `CST_MST_BATCH_SPIN` Oracle (2.679 rows, 38 cols — hanya butuh 7 kolom)
+**Dipakai oleh:** formula type `From_Master_Batch_Spinning` → 6 params: `MB_SP_CODE`, `MB_SP_DYE`, `MB_SP_DENIER`, `MB_SP_FILAMENT`, `MB_SP_CC`, `MB_SP_DOZING`
+**Relevan untuk:** produk type `MEL` (Melange) saja
+
+```sql
+CREATE TABLE cost_master_mb_spin (
+    CMBS_spin_id       UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    CMBS_oracle_sys_id VARCHAR(30)  UNIQUE,              -- Original Oracle CMBS_SYS_ID
+    CMBS_mb_head_id    UUID         NOT NULL REFERENCES cost_master_mb_head(CMBH_mb_id),
+    CMBS_mgt_name      VARCHAR(100) NOT NULL,             -- Match ke CYL_SHADE_NAME produk
+    CMBS_denier        NUMERIC(10,2),
+    CMBS_filament      INTEGER,
+    CMBS_dozing        NUMERIC(10,4),                     -- Dozing rate %
+    CMBS_mb_costing    VARCHAR(100),                      -- MB costing reference
+    CMBS_is_active     BOOLEAN      NOT NULL DEFAULT TRUE,
+    CMBS_created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CMBS_created_by    VARCHAR(50),
+    CMBS_updated_at    TIMESTAMPTZ,
+    CMBS_updated_by    VARCHAR(50)
+);
+
+-- Index untuk lookup by mgt_name (dipakai engine saat match ke shade_name produk)
+CREATE INDEX idx_cmbs_mgt_name ON cost_master_mb_spin(CMBS_mgt_name) WHERE CMBS_is_active = TRUE;
+```
+
+---
+
+### 11.4 Tabel Oracle yang TIDAK Perlu Dibuat di Sistem Baru
+
+| Oracle Table | Alasan Tidak Perlu |
+|---|---|
+| `CST_YARN_RM_HDR` | Konfigurasi RM per produk — sudah di-handle di BOM Phase B (`cost_product_order_component`) |
+| `CST_YARN_RM_DTL` | Detail Store Rate per produk — engine langsung query `cst_rm_cost` via rm_code dari BOM |
+| `CST_YARN_RM_CAPTIVE` | Captive linkage — sudah di-handle via upstream product di Phase B BOM |
+| `CST_YARN_RM_MULTI` | Multi-yarn composition — sudah di-handle via BOM component dengan share_pct |
+| `CST_YARN_FORMULA_CALC` | **9.557 rows** formula definition — digantikan sepenuhnya oleh Go handler functions. Ini saving migrasi terbesar. |
+
+---
+
+### 11.5 Summary Master Tables
+
+| Tabel Baru | Pengganti Oracle | Rows | Status | Perlu Migration Data |
+|---|---|---|---|---|
+| `cst_rm_cost` | `CST_GRP_CONSUMP_HEAD` | 320+ | ✅ Sudah ada | — |
+| `cost_master_machine` | `CST_MST_MACHINE` | 103 | ❌ Belum ada | ✅ Ya, semua 103 rows |
+| `cost_master_packing` | `CST_MST_BOX_BOBIN_COST` | 68 | ❌ Belum ada | ✅ Ya, semua 68 rows |
+| `cost_master_intermingling` | `CST_YARN_MST_INTERMINGLING` | 19 | ❌ Belum ada | ✅ Ya, seed SQL sudah ada di §11.2 |
+| `cost_master_product_grade` | `CST_MST_PRODUCT_GRADE` | 40 | ❌ Belum ada | ✅ Ya, semua 40 rows |
+| `cost_master_mb_head` | `CST_MST_BATCH_HEAD` | 4.169 | ❌ Belum ada | ⚠️ Partial — hanya 6 dari 50 kolom, hanya MEL type |
+| `cost_master_mb_spin` | `CST_MST_BATCH_SPIN` | 2.679 | ❌ Belum ada | ⚠️ Partial — hanya 7 dari 38 kolom, hanya MEL type |
+
+---
+
+## 12. Updated Checklist Sebelum Mulai Coding
+
+- [ ] **Gap 1:** Tambah `CPRM_formula_type` dan `CPRM_calc_seq` ke migration DDL
+- [ ] **Gap 1:** Update `ERD_Master.md` — tambah dua kolom baru di `cost_parameter_master`
+- [ ] **Gap 2:** Confirm struktur `cost_calculation_result` — Opsi C (hybrid) disarankan
+- [ ] **cst_rm_cost:** Konfirmasi 4 pertanyaan di §11.1 dengan developer (rm_code format, cost_val=0 policy, group_head_id, sl_rate vs cost_val)
+- [ ] **cost_master_machine:** Buat DDL + migration script dari `CST_MST_MACHINE`
+- [ ] **cost_master_packing:** Buat DDL + konfirmasi apakah rate MKT/VAL berbeda
+- [ ] **cost_master_intermingling:** Buat DDL + jalankan seed SQL di §11.2 (19 rows)
+- [ ] **cost_master_product_grade:** Buat DDL + migration script dari `CST_MST_PRODUCT_GRADE`
+- [ ] **cost_master_mb_head / mb_spin:** Buat DDL + partial migration (hanya kolom relevan, hanya MEL type products)
+- [ ] Update `ERD_Master.md` — tambah 6 tabel baru ke prefix registry
+- [ ] Seed data `CPRM_formula_type` + `CPRM_calc_seq` untuk 140 params
+
+---
+
+*Update: Juni 2026 — setelah review master data Oracle + tabel cst_rm_cost sistem baru*
