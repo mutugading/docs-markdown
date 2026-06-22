@@ -45,8 +45,8 @@ Product Routing (multi-level) ──► cost_route_head
                                     ↓ CASCADE
                         ────────► cost_route_rm   (RM per node)
                                     ↕ FK lookup
-                        ────────► cost_erp_item   (ERP items — harus ada duluan)
-                        ────────► cst_rm_group_head (RM Groups — harus ada duluan)
+                        ────────► cst_item_cons_stk_po (item rates dari Oracle — untuk kalkulasi)
+                        ────────► cst_rm_group_head    (RM Groups — harus ada duluan)
 ```
 
 ### Yang TIDAK perlu data engineer isi:
@@ -80,19 +80,17 @@ Tabel ini sudah di-seed otomatis — **data engineer tidak perlu mengisi**:
 
 #### A. ERP Item Rates (`cst_item_cons_stk_po`)
 
-> **Klarifikasi penting**: Kolom `crm_rm_item_code` di `cost_route_rm` adalah plain `VARCHAR` — **tidak ada FK constraint** ke tabel apapun. Jadi import routing dengan `rm_type = ITEM` **tidak akan gagal** meskipun item belum ada di DB.
->
-> Namun agar **calc engine bisa menghitung harga** komponen bertipe ITEM, item_code harus ada di `cst_item_cons_stk_po` (tabel sync dari Oracle yang digunakan untuk lookup rate). Tabel ini sudah diisi secara rutin oleh sync Oracle (bisa dilihat di halaman Finance → Item Cons Stock PO).
+Kolom `crm_rm_item_code` di `cost_route_rm` adalah plain `VARCHAR` — **tidak ada FK constraint** ke tabel apapun. Import routing dengan `rm_type = ITEM` **tidak akan gagal** meskipun item belum ada di DB.
 
-Cara cek item yang sudah ada:
+Namun agar **calc engine bisa menghitung harga** komponen bertipe ITEM, item_code harus sudah ada di `cst_item_cons_stk_po` untuk periode yang dikalkulasi. Tabel ini diisi otomatis oleh sync Oracle rutin dan bisa dilihat di halaman **Finance → Item Cons Stock PO**.
+
+Cara cek item yang akan dipakai di Sheet 6:
 ```sql
 SELECT DISTINCT item_code, item_name
 FROM cst_item_cons_stk_po
 WHERE item_code IN ('ITEM-CODE-1', 'ITEM-CODE-2', ...)
 ORDER BY item_code;
 ```
-
-> **Catatan**: `cost_erp_item` adalah tabel terpisah (rencana future sync) yang saat ini **kosong dan tidak dipakai** oleh import maupun calc engine. Abaikan tabel ini.
 
 #### B. RM Groups (`cst_rm_group_head`)
 
@@ -153,7 +151,7 @@ cost_product_type (1)
                                                                     │
                                                                     └──(1:N CASCADE)─► cost_route_rm (CRM_)
                                                                                             crm_rm_type = 'PRODUCT' → cpm_product_sys_id
-                                                                                            crm_rm_type = 'ITEM'    → cost_erp_item
+                                                                                            crm_rm_type = 'ITEM'    → item_code (string, di-lookup ke cst_item_cons_stk_po saat kalkulasi)
                                                                                             crm_rm_type = 'GROUP'   → cst_rm_group_head
                                                                                             crm_route_rm_ratio
 ```
@@ -464,7 +462,7 @@ Ada 3 tipe RM yang harus dipilih per baris:
 | `route_seq` | — | INTEGER | ✅ | Sequence dalam level (untuk join ke Sheet 5) |
 | `rm_type` | `crm_rm_type` | VARCHAR(20) | ✅ | `PRODUCT`, `ITEM`, atau `GROUP` |
 | `rm_product_legacy_id` | → lookup `cpm_product_sys_id` | VARCHAR | ❌* | Isi jika `rm_type = PRODUCT`. `legacy_oracle_sys_id` dari produk RM |
-| `rm_item_code` | `crm_rm_item_code` | VARCHAR(30) | ❌* | Isi jika `rm_type = ITEM`. Harus ada di `cost_erp_item` |
+| `rm_item_code` | `crm_rm_item_code` | VARCHAR(30) | ❌* | Isi jika `rm_type = ITEM`. Item code dari Oracle (tidak ada FK — disimpan sebagai string) |
 | `rm_group_code` | `crm_rm_group_code` | VARCHAR(30) | ❌* | Isi jika `rm_type = GROUP`. Harus ada di `cst_rm_group_head` |
 | `ratio` | `crm_route_rm_ratio` | DECIMAL(10,6) | ✅ | Rasio konsumsi. Contoh: `1.05` = butuh 1.05 kg RM per 1 kg produk. Harus > 0 |
 | `rm_name` | `crm_route_rm_name` | VARCHAR(200) | ❌ | Nama deskriptif RM ini |
@@ -541,7 +539,7 @@ Berikut aturan yang **wajib dipenuhi** di data Excel sebelum import. Jika tidak,
 | 2 | Tepat satu kolom RM reference terisi sesuai `rm_type` | `rm_type=GROUP, rm_group_code=POLY-DYE` | `rm_type=GROUP, rm_item_code=001` |
 | 3 | `ratio` harus > 0 | `1.050000` | `0` atau negatif |
 | 4 | Jika `rm_type = PRODUCT`, `rm_product_legacy_id` harus ada di Sheet 1 | | |
-| 5 | Jika `rm_type = ITEM`, `rm_item_code` harus ada di `cost_erp_item` | | |
+| 5 | Jika `rm_type = ITEM`, `rm_item_code` harus ada di `cst_item_cons_stk_po` (untuk kalkulasi biaya) | | |
 | 6 | Jika `rm_type = GROUP`, `rm_group_code` harus ada di `cst_rm_group_head` | | |
 | 7 | Kombinasi `(route_head, level, seq)` harus ada di Sheet 5 | | |
 
@@ -563,7 +561,7 @@ Berikut hal-hal yang **perlu dikonfirmasi atau diselesaikan sebelum implementasi
 
 **Fakta**: `crm_rm_item_code` di `cost_route_rm` adalah VARCHAR tanpa FK constraint — **import tidak akan gagal** hanya karena item_code belum ada di DB.
 
-**Yang perlu diperhatikan**: Agar **calc engine bisa menghitung biaya** komponen bertipe ITEM, item_code yang diisi di Sheet 6 harus ada di tabel `cst_item_cons_stk_po` (bukan `cost_erp_item`) untuk periode yang akan dikalkulasi. Tabel ini diisi otomatis dari sync Oracle yang sudah berjalan rutin.
+**Yang perlu diperhatikan**: Agar **calc engine bisa menghitung biaya** komponen bertipe ITEM, item_code yang diisi di Sheet 6 harus ada di tabel `cst_item_cons_stk_po` untuk periode yang akan dikalkulasi. Tabel ini diisi otomatis dari sync Oracle yang sudah berjalan rutin.
 
 **Solusi**: Setelah menyiapkan Sheet 6, data engineer menyerahkan daftar semua `rm_item_code` ke tim backend untuk diverifikasi keberadaannya di `cst_item_cons_stk_po`.
 
@@ -593,7 +591,7 @@ WHERE item_code IN (/* list dari Sheet 6 */);
 
 ### 11.5 ℹ️ Keputusan: cpm_erp_item_code
 
-`cpm_erp_item_code` di product_master adalah **denormalized soft-link** (tidak ada FK constraint ke `cost_erp_item`). Artinya bisa diisi meskipun item belum ada di sistem.
+`cpm_erp_item_code` di product_master adalah **denormalized soft-link** (tidak ada FK constraint). Artinya bisa diisi meskipun item belum ada di DB — tidak akan menyebabkan error.
 
 **Keputusan yang perlu dibuat**: Apakah kolom ini diisi saat import atau dibiarkan kosong dan diisi nanti saat ERP linking?
 
@@ -610,7 +608,7 @@ Import harus dilakukan **dalam urutan berikut** untuk menghindari FK violation:
 ```
 TAHAP 1 — Prerequisite (Harus ada sebelum import dimulai)
 ├── cst_rm_group_head    (RM Groups — konfigurasi via UI)
-├── cost_erp_item        (ERP Items — sync dari Oracle)
+├── cst_item_cons_stk_po (item rates — sudah terisi dari sync Oracle rutin, tidak perlu diisi manual)
 ├── mst_machine          (Master Mesin — jika pakai MASTER_LOOKUP params)
 ├── mst_intermingling    (Master Intermingling)
 ├── mst_product_grade    (Master Product Grade)
@@ -733,7 +731,7 @@ Sebelum menyerahkan file Excel ke tim backend, pastikan:
 ### Checklist Sheet 6 (Route RMs)
 - [ ] Tidak ada baris yang mengisi lebih dari 1 kolom RM reference
 - [ ] `rm_type` sesuai dengan kolom yang diisi (`PRODUCT`/`ITEM`/`GROUP`)
-- [ ] Semua `rm_item_code` sudah dikonfirmasi ke tim backend bahwa ada di `cost_erp_item`
+- [ ] Semua `rm_item_code` sudah dikonfirmasi ke tim backend bahwa ada di `cst_item_cons_stk_po`
 - [ ] Semua `rm_group_code` sudah dikonfirmasi ke tim backend bahwa ada di `cst_rm_group_head`
 - [ ] `ratio` tidak ada yang 0 atau kosong
 
