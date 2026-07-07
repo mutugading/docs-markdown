@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MB Costing Suite — UI Prototype v1.2</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #FAF9F7;
+  --surface-0: #F1EFE8;
+  --surface-1: #F7F5EF;
+  --surface-2: #FFFFFF;
+  --text-primary: #2C2C2A;
+  --text-secondary: #5F5E5A;
+  --text-muted: #888780;
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.16);
+  --radius: 8px;
+  --font-sans: -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 240px;
+  background: #2C2C2A;
+  color: #F7F5EF;
+  padding: 20px 12px;
+  flex-shrink: 0;
+}
+.sidebar-logo {
+  padding: 8px 12px 16px;
+  border-bottom: 0.5px solid rgba(255,255,255,0.12);
+  margin-bottom: 12px;
+}
+.sidebar-logo-title { font-size: 14px; font-weight: 500; }
+.sidebar-logo-sub { font-size: 11px; color: #B4B2A9; margin-top: 2px; }
+.sidebar-section {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: #888780;
+  padding: 12px 12px 6px;
+  letter-spacing: 0.5px;
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: #D3D1C7;
+  transition: background 0.15s;
+}
+.sidebar-item:hover { background: rgba(255,255,255,0.06); }
+.sidebar-item.active { background: rgba(255,255,255,0.12); color: #fff; }
+.sidebar-item i { font-size: 16px; }
+
+.main {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-x: auto;
+  min-width: 0;
+}
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 0.5px solid var(--border);
+  margin-bottom: 20px;
+}
+.top-bar-title { font-size: 20px; font-weight: 500; }
+.top-bar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+.user-badge-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #7F77DD; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 500;
+}
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+.card {
+  background: var(--surface-2);
+  border: 0.5px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: var(--radius);
+  font-weight: 500;
+}
+.pill-draft { background: #F1EFE8; color: #444441; }
+.pill-submitted { background: #E6F1FB; color: #0C447C; }
+.pill-approved { background: #FAEEDA; color: #633806; }
+.pill-validated { background: #EAF3DE; color: #27500A; }
+.pill-unapproved { background: #FCEBEB; color: #791F1F; }
+.pill-revoked { background: #FCEBEB; color: #791F1F; }
+.pill-bo { background: #EEEDFE; color: #26215C; }
+.pill-current { background: #EAF3DE; color: #27500A; }
+.pill-waiting { background: #F1EFE8; color: #444441; }
+.pill-outdated { background: #F1EFE8; color: #888780; }
+.pill-group { background: #F1EFE8; color: #444441; }
+.pill-carrier { background: #EF9F27; color: #412402; }
+
+.btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  background: transparent;
+  border: 0.5px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text-primary);
+}
+.btn:hover { background: var(--surface-1); }
+.btn-primary { background: #2C2C2A; color: #fff; border-color: #2C2C2A; }
+.btn-primary:hover { background: #444441; }
+.btn-accent { background: #185FA5; color: #fff; border-color: #185FA5; }
+.btn-accent:hover { background: #0C447C; }
+.btn-success { background: #3B6D11; color: #fff; border-color: #3B6D11; }
+.btn-success:hover { background: #27500A; }
+.btn-danger { background: transparent; color: #A32D2D; border-color: #A32D2D; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-icon { padding: 6px 8px; }
+
+input[type="text"], input[type="number"], select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  outline: none;
+}
+input:focus, select:focus {
+  border-color: #185FA5;
+  box-shadow: 0 0 0 2px rgba(24,95,165,0.12);
+}
+input[readonly] { background: var(--surface-0); color: var(--text-secondary); }
+label { display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th {
+  padding: 10px 8px;
+  text-align: left;
+  color: var(--text-secondary);
+  font-weight: 500;
+  border-bottom: 0.5px solid var(--border);
+  background: var(--surface-1);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+td { padding: 12px 8px; border-bottom: 0.5px solid var(--border); }
+tbody tr:hover { background: var(--surface-1); }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.text-muted { color: var(--text-secondary); }
+.text-mute { color: var(--text-muted); }
+.text-danger { color: #A32D2D; }
+.text-success { color: #27500A; }
+.text-accent { color: #0C447C; }
+.font-mono { font-variant-numeric: tabular-nums; }
+.font-medium { font-weight: 500; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+.stat-card {
+  padding: 14px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+}
+.stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.info-box {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  margin-top: 12px;
+}
+.info-box-warn { background: #FAEEDA; color: #633806; }
+.info-box-info { background: #E6F1FB; color: #0C447C; }
+.info-box-purple { background: #EEEDFE; color: #26215C; }
+.info-box i { margin-right: 6px; }
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 10px;
+  margin-bottom: 16px;
+  align-items: end;
+}
+
+.workflow-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #B5D4F4;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.progress-bar-fill { height: 100%; background: #185FA5; }
+
+.modal-overlay {
+  min-height: 500px;
+  background: rgba(44,44,42,0.55);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal {
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 560px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.modal-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 20px;
+}
+.modal-icon {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: #EAF3DE; color: #27500A;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+}
+
+.artifact-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0;
+}
+.artifact-item {
+  padding: 10px;
+  background: #E6F1FB;
+  border-radius: var(--radius);
+  color: #0C447C;
+  font-size: 11px;
+}
+.artifact-item-title { font-weight: 500; margin-bottom: 3px; }
+.artifact-item i { margin-right: 4px; }
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.pagination-controls { display: flex; gap: 4px; }
+.page-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: inherit;
+}
+.page-btn.active { background: var(--surface-1); font-weight: 500; }
+
+.icon-btn {
+  padding: 4px 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.icon-btn:hover { color: var(--text-primary); }
+.icon-btn.danger { color: #A32D2D; }
+
+.audit-strip {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+  margin-top: 8px;
+}
+.audit-strip strong { color: var(--text-primary); font-weight: 500; }
+
+.version-history {
+  padding: 12px;
+  background: var(--surface-1);
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+.version-history-title { font-size: 12px; font-weight: 500; margin-bottom: 8px; }
+.version-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0; font-size: 11px; color: var(--text-secondary);
+}
+.version-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border-strong);
+}
+.version-dot.current { background: #27500A; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="sidebar-logo-title">MB Costing Suite</div>
+    <div class="sidebar-logo-sub">PT Mutu Gading Tekstil · v1.2</div>
+  </div>
+
+  <div class="sidebar-section">Recipe</div>
+  <div class="sidebar-item active" data-target="s-list">
+    <i class="ti ti-list"></i><span>Recipe list</span>
+  </div>
+  <div class="sidebar-item" data-target="s-detail">
+    <i class="ti ti-edit"></i><span>Recipe editor</span>
+  </div>
+  <div class="sidebar-item" data-target="s-validate">
+    <i class="ti ti-check"></i><span>Validate dialog</span>
+  </div>
+
+  <div class="sidebar-section">Cost</div>
+  <div class="sidebar-item" data-target="s-calc">
+    <i class="ti ti-calculator"></i><span>Cost calc console</span>
+  </div>
+  <div class="sidebar-item" data-target="s-push">
+    <i class="ti ti-upload"></i><span>Push to head</span>
+  </div>
+  <div class="sidebar-item" data-target="s-history">
+    <i class="ti ti-history"></i><span>Cost history</span>
+  </div>
+
+  <div class="sidebar-section">Master</div>
+  <div class="sidebar-item" data-target="s-spin">
+    <i class="ti ti-settings"></i><span>Spin management</span>
+  </div>
+  <div class="sidebar-item" data-target="s-boughtout">
+    <i class="ti ti-shopping-cart"></i><span>Boughtout register</span>
+  </div>
+  <div class="sidebar-item" data-target="s-params">
+    <i class="ti ti-adjustments"></i><span>Params master</span>
+  </div>
+  <div class="sidebar-item" data-target="s-lock">
+    <i class="ti ti-lock"></i><span>Lock console</span>
+  </div>
+</aside>
+
+<main class="main">
+
+<!-- ============ SCREEN: RECIPE LIST ============ -->
+<div class="screen active" id="s-list">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Recipe list</div>
+      <div class="top-bar-sub">4,091 records · own production + boughtout</div>
+    </div>
+    <div style="display:flex; gap:12px; align-items:center;">
+      <button class="btn btn-primary"><i class="ti ti-plus"></i> New draft</button>
+      <div class="user-badge">
+        <div class="user-badge-avatar">IN</div>
+        <span>Indra (0121) · R&amp;D drafter</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="filter-bar">
+      <div>
+        <label>Search</label>
+        <input type="text" placeholder="MB name, VS number, shade code, Orion code">
+      </div>
+      <div>
+        <label>Status</label>
+        <select>
+          <option>All statuses</option>
+          <option>Draft</option>
+          <option>Submitted</option>
+          <option>Approved</option>
+          <option>Validated</option>
+        </select>
+      </div>
+      <div>
+        <label>Type</label>
+        <select>
+          <option>All types</option>
+          <option>Own production</option>
+          <option>Boughtout</option>
+        </select>
+      </div>
+      <button class="btn btn-icon"><i class="ti ti-filter"></i></button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:30%">MB name</th>
+          <th style="width:16%">POY spec</th>
+          <th style="width:14%">Status</th>
+          <th style="width:6%">Ver</th>
+          <th style="width:16%" class="text-right">Cost actual</th>
+          <th style="width:10%" class="text-right">Period</th>
+          <th style="width:8%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="font-medium">MGT SMORES WT 1093-CS</div>
+            <div class="text-muted" style="font-size:11px;">D-05028 · VS-68424 · Smores WT</div>
+          </td>
+          <td class="text-muted">250/144/RND/OSD</td>
+          <td><span class="pill pill-draft">Draft</span></td>
+          <td class="text-muted">v1</td>
+          <td class="text-right text-mute">—</td>
+          <td class="text-right text-mute">—</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">MGT VIOLET MGTS 5017-D-00812</div>
+            <div class="text-muted" style="font-size:11px;">D-00812 · VS-52101 · Violet MGTS</div>
+          </td>
+          <td class="text-muted">250/48/RND/DSD</td>
+          <td><span class="pill pill-validated">Validated</span></td>
+          <td class="text-muted">v3</td>
+          <td class="text-right font-mono">25,898.18</td>
+          <td class="text-right text-muted font-mono">202607</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">POLY BLACK 701-S-C-00234</div>
+            <div class="text-muted" style="font-size:11px;">C-00234 · VS-19919 · 15 spin variants</div>
+          </td>
+          <td class="text-muted">Multi (250/48...)</td>
+          <td><span class="pill pill-validated">Validated</span></td>
+          <td class="text-muted">v5</td>
+          <td class="text-right font-mono">31,205.44</td>
+          <td class="text-right text-muted font-mono">202607</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">MGT CROSS GY-7177 D-01162-C</div>
+            <div class="text-muted" style="font-size:11px;">D-01162 · VS-19919 · Cross GY</div>
+          </td>
+          <td class="text-muted">250/48/RND/DSD</td>
+          <td><span class="pill pill-submitted">Submitted</span></td>
+          <td class="text-muted">v2</td>
+          <td class="text-right text-mute font-mono">22,410.03</td>
+          <td class="text-right text-mute font-mono">202606</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">MGT PENTA CM-2150 D-01156-C</div>
+            <div class="text-muted" style="font-size:11px;">D-01156 · VS-19888 · Penta CM</div>
+          </td>
+          <td class="text-muted">250/48/RND/DSD</td>
+          <td><span class="pill pill-approved">Approved</span></td>
+          <td class="text-muted">v1</td>
+          <td class="text-right text-mute font-mono">—</td>
+          <td class="text-right text-mute font-mono">—</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">MGT PREMIUM VIOLET IMPORTED</div>
+            <div class="text-muted" style="font-size:11px;">Boughtout · IMP-V01 · No recipe</div>
+          </td>
+          <td class="text-muted">250/144/RND/OSD</td>
+          <td><span class="pill pill-validated">Validated</span> <span class="pill pill-bo" style="margin-left:4px;">BO</span></td>
+          <td class="text-muted">—</td>
+          <td class="text-right font-mono">42,750.00</td>
+          <td class="text-right text-muted font-mono">202607</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">MGT SHALE GY-7178 D-01163-C</div>
+            <div class="text-muted" style="font-size:11px;">D-01163 · VS-19848 · Shale GY</div>
+          </td>
+          <td class="text-muted">250/48/RND/DSD</td>
+          <td><span class="pill pill-unapproved">Un-approved</span></td>
+          <td class="text-muted">v4</td>
+          <td class="text-right text-mute font-mono">19,850.20</td>
+          <td class="text-right text-mute font-mono">202606</td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="pagination">
+      <span>Showing 1–7 of 4,091</span>
+      <div class="pagination-controls">
+        <button class="page-btn"><i class="ti ti-chevron-left"></i></button>
+        <button class="page-btn active">1</button>
+        <button class="page-btn">2</button>
+        <button class="page-btn">3</button>
+        <button class="page-btn">…</button>
+        <button class="page-btn">585</button>
+        <button class="page-btn"><i class="ti ti-chevron-right"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: RECIPE EDITOR ============ -->
+<div class="screen" id="s-detail">
+  <div class="top-bar">
+    <div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="btn btn-sm btn-icon"><i class="ti ti-arrow-left"></i></button>
+        <div>
+          <div class="top-bar-title">MGT SMORES WT 1093-CS <span class="pill pill-draft" style="margin-left:6px; vertical-align:middle;">Draft v1</span></div>
+          <div class="top-bar-sub">Created by 0121 · 2026-07-04 10:30 · Sys ID 20260705352</div>
+        </div>
+      </div>
+    </div>
+    <div class="workflow-actions">
+      <button class="btn btn-danger"><i class="ti ti-trash"></i> Delete draft</button>
+      <button class="btn btn-accent"><i class="ti ti-send"></i> Submit for approval</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Header</div>
+    <div class="grid-2">
+      <div>
+        <label>MB name</label>
+        <input type="text" value="MGT SMORES WT 1093-CS">
+      </div>
+      <div>
+        <label>Development no</label>
+        <input type="text" value="D-05028">
+      </div>
+      <div>
+        <label>VS number</label>
+        <input type="text" value="VS-68424">
+      </div>
+      <div>
+        <label>Customer (optional)</label>
+        <input type="text" placeholder="Lookup...">
+      </div>
+      <div>
+        <label>Shade code</label>
+        <input type="text" value="1093-02">
+      </div>
+      <div>
+        <label>Shade name</label>
+        <input type="text" value="Smores WT">
+      </div>
+      <div>
+        <div class="grid-2">
+          <div>
+            <label>Denier</label>
+            <input type="number" value="250">
+          </div>
+          <div>
+            <label>Filament</label>
+            <input type="number" value="144">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="grid-2">
+          <div>
+            <label>Cross section</label>
+            <select><option>RND</option><option>TBL</option><option>PLUS</option><option>OTL</option></select>
+          </div>
+          <div>
+            <label>Lusture</label>
+            <select><option>OSD</option><option>DSD</option><option>DBR</option><option>BSD</option><option>RDSD</option></select>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label>LDR default (%)</label>
+        <input type="number" value="1.500" step="0.001">
+      </div>
+      <div>
+        <label>Final product (auto)</label>
+        <input type="text" value="POY 250/144/RND/OSD" readonly>
+      </div>
+      <div>
+        <label>Throughput / hour</label>
+        <select>
+          <option>B — 40 kg/hr (default)</option>
+          <option>A — 55 kg/hr</option>
+          <option>C — 34 kg/hr</option>
+          <option>D — 20 kg/hr</option>
+          <option>T — 75 kg/hr (trial)</option>
+        </select>
+      </div>
+      <div>
+        <label>No of process</label>
+        <select>
+          <option>S — Single (multiplier ×1)</option>
+          <option>D — Double (multiplier ×2)</option>
+          <option>T — Triple (multiplier ×3)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="font-size:13px; font-weight:500;">Item composition</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-sm"><i class="ti ti-copy"></i> Copy from other MB</button>
+        <button class="btn btn-sm"><i class="ti ti-plus"></i> Add item</button>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:5%" class="text-center">#</th>
+          <th style="width:22%">Code</th>
+          <th style="width:36%">Colourant / group</th>
+          <th style="width:14%" class="text-right">Comp %</th>
+          <th style="width:14%">Source</th>
+          <th style="width:9%"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="text-center text-muted">1</td>
+          <td class="font-mono">VIOLET MGTS-5017</td>
+          <td>Violet MGTS-5017</td>
+          <td class="text-right font-mono">0.071</td>
+          <td><span class="pill pill-group">GROUP</span></td>
+          <td>
+            <button class="icon-btn"><i class="ti ti-edit"></i></button>
+            <button class="icon-btn danger"><i class="ti ti-trash"></i></button>
+          </td>
+        </tr>
+        <tr>
+          <td class="text-center text-muted">2</td>
+          <td class="font-mono">DYE0000001</td>
+          <td>Optical brightner OB-1 · Fluorescent brightner 393</td>
+          <td class="text-right font-mono">6.545</td>
+          <td><span class="pill pill-group">GROUP</span></td>
+          <td>
+            <button class="icon-btn"><i class="ti ti-edit"></i></button>
+            <button class="icon-btn danger"><i class="ti ti-trash"></i></button>
+          </td>
+        </tr>
+        <tr>
+          <td class="text-center text-muted">3</td>
+          <td class="font-mono">CHM0000186</td>
+          <td>Lubricon-750</td>
+          <td class="text-right font-mono">2.000</td>
+          <td><span class="pill pill-group">GROUP</span></td>
+          <td>
+            <button class="icon-btn"><i class="ti ti-edit"></i></button>
+            <button class="icon-btn danger"><i class="ti ti-trash"></i></button>
+          </td>
+        </tr>
+        <tr style="background:#FDF6E9;">
+          <td class="text-center" style="color:#633806;">4</td>
+          <td class="font-mono" style="color:#633806;">PBT</td>
+          <td style="color:#633806;">PBT carrier <span style="font-size:11px; color:#856404; margin-left:4px;">(auto-fill balance)</span></td>
+          <td class="text-right font-mono font-medium" style="color:#633806;">91.384</td>
+          <td><span class="pill pill-carrier">CARRIER</span></td>
+          <td></td>
+        </tr>
+        <tr style="background:var(--surface-1);">
+          <td colspan="3" class="text-right font-medium">Total composition</td>
+          <td class="text-right font-mono font-medium" style="color:#27500A;">100.000</td>
+          <td colspan="2">
+            <button class="btn btn-sm"><i class="ti ti-calculator"></i> Calc PBT</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-box-warn">
+      <i class="ti ti-info-circle"></i>Composition sum equals 100.000% — ready to submit.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="version-history-title">Version history</div>
+    <div class="version-item">
+      <div class="version-dot current"></div>
+      <span><strong style="color:var(--text-primary);">v1 · Draft</strong> · created 2026-07-04 by 0121</span>
+    </div>
+    <div class="version-item text-muted">
+      <em>No previous versions — this is the first draft.</em>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: VALIDATE MODAL ============ -->
+<div class="screen" id="s-validate">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Validate dialog</div>
+      <div class="top-bar-sub">Finance validator confirmation — mockup shows modal overlay</div>
+    </div>
+  </div>
+
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-icon"><i class="ti ti-check"></i></div>
+        <div>
+          <div style="font-size:15px; font-weight:500;">Validate this recipe?</div>
+          <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">Finance validator · action is auditable</div>
+        </div>
+      </div>
+
+      <div style="padding:12px; background:var(--surface-1); border-radius:var(--radius); margin-bottom:12px;">
+        <div style="font-size:11px; color:var(--text-secondary); margin-bottom:4px;">Recipe</div>
+        <div style="font-size:13px; font-weight:500;">MGT VIOLET MGTS 5017-D-00812</div>
+        <div style="font-size:11px; color:var(--text-secondary); margin-top:2px;">v3 · 4 composition items · total 100.000%</div>
+      </div>
+
+      <div style="font-size:12px; margin-bottom:6px; font-weight:500;">Will be auto-generated on validate</div>
+      <div class="artifact-preview">
+        <div class="artifact-item">
+          <div class="artifact-item-title"><i class="ti ti-box"></i>Product master</div>
+          <div class="font-mono">CSTMB2607000042</div>
+        </div>
+        <div class="artifact-item">
+          <div class="artifact-item-title"><i class="ti ti-route"></i>Route</div>
+          <div>1 head · 4 RM groups</div>
+        </div>
+        <div class="artifact-item">
+          <div class="artifact-item-title"><i class="ti ti-list-details"></i>Parameters</div>
+          <div>8 params copied from master</div>
+        </div>
+        <div class="artifact-item">
+          <div class="artifact-item-title"><i class="ti ti-camera"></i>Snapshot v3</div>
+          <div>Composition frozen (immutable)</div>
+        </div>
+      </div>
+
+      <div class="info-box info-box-warn" style="margin:12px 0;">
+        <i class="ti ti-lock"></i>Product master will be hard-locked after validation. Escape hatch requires Finance admin unlock with reason.
+      </div>
+
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn">Cancel</button>
+        <button class="btn btn-success"><i class="ti ti-check"></i> Validate and generate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: COST CALC ============ -->
+<div class="screen" id="s-calc">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Cost calculation console</div>
+      <div class="top-bar-sub">Finance validator · trigger monthly recalc for all validated MB</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:grid; grid-template-columns: 1fr 1fr auto auto; gap:12px; align-items:end;">
+      <div>
+        <label>Period</label>
+        <select>
+          <option>202607 — Jul 2026 (active)</option>
+          <option>202606 — Jun 2026 (frozen)</option>
+          <option>202605 — May 2026 (frozen)</option>
+        </select>
+      </div>
+      <div>
+        <label>Scope</label>
+        <select>
+          <option>All validated MB (4,085)</option>
+          <option>Selected MB only</option>
+          <option>Failed from last run (4)</option>
+        </select>
+      </div>
+      <button class="btn"><i class="ti ti-refresh"></i> Reset</button>
+      <button class="btn btn-accent"><i class="ti ti-player-play"></i> Run calc</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <div style="font-size:13px; font-weight:500;"><i class="ti ti-loader-2 ti-tabler-icon" style="color:#0C447C; margin-right:4px;"></i>Calc run in progress</div>
+      <div style="font-size:12px; color:var(--text-secondary); font-family:monospace;">Run ID: b3f7c-42a8 · 1m 27s elapsed</div>
+    </div>
+    <div style="font-size:12px; color:var(--text-secondary);">Processing MB 3,412 of 4,085 (VIOLET MGTS-9083...)</div>
+    <div class="progress-bar">
+      <div class="progress-bar-fill" style="width:83.5%;"></div>
+    </div>
+
+    <div class="grid-4" style="margin-top:16px;">
+      <div class="stat-card">
+        <div class="stat-label">Total MB</div>
+        <div class="stat-value">4,085</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" style="color:#27500A;">Success</div>
+        <div class="stat-value" style="color:#27500A;">3,408</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" style="color:#A32D2D;">Failed</div>
+        <div class="stat-value" style="color:#A32D2D;">4</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Elapsed</div>
+        <div class="stat-value">1m 27s</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:10px;">Recent errors</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32%">MB</th>
+          <th style="width:20%">Error type</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono" style="font-size:11px;">MGT RAJA MN-3138 D-01252-C</td>
+          <td><span class="pill pill-unapproved">Dependency</span></td>
+          <td class="text-muted" style="font-size:11px;">MB-from-MB reference not calculated: POLY BASE 001</td>
+        </tr>
+        <tr>
+          <td class="font-mono" style="font-size:11px;">MGT KESYA BL-5171 D-01255-C</td>
+          <td><span class="pill pill-unapproved">RM cost</span></td>
+          <td class="text-muted" style="font-size:11px;">RM cost not found for group SPD-2026 in period 202607</td>
+        </tr>
+        <tr>
+          <td class="font-mono" style="font-size:11px;">MGT EYES BL-5151 D-01172-C</td>
+          <td><span class="pill pill-unapproved">Composition</span></td>
+          <td class="text-muted" style="font-size:11px;">Composition sum ≠ 100 (99.987%)</td>
+        </tr>
+        <tr>
+          <td class="font-mono" style="font-size:11px;">MGT BOX BG-6237 D-01216</td>
+          <td><span class="pill pill-unapproved">RM cost</span></td>
+          <td class="text-muted" style="font-size:11px;">No active RM cost for period 202607</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============ SCREEN: PUSH TO HEAD ============ -->
+<div class="screen" id="s-push">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Push to head</div>
+      <div class="top-bar-sub">Period 202607 · make cost active for yarn calc downstream</div>
+    </div>
+    <button class="btn btn-success"><i class="ti ti-upload"></i> Confirm push</button>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Preview summary</div>
+    <div class="grid-4">
+      <div class="stat-card">
+        <div class="stat-label">MB ready</div>
+        <div class="stat-value">4,081</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Missing rows</div>
+        <div class="stat-value" style="color:var(--text-muted);">6</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Rows to upsert</div>
+        <div class="stat-value" style="color:#0C447C;">12,243</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Previous period</div>
+        <div class="stat-value" style="font-family:monospace;">202606</div>
+      </div>
+    </div>
+    <div style="margin-top:8px; font-size:11px; color:var(--text-secondary);">
+      4,081 MB × 3 cost types = 12,243 rows. Missing = MB dengan incomplete 3-type rows (dilacak di preview).
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Top movers (ACTUAL cost type)</div>
+    <div style="margin-bottom:8px; font-size:11px; color:var(--text-secondary);">
+      Preview per cost_type — tab: <span class="pill pill-current" style="cursor:pointer;">ACTUAL</span> <span class="pill" style="background:#F1EFE8; color:#444441; cursor:pointer;">SELLING</span> <span class="pill" style="background:#F1EFE8; color:#444441; cursor:pointer;">FORECAST</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40%">MB name</th>
+          <th style="width:15%">POY spec</th>
+          <th style="width:15%" class="text-right">Current</th>
+          <th style="width:15%" class="text-right">New</th>
+          <th style="width:15%" class="text-right">Delta</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-medium">MGT VIOLET MGTS 5017-D-00812</td>
+          <td class="text-muted" style="font-size:11px;">250/48/RND/DSD</td>
+          <td class="text-right text-muted font-mono">22,410.03</td>
+          <td class="text-right font-mono">25,898.18</td>
+          <td class="text-right text-danger font-mono">+15.7%</td>
+        </tr>
+        <tr>
+          <td class="font-medium">POLY BLACK 701-S-C-00234</td>
+          <td class="text-muted" style="font-size:11px;">Multi</td>
+          <td class="text-right text-muted font-mono">28,915.20</td>
+          <td class="text-right font-mono">31,205.44</td>
+          <td class="text-right text-danger font-mono">+7.9%</td>
+        </tr>
+        <tr>
+          <td class="font-medium">MGT CROSS GY-7177 D-01162-C</td>
+          <td class="text-muted" style="font-size:11px;">250/48/RND/DSD</td>
+          <td class="text-right text-muted font-mono">24,102.55</td>
+          <td class="text-right font-mono">22,073.90</td>
+          <td class="text-right text-success font-mono">−8.4%</td>
+        </tr>
+        <tr>
+          <td class="font-medium">MGT PENTA CM-2150 D-01156-C</td>
+          <td class="text-muted" style="font-size:11px;">250/48/RND/DSD</td>
+          <td class="text-right text-muted font-mono">18,220.14</td>
+          <td class="text-right font-mono">19,301.75</td>
+          <td class="text-right text-danger font-mono">+5.9%</td>
+        </tr>
+        <tr>
+          <td class="font-medium">MGT SHALE GY-7178 D-01163-C</td>
+          <td class="text-muted" style="font-size:11px;">250/48/RND/DSD</td>
+          <td class="text-right text-muted font-mono">19,850.20</td>
+          <td class="text-right font-mono">21,001.30</td>
+          <td class="text-right text-danger font-mono">+5.8%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-box-warn">
+      <i class="ti ti-info-circle"></i><strong>Push is not reversible.</strong> Yarn calc downstream akan langsung consume cost baru setelah confirm. Audit log preserved di mst_mb_push_log.
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Recent push history</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Pushed at</th>
+          <th>By</th>
+          <th class="text-right">MB count</th>
+          <th class="text-right">Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono">202606</td>
+          <td class="text-muted" style="font-size:11px;">2026-06-08 09:22</td>
+          <td>0342 (Finance)</td>
+          <td class="text-right font-mono">4,072</td>
+          <td class="text-right font-mono text-muted">4.2s</td>
+        </tr>
+        <tr>
+          <td class="font-mono">202605</td>
+          <td class="text-muted" style="font-size:11px;">2026-05-06 11:15</td>
+          <td>0342 (Finance)</td>
+          <td class="text-right font-mono">4,068</td>
+          <td class="text-right font-mono text-muted">3.9s</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============ SCREEN: COST HISTORY ============ -->
+<div class="screen" id="s-history">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Cost history</div>
+      <div class="top-bar-sub">Per-MB cost trend across periods · immutable audit trail</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:grid; grid-template-columns: 2fr 1fr; gap:12px; margin-bottom:16px; align-items:end;">
+      <div>
+        <label>MB (search)</label>
+        <input type="text" value="MGT VIOLET MGTS 5017-D-00812">
+      </div>
+      <div>
+        <label>Range</label>
+        <select>
+          <option>Last 12 months</option>
+          <option>Last 6 months</option>
+          <option>Last 3 months</option>
+        </select>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Period</th>
+          <th>Ver</th>
+          <th class="text-right">RM actual</th>
+          <th class="text-right">Conv cost</th>
+          <th class="text-right">Cost actual</th>
+          <th class="text-right">Cost selling</th>
+          <th>Frozen</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono font-medium">202607</td>
+          <td class="text-muted">v3</td>
+          <td class="text-right font-mono">23,872.65</td>
+          <td class="text-right font-mono">2,025.53</td>
+          <td class="text-right font-mono font-medium">25,898.18</td>
+          <td class="text-right font-mono">26,150.00</td>
+          <td class="text-right font-mono">25,100.50</td>
+          <td class="text-muted"><i class="ti ti-lock-open" style="color:var(--text-muted);"></i></td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">202606</td>
+          <td class="text-muted">v3</td>
+          <td class="text-right font-mono">20,485.30</td>
+          <td class="text-right font-mono">1,924.73</td>
+          <td class="text-right font-mono">22,410.03</td>
+          <td class="text-right font-mono">22,650.30</td>
+          <td class="text-right font-mono">21,850.30</td>
+          <td><i class="ti ti-lock" style="color:#27500A;"></i></td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">202605</td>
+          <td class="text-muted">v2</td>
+          <td class="text-right font-mono">21,150.44</td>
+          <td class="text-right font-mono">1,890.20</td>
+          <td class="text-right font-mono">23,040.64</td>
+          <td class="text-right font-mono">23,290.10</td>
+          <td class="text-right font-mono">22,540.10</td>
+          <td><i class="ti ti-lock" style="color:#27500A;"></i></td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">202604</td>
+          <td class="text-muted">v2</td>
+          <td class="text-right font-mono">20,822.10</td>
+          <td class="text-right font-mono">1,880.55</td>
+          <td class="text-right font-mono">22,702.65</td>
+          <td class="text-right font-mono">22,950.20</td>
+          <td class="text-right font-mono">22,150.90</td>
+          <td><i class="ti ti-lock" style="color:#27500A;"></i></td>
+          <td><button class="icon-btn"><i class="ti ti-eye"></i></button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-box-info">
+      <i class="ti ti-info-circle"></i><strong>Source:</strong> <code>cst_product_cost</code> (full history). Status APPROVED = pushed to <code>cst_mb_cost</code> (active cache). CALCULATED = ready to push. SUPERSEDED = obsolete after recalc. Composition version dilacak via cpc_param_snapshot JSONB.
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: SPIN MANAGEMENT ============ -->
+<div class="screen" id="s-spin">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Spin management</div>
+      <div class="top-bar-sub">POLY BLACK 701-S · 15 spin variants for POY applications</div>
+    </div>
+    <button class="btn btn-primary"><i class="ti ti-plus"></i> Add spin</button>
+  </div>
+
+  <div class="card">
+    <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; padding:12px 0;">
+      <div>
+        <div style="font-size:11px; color:var(--text-secondary);">MB name</div>
+        <div style="font-weight:500; margin-top:3px;">POLY BLACK 701-S</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-secondary);">Recipe</div>
+        <div style="margin-top:3px;">Own · <span class="pill pill-validated">v5 validated</span></div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-secondary);">Active cost (actual)</div>
+        <div style="font-weight:500; margin-top:3px; font-family:monospace;">31,205.44</div>
+      </div>
+      <div>
+        <div style="font-size:11px; color:var(--text-secondary);">Active period</div>
+        <div style="font-weight:500; margin-top:3px; font-family:monospace;">202607</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div style="font-size:13px; font-weight:500;">Spin variants (15)</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-sm"><i class="ti ti-download"></i> Export</button>
+        <button class="btn btn-sm"><i class="ti ti-upload"></i> Bulk import</button>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>POY spec</th>
+          <th class="text-right">LDR %</th>
+          <th>Orion code</th>
+          <th>Check status</th>
+          <th class="text-right">MB @ POY (actual)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono">250/48/RND/BSD</td>
+          <td class="text-right font-mono">3.570</td>
+          <td class="font-mono">MBB0000041</td>
+          <td><span class="pill pill-current">Current</span></td>
+          <td class="text-right font-mono">1,114.03</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">250/72/RND/BSD</td>
+          <td class="text-right font-mono">3.570</td>
+          <td class="font-mono">MBB0000041</td>
+          <td><span class="pill pill-current">Current</span></td>
+          <td class="text-right font-mono">1,114.03</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">380/108/2/TBL/DBR</td>
+          <td class="text-right font-mono">4.340</td>
+          <td class="font-mono">MBB0000041</td>
+          <td><span class="pill pill-current">Current</span></td>
+          <td class="text-right font-mono">1,354.32</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">500/96/TBL/BBR</td>
+          <td class="text-right font-mono">3.570</td>
+          <td class="font-mono">MBB0000041</td>
+          <td><span class="pill pill-submitted">Approved</span></td>
+          <td class="text-right font-mono">1,114.03</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">250/48/RND/BSD</td>
+          <td class="text-right font-mono">2.950</td>
+          <td class="text-mute">—</td>
+          <td><span class="pill pill-waiting">Waiting</span></td>
+          <td class="text-right font-mono text-muted">920.56</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">180/36/RND/BSD</td>
+          <td class="text-right font-mono">3.570</td>
+          <td class="font-mono">MBB0000041</td>
+          <td><span class="pill pill-outdated">Outdated</span></td>
+          <td class="text-right font-mono text-muted">1,114.03</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-box-purple">
+      <i class="ti ti-info-circle"></i>Yarn calc lookup MB by (shade name, denier, filament, cross section, lusture). <strong>Phase 4 refactor</strong> akan switch ke sys_id-based lookup untuk performance dan reliability.
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: BOUGHTOUT ============ -->
+<div class="screen" id="s-boughtout">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Register boughtout MB</div>
+      <div class="top-bar-sub">Shortcut flow · skip recipe workflow · Finance direct entry</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="info-box info-box-purple" style="margin-top:0;">
+      <i class="ti ti-info-circle"></i>Boughtout MB tidak punya recipe. Cost = harga beli langsung. RM group harus sudah di-register di RM Master module dulu.
+    </div>
+
+    <div style="font-size:13px; font-weight:500; margin:16px 0 12px;">Header</div>
+    <div class="grid-2">
+      <div>
+        <label>MB name</label>
+        <input type="text" placeholder="e.g. MGT PREMIUM VIOLET IMPORTED">
+      </div>
+      <div>
+        <label>Shade code / name</label>
+        <input type="text" placeholder="e.g. IMP-V01 · Premium violet">
+      </div>
+      <div>
+        <div class="grid-2">
+          <div>
+            <label>Denier</label>
+            <input type="number" value="250">
+          </div>
+          <div>
+            <label>Filament</label>
+            <input type="number" value="144">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="grid-2">
+          <div>
+            <label>Cross section</label>
+            <select><option>RND</option><option>TBL</option></select>
+          </div>
+          <div>
+            <label>Lusture</label>
+            <select><option>OSD</option><option>DSD</option></select>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label>LDR default (%)</label>
+        <input type="number" value="2.500" step="0.001">
+      </div>
+      <div>
+        <label>Orion item code</label>
+        <input type="text" value="CMB0004521">
+      </div>
+      <div>
+        <label>Linked RM group</label>
+        <select>
+          <option>-- Select existing RM group --</option>
+          <option>202606421 · Imported violet premium</option>
+          <option>202606422 · Imported cyan premium</option>
+        </select>
+      </div>
+      <div>
+        <label>Supplier reference (optional)</label>
+        <input type="text" placeholder="PO number, contract">
+      </div>
+    </div>
+
+    <div style="margin-top:20px; display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn">Cancel</button>
+      <button class="btn btn-success"><i class="ti ti-check"></i> Register &amp; auto-validate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN: PARAMS MASTER ============ -->
+<div class="screen" id="s-params">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">MB params master</div>
+      <div class="top-bar-sub">Finance admin only · changes apply to future validations only</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Scalar parameters (6)</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Code</th>
+          <th>Name</th>
+          <th>Description</th>
+          <th class="text-right">Default value</th>
+          <th>Unit</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono">WASTE</td>
+          <td>Waste</td>
+          <td class="text-muted" style="font-size:11px;">Waste factor in conversion cost</td>
+          <td class="text-right font-mono">2.000</td>
+          <td class="text-muted">%</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">QUALITY_LOSS</td>
+          <td>Quality loss</td>
+          <td class="text-muted" style="font-size:11px;">Quality loss factor</td>
+          <td class="text-right font-mono">0.600</td>
+          <td class="text-muted">%</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">EFFICIENCY</td>
+          <td>Efficiency</td>
+          <td class="text-muted" style="font-size:11px;">Machine efficiency for net prod calc</td>
+          <td class="text-right font-mono">94.000</td>
+          <td class="text-muted">%</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">DEV_EXPENSE</td>
+          <td>Development expense</td>
+          <td class="text-muted" style="font-size:11px;">Dev expense factor in cost others</td>
+          <td class="text-right font-mono">3.000</td>
+          <td class="text-muted">%</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">PACKING</td>
+          <td>Packing</td>
+          <td class="text-muted" style="font-size:11px;">Packing cost (flat)</td>
+          <td class="text-right font-mono">0.100</td>
+          <td class="text-muted">cost/kg</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+        <tr>
+          <td class="font-mono">MB_PROD_PER_DAY</td>
+          <td>MB production hours/day</td>
+          <td class="text-muted" style="font-size:11px;">Effective production hours per day</td>
+          <td class="text-right font-mono">16.000</td>
+          <td class="text-muted">hours</td>
+          <td><button class="icon-btn"><i class="ti ti-edit"></i></button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Picklist parameters (2)</div>
+    <div class="grid-2">
+      <div>
+        <div style="font-size:12px; font-weight:500; margin-bottom:8px;">THROUGHPUT_PER_HOUR</div>
+        <table>
+          <thead><tr><th style="width:20%">Code</th><th class="text-right">Value (kg/hr)</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td class="font-mono">A</td><td class="text-right font-mono">55</td><td class="text-muted" style="font-size:11px;">High throughput</td></tr>
+            <tr><td class="font-mono">B</td><td class="text-right font-mono">40</td><td class="text-muted" style="font-size:11px;">Default</td></tr>
+            <tr><td class="font-mono">C</td><td class="text-right font-mono">34</td><td class="text-muted" style="font-size:11px;">Medium</td></tr>
+            <tr><td class="font-mono">D</td><td class="text-right font-mono">20</td><td class="text-muted" style="font-size:11px;">Low</td></tr>
+            <tr><td class="font-mono">T</td><td class="text-right font-mono">75</td><td class="text-muted" style="font-size:11px;">Trial</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div style="font-size:12px; font-weight:500; margin-bottom:8px;">NO_OF_PROCESS</div>
+        <table>
+          <thead><tr><th style="width:20%">Code</th><th class="text-right">Multiplier</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td class="font-mono">S</td><td class="text-right font-mono">1</td><td class="text-muted" style="font-size:11px;">Single</td></tr>
+            <tr><td class="font-mono">D</td><td class="text-right font-mono">2</td><td class="text-muted" style="font-size:11px;">Double</td></tr>
+            <tr><td class="font-mono">T</td><td class="text-right font-mono">3</td><td class="text-muted" style="font-size:11px;">Triple</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box info-box-warn">
+    <i class="ti ti-info-circle"></i><strong>Future-only propagation:</strong> Changes to these values only affect MB validated after the change. Existing MB retain their current cst_product_parameter values until re-validated.
+  </div>
+</div>
+
+<!-- ============ SCREEN: LOCK CONSOLE ============ -->
+<div class="screen" id="s-lock">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-title">Lock console</div>
+      <div class="top-bar-sub">Finance admin · escape hatch for locked MB product artifacts</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Currently unlocked (2)</div>
+    <table>
+      <thead>
+        <tr>
+          <th>MB / product</th>
+          <th>Unlocked by</th>
+          <th>Reason</th>
+          <th class="text-right">Auto-relock in</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="font-medium">MGT VIOLET MGTS 5017-D-00812</div>
+            <div class="text-muted font-mono" style="font-size:11px;">CSTMB2607000042</div>
+          </td>
+          <td>
+            <div>0342 (Rina)</div>
+            <div class="text-muted" style="font-size:11px;">2026-07-06 08:15</div>
+          </td>
+          <td class="text-muted" style="font-size:11px;">Manual cost adjustment for supplier price correction pending re-validation</td>
+          <td class="text-right"><span class="pill pill-approved font-mono">23h 47m</span></td>
+          <td>
+            <button class="btn btn-sm"><i class="ti ti-lock"></i> Re-lock</button>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <div class="font-medium">POLY BLACK 701-S-C-00234</div>
+            <div class="text-muted font-mono" style="font-size:11px;">CSTMB2606001834</div>
+          </td>
+          <td>
+            <div>0342 (Rina)</div>
+            <div class="text-muted" style="font-size:11px;">2026-07-06 06:42</div>
+          </td>
+          <td class="text-muted" style="font-size:11px;">Emergency ratio override — supplier substitution incident</td>
+          <td class="text-right"><span class="pill pill-approved font-mono">22h 14m</span></td>
+          <td>
+            <button class="btn btn-sm"><i class="ti ti-lock"></i> Re-lock</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:500; margin-bottom:12px;">Recent lock history</div>
+    <table>
+      <thead>
+        <tr>
+          <th>MB / product</th>
+          <th>Unlocked by</th>
+          <th>Relocked by</th>
+          <th class="text-right">Duration</th>
+          <th class="text-right">Manual edits</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="font-mono" style="font-size:12px;">MGT CROSS GY-7177 D-01162-C</td>
+          <td class="text-muted" style="font-size:11px;">0342 · 2026-06-30 09:15</td>
+          <td class="text-muted" style="font-size:11px;">SYSTEM · 2026-07-01 09:15</td>
+          <td class="text-right font-mono">24h 00m</td>
+          <td class="text-right"><span class="pill pill-submitted">3 edits</span></td>
+        </tr>
+        <tr>
+          <td class="font-mono" style="font-size:12px;">MGT PENTA CM-2150 D-01156-C</td>
+          <td class="text-muted" style="font-size:11px;">0342 · 2026-06-28 14:20</td>
+          <td class="text-muted" style="font-size:11px;">0342 · 2026-06-28 16:45</td>
+          <td class="text-right font-mono">2h 25m</td>
+          <td class="text-right text-muted">No edits</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="info-box info-box-warn">
+      <i class="ti ti-alert-triangle"></i>All escape hatch actions are audited. Recipe re-validation with existing manual edits will trigger conflict resolution dialog.
+    </div>
+  </div>
+</div>
+
+</main>
+
+</div>
+
+<script>
+document.querySelectorAll('.sidebar-item').forEach(function(item) {
+  item.addEventListener('click', function() {
+    document.querySelectorAll('.sidebar-item').forEach(function(x) { x.classList.remove('active'); });
+    document.querySelectorAll('.screen').forEach(function(x) { x.classList.remove('active'); });
+    item.classList.add('active');
+    var target = item.getAttribute('data-target');
+    document.getElementById(target).classList.add('active');
+    window.scrollTo(0, 0);
+  });
+});
+</script>
+
+</body>
+</html>
