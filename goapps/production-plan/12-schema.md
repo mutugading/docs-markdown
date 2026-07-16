@@ -126,6 +126,7 @@ CREATE TABLE work_order (
     wo_lot_ref               VARCHAR(30),
     wo_qty_target            DECIMAL(18,3) NOT NULL,
     wo_deadline              DATE          NOT NULL,
+    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL', -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT (v1.1)
     wo_grade_req_ref         BIGINT,
     wo_packing_box_type      VARCHAR(10),
     wo_packing_pallet_type   VARCHAR(10),
@@ -248,8 +249,16 @@ CREATE TABLE wo_production_actual (
 
     -- Calculated qty (hasil kalkulasi dari bobbin count × std_weight)
     wpa_calculated_qty_kg    DECIMAL(18,3), -- auto-calculated
+    wpa_qty_doffed_kg        DECIMAL(18,3), -- SPG: GROSS × weight — basis efficiency (v1.1)
+    wpa_qty_transferred_kg   DECIMAL(18,3), -- SPG: TRANSFERRED × weight — basis fulfillment (v1.1)
     wpa_qty_source           VARCHAR(20),   -- ETL_SUGGEST / MANUAL_OVERRIDE
     wpa_manual_reason        TEXT,          -- alasan jika MANUAL_OVERRIDE
+
+    -- KPI shift input operator (v1.1, halaman 13)
+    wpa_breaks_count         INT,
+    wpa_doff_full_count      INT,
+    wpa_doff_manual_count    INT,           -- revolving manual
+    wpa_co_failure_count     INT,           -- change over failure
 
     -- ETL metadata
     wpa_sync_status          VARCHAR(20)    DEFAULT 'OK',  -- OK / SYNC_FAILED / PENDING
@@ -306,6 +315,124 @@ CREATE TABLE changeover_component (
     cc_is_auto_detected      BOOLEAN       DEFAULT TRUE,
     cc_override_by           BIGINT,
     cc_override_at           TIMESTAMPTZ
+);
+
+-- ─────────────────────────────────────────────
+-- DAILY PERFORMANCE (v1.1) — shift entry, efficiency, waste, downtime
+-- Detail konsep & formula: halaman 13
+-- Prefix: msl_ / asl_ / drm_ / de_ / wcm_ / wa_ / es_
+-- ─────────────────────────────────────────────
+CREATE TABLE machine_shift_log (
+    msl_id                   BIGSERIAL PRIMARY KEY,
+    msl_machine_id           BIGINT        NOT NULL,
+    msl_date                 DATE          NOT NULL,
+    msl_shift                CHAR(1)       NOT NULL,   -- 1 / 2 / 3
+    msl_positions_total      INT,
+    msl_positions_running    DECIMAL(8,2),              -- bisa fraksi
+    msl_running_minutes      INT,
+    msl_activity_note        TEXT,
+    msl_status               VARCHAR(20)   DEFAULT 'DRAFT', -- DRAFT / FINAL
+    msl_input_by             BIGINT        NOT NULL,
+    msl_input_at             TIMESTAMPTZ   DEFAULT NOW(),
+    msl_updated_at           TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (msl_machine_id, msl_date, msl_shift)
+);
+
+CREATE TABLE area_shift_log (
+    asl_id                   BIGSERIAL PRIMARY KEY,
+    asl_area                 CHAR(3)       NOT NULL,    -- TXT / SPG / TWT
+    asl_date                 DATE          NOT NULL,
+    asl_shift                CHAR(1),                    -- NULL = harian
+    asl_ot_hours             DECIMAL(6,2),
+    asl_notes                TEXT,
+    asl_input_by             BIGINT        NOT NULL,
+    asl_input_at             TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (asl_area, asl_date, asl_shift)
+);
+
+CREATE TABLE downtime_reason_master (
+    drm_id                   BIGSERIAL PRIMARY KEY,
+    drm_area                 CHAR(3)       NOT NULL,
+    drm_code                 VARCHAR(20)   NOT NULL,    -- XST / LB / TP / CPF / POWER_FAILURE / ...
+    drm_name                 VARCHAR(100)  NOT NULL,
+    drm_category             VARCHAR(20)   NOT NULL,    -- IDLE_POSITION / MACHINE_DOWN / PRODUCTION_LOSS
+    drm_is_exclude_from_eff  BOOLEAN       DEFAULT FALSE,
+    drm_is_active            BOOLEAN       DEFAULT TRUE,
+    drm_sort_order           INT           DEFAULT 0,
+    UNIQUE (drm_area, drm_code)
+);
+
+CREATE TABLE downtime_event (
+    de_id                    BIGSERIAL PRIMARY KEY,
+    de_machine_id            BIGINT        NOT NULL,
+    de_wo_id                 BIGINT,
+    de_shift_log_id          BIGINT        REFERENCES machine_shift_log(msl_id),
+    de_ce_id                 BIGINT        REFERENCES changeover_event(ce_id), -- hindari dobel hitung CO
+    de_date                  DATE          NOT NULL,
+    de_shift                 CHAR(1),
+    de_position_no           VARCHAR(10),
+    de_reason_id             BIGINT        NOT NULL REFERENCES downtime_reason_master(drm_id),
+    de_start_at              TIMESTAMPTZ,
+    de_end_at                TIMESTAMPTZ,
+    de_duration_min          INT,
+    de_lost_kg               DECIMAL(12,3),              -- auto dari theoretical rate, editable
+    de_notes                 TEXT,
+    de_input_by              BIGINT        NOT NULL,
+    de_input_at              TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE TABLE waste_category_master (
+    wcm_id                   BIGSERIAL PRIMARY KEY,
+    wcm_area                 CHAR(3)       NOT NULL,
+    wcm_type                 VARCHAR(15)   NOT NULL,     -- WASTE / DOWNGRADE
+    wcm_code                 VARCHAR(30)   NOT NULL,
+    wcm_name                 VARCHAR(100)  NOT NULL,
+    wcm_grade_target         VARCHAR(5),                 -- DOWNGRADE: B / C
+    wcm_is_active            BOOLEAN       DEFAULT TRUE,
+    wcm_sort_order           INT           DEFAULT 0,
+    UNIQUE (wcm_area, wcm_type, wcm_code)
+);
+
+CREATE TABLE waste_actual (
+    wa_id                    BIGSERIAL PRIMARY KEY,
+    wa_area                  CHAR(3)       NOT NULL,
+    wa_machine_id            BIGINT,
+    wa_wo_id                 BIGINT,
+    wa_shift_log_id          BIGINT        REFERENCES machine_shift_log(msl_id),
+    wa_date                  DATE          NOT NULL,
+    wa_shift                 CHAR(1),
+    wa_category_id           BIGINT        NOT NULL REFERENCES waste_category_master(wcm_id),
+    wa_qty_kg                DECIMAL(12,3) NOT NULL,
+    wa_is_upset              BOOLEAN       DEFAULT FALSE,
+    wa_notes                 TEXT,
+    wa_input_by              BIGINT        NOT NULL,
+    wa_input_at              TIMESTAMPTZ   DEFAULT NOW()
+);
+
+CREATE TABLE efficiency_snapshot (
+    es_id                    BIGSERIAL PRIMARY KEY,
+    es_area                  CHAR(3)       NOT NULL,
+    es_scope                 VARCHAR(20)   NOT NULL,     -- MACHINE_SHIFT / MACHINE_DAY / AREA_DAY
+    es_machine_id            BIGINT,
+    es_wo_id                 BIGINT,
+    es_date                  DATE          NOT NULL,
+    es_shift                 CHAR(1),
+    es_segment               VARCHAR(10),                -- DTY / ACY / ATY / POY
+    es_is_excluding          BOOLEAN       DEFAULT FALSE,
+    es_qty_theoretical_100   DECIMAL(14,3),
+    es_qty_theoretical_rng   DECIMAL(14,3),
+    es_qty_loss              DECIMAL(14,3),
+    es_qty_waste             DECIMAL(14,3),
+    es_qty_actual            DECIMAL(14,3),              -- SPG: doffed
+    es_eff_production_pct    DECIMAL(6,2),
+    es_eff_running_pct       DECIMAL(6,2),
+    es_eff_plant_pct         DECIMAL(6,2),               -- SPG
+    es_yield_pct             DECIMAL(6,2),               -- SPG
+    es_waste_pct             DECIMAL(6,2),
+    es_breaks_count          INT,
+    es_breaks_per_ton        DECIMAL(8,2),
+    es_calc_at               TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (es_area, es_scope, es_machine_id, es_wo_id, es_date, es_shift, es_segment, es_is_excluding)
 );
 
 -- ─────────────────────────────────────────────
@@ -411,8 +538,9 @@ CREATE TABLE common_lot_component (
 | `03_COPlan` | `changeover_event` + `changeover_component` |
 | `PREV_PLAN` | Start New Month workflow (carry-forward candidates) |
 | `STOCK` | Inventory sync ETL dari Orion (read-only) |
+| Daily report TXT/TWT/SPG (efficiency, waste, idle, activity) | `machine_shift_log`, `waste_actual`, `downtime_event`, `efficiency_snapshot` — lihat mapping detail di halaman 13 |
 
 ---
 
 *PRD dibuat Juni 2026 via sesi brainstorming di Claude AI*
-*Version: Draft v1.0*
+*Version: Draft v1.1 — Juli 2026*

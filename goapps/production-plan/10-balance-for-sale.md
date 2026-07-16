@@ -55,3 +55,28 @@ Dikelola Management.
 - WOs pending approval
 - RM fence alerts
 - Unmatched SO alerts
+
+---
+
+## Daily Performance Dashboard (v1.1)
+
+Pengganti daily report Excel TXT/TWT/SPG. Detail metrik & formula di halaman 13.
+
+**KPI Cards (Today + MTD):**
+- Total Production per area — versi Excluding/Including
+- Efficiency: DTY (excl/incl), ACY, ATY, SPG (Yield/Efficiency/Plant), TWT
+- Waste % per area · Idle positions · OT hours
+
+**Panel:**
+- Heatmap MC EFF per mesin per shift (bulanan — pengganti file `Eff_*`)
+- Waste per kategori (with/without upsets, excl/incl trip & B-to-B)
+- Downtime/idle pareto per reason + lost kg
+- Activity feed per mesin per shift
+- Downgrade record SPG per reason
+
+**Drill-down:** area → mesin → WO/lot → shift.
+
+**Export to Excel:** per tanggal, template menyerupai layout report existing
+(dashboard = source of truth, Excel = generated output).
+
+**Actual vs Plan di Morning Review** diperkaya kolom efficiency & waste per mesin.

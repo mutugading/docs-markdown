@@ -9,7 +9,7 @@
 | **PM** | Production Manager | Approve WO overall, cancel, override over-production |
 | **Marketing** | Marketing | Approve MTS demand. Receive notifikasi Balance for Sale |
 | **Management** | Direksi / Manager senior | View dashboard, manage commodity watchlist |
-| **Operator** | Tim produksi | Input parameter actual WO, fallback input actual qty |
+| **Operator** | Tim produksi | Input shift log per mesin per shift: produksi, waste, downtime/idle, breaks, activity, parameter actual |
 
 ---
 
@@ -48,7 +48,9 @@
 
 ### Operator
 - Input parameter actual (`WO_EXECUTION`)
-- Input actual produksi (fallback — hanya jika ETL bobbin tracking gagal)
+- Input shift log per mesin per shift (lihat halaman 13):
+  qty produksi (prefill suggest ETL), posisi & waktu running,
+  waste per kategori, downtime/idle + reason, breaks, doff count, activity note
 - Report issue WO
 
 ---
@@ -75,7 +77,8 @@
 | Manage commodity watchlist | | | | ✓ | | |
 | Buka kembali qty FINAL (>24 jam) | | | ✓ | | | |
 | Input parameter actual execution | | | | | | ✓ |
-| Input actual produksi (fallback) | ✓ | | | | | ✓ |
+| Input actual produksi per shift | ✓ | | | | | ✓ |
+| Input shift log (waste/downtime/activity) | ✓ | | | | | ✓ |
 | Resolve plan change flag | ✓ | | ✓ | | | |
 
 ---
@@ -106,6 +109,7 @@ Reject selalu manual. Jika di-reject, WO kembali ke PPC dengan catatan.
 | SO Orion belum di-pull | PPC |
 | Balance for Sale komoditi berubah signifikan | Management + Marketing |
 | Demand deadline terlambat dari kontrak | Management |
+| Shift log belum lengkap (H+1) | Operator + PPC |
 
 **Channel MVP:** Email + in-app notification
 **Channel Phase 2:** WhatsApp (tambahan)

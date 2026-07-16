@@ -45,6 +45,13 @@ scope dibatasi per area.
 - `PPC_TXT_PRODUCTION` → `WO_PRODUCTION_ACTUAL`
 - TQM breakdown: NORMAL / DOWNGRADE / PENDING per doff
 
+**Daily Performance TXT (v1.1 — halaman 13)**
+- Shift entry operator TXT: produksi (prefill ETL), running posisi & waktu,
+  waste, downtime/idle + reason master, breaks, activity
+- Efficiency engine TXT: Production/Running Eff, MC EFF grid, versi Excl/Incl
+- `EFFICIENCY_SNAPSHOT`, `WASTE_ACTUAL`, `DOWNTIME_EVENT` + master
+- Dashboard Daily Performance TXT + Export to Excel
+
 **Dashboard**
 - Morning review TXT
 - Basic Balance for Sale
@@ -67,6 +74,9 @@ scope dibatasi per area.
 ### Scope
 - SPG integration: `PRC_PPC_SPG_PRODUCTION` + `ASPSPG.TQMAPP`
 - Layer 2 & 3 area SPG
+- Daily Performance SPG: shift entry, dual qty (doffed/transferred),
+  Yield/Efficiency/Plant/Machine Eff, waste 8 kategori (with/without upsets),
+  production loss 6 kategori, downgrade record, Change Over % & Breaks/Ton
 - Captive RM tracking (STORE/CAPTIVE/MIXED)
 - RM Allocation connect BOM Phase B
 - Changeover component-based (C1–C7)
@@ -81,6 +91,8 @@ scope dibatasi per area.
 
 ### Scope
 - TWT integration (TXTTRANSFER MACH_DEPT='TWT')
+- Daily Performance TWT: shift entry, efficiency per autoclave/mesin,
+  waste per tipe mesin, downtime vs target (mis. Meerabah 2.160 mnt/bln)
 - Grade actual: `PRC_PPC_GRADE_ACTUAL` → `WO_GRADE_ACTUAL`
 - Full reporting dan export
 - Rolling average yield (setelah 3 WO completed)
@@ -111,3 +123,6 @@ Bulan 8–9:  Full analytics + Excel retirement
 | 1 | BOM Phase B schema → `WO_RM_ALLOCATION` Phase 2 | Phase 2 | ETA 2–3 hari |
 | 2 | Changeover durasi & waste — validasi tim produksi | Phase 2 | Open |
 | 3 | Threshold SPG & TWT data aktual | Phase 2 | Open |
+| 4 | Validasi definisi break metrics TXT (original vs inspection) | Phase 1 | Open |
+| 5 | Denier produk untuk theoretical calc — field di CPM_ | Phase 1 | Open |
+| 6 | Sumber resmi Overtime (HR) — sementara `AREA_SHIFT_LOG` | Phase 2 | Open |

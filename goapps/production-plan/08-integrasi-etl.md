@@ -110,6 +110,11 @@ Field tambahan PostgreSQL: `sos_pulled_to_demand_id` (NULL=available, FK=sudah d
 **Sanity 1:** `GROSS = TRANSFERRED + CUT + NOT_TRANSFER`
 **Sanity 2:** `TRANSFERRED = NORMAL + DOWNGRADE + NOT_CHECKED`
 
+**Pemakaian dual qty (v1.1):** `GROSS_BOBBINS` → `wpa_qty_doffed_kg` (basis efficiency &
+daily report — sesuai daily report Excel existing yang doffing-based), `TRANSFERRED_BOBS` →
+`wpa_qty_transferred_kg` (basis pemenuhan WO & feeding RM ke TXT). WIP doffed-belum-transfer
+bila diperlukan = `NOT_TRANSFER × weight` (turunan, tanpa tabel baru).
+
 **TQM join SPG (TQMAPP):** exact match via
 `TRN_APP_REL_DT=TQM_PRD_DT, TRN_APP_REL_DOFF=TQM_DOFF, TRN_POS=TQM_POS, TRN_BOB=TQM_BOB`
 
@@ -138,6 +143,10 @@ Field tambahan PostgreSQL: `sos_pulled_to_demand_id` (NULL=available, FK=sudah d
 | SO ETL mode | TRUNCATE + INSERT | Full replace, sesuai PRC_SO_PENDING_MGT |
 | PostgreSQL write | UPSERT by natural key | `ON CONFLICT DO UPDATE` |
 | On ETL fail | `wpa_sync_status = SYNC_FAILED` | Alert ke PPC |
+
+**Catatan v1.1:** Efficiency, waste, downtime/idle, running time & posisi running
+**tidak tersedia di Oracle** — bukan scope ETL. Sumbernya input operator per shift
+(shift entry) dan kalkulasi engine di sistem PPC. Lihat halaman 13.
 
 ---
 

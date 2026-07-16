@@ -105,10 +105,15 @@ Suggest logic (priority):
   calculated_qty_kg = (full_bobbins × std_full) + (unfull_bobbins × std_unfull)
 ```
 
-**Kalkulasi qty SPG:**
+**Kalkulasi qty SPG — dual qty (v1.1):**
 ```
-calculated_qty_kg = transferred_bobs × weight_per_bob (DOFF_WT)
+wpa_qty_doffed_kg      = gross_bobbins × weight_per_bob      → basis EFFICIENCY & daily report
+wpa_qty_transferred_kg = transferred_bobs × weight_per_bob   → basis PEMENUHAN WO & feeding RM TXT
+calculated_qty_kg      = wpa_qty_transferred_kg (fulfillment)
 ```
+Doffed ≥ transferred (selisih = POY doffed belum transfer / aging di lag area = `NOT_TRANSFER`).
+Daily report Excel existing berbasis **doffed**, realisasi WO berbasis **transferred** —
+keduanya disimpan. Lihat halaman 13.
 
 ---
 
@@ -176,6 +181,7 @@ CREATE TABLE work_order (
     wo_lot_remark            CHAR(3),                  -- NEW / OLD
     wo_qty_target            DECIMAL(18,3) NOT NULL,
     wo_deadline              DATE          NOT NULL,
+    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL', -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT (v1.1)
     wo_grade_req_ref         BIGINT,                   -- FK ke PRODUCTION_DEMAND
     wo_packing_box_type      VARCHAR(10),
     wo_packing_pallet_type   VARCHAR(10),
@@ -272,8 +278,16 @@ CREATE TABLE wo_production_actual (
 
     -- Calculated qty (hasil kalkulasi dari bobbin count × std_weight)
     wpa_calculated_qty_kg    DECIMAL(18,3), -- auto-calculated dari bobbin count
+    wpa_qty_doffed_kg        DECIMAL(18,3), -- SPG: GROSS × weight — basis efficiency (v1.1)
+    wpa_qty_transferred_kg   DECIMAL(18,3), -- SPG: TRANSFERRED × weight — basis fulfillment (v1.1)
     wpa_qty_source           VARCHAR(20),   -- ETL_SUGGEST / MANUAL_OVERRIDE
     wpa_manual_reason        TEXT,          -- alasan jika MANUAL_OVERRIDE
+
+    -- KPI shift input operator (v1.1, lihat halaman 13)
+    wpa_breaks_count         INT,
+    wpa_doff_full_count      INT,
+    wpa_doff_manual_count    INT,           -- revolving manual
+    wpa_co_failure_count     INT,           -- change over failure
 
     -- ETL metadata
     wpa_sync_status          VARCHAR(20)   DEFAULT 'OK', -- OK / SYNC_FAILED / PENDING

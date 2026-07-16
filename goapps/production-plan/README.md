@@ -1,6 +1,6 @@
 # PRD — PPC Production Planning System
 
-> **Status:** Draft v1.0 · Juni 2026
+> **Status:** Draft v1.1 · Juli 2026
 > **Owner:** Indra (IT Lead, PT Mutu Gading Tekstil)
 > **Stack:** Go + PostgreSQL · Service baru di `goapps-backend`
 > **Development:** 3 phase · ETA ~9 bulan
@@ -23,6 +23,7 @@
 | 10 | [Balance for Sale & Dashboard](10-balance-for-sale.md) | BFS formula, commodity watch, morning review |
 | 11 | [Phase Plan & Roadmap](11-phase-plan.md) | 3 phase, timeline, dependensi |
 | 12 | [Schema Lengkap](12-schema.md) | PostgreSQL DDL semua tabel — siap untuk developer |
+| 13 | [Daily Performance](13-daily-performance.md) | Efficiency, waste, downtime/idle, shift entry operator, export Excel |
 
 ---
 
@@ -43,6 +44,21 @@
 | # | Item | Phase | Status |
 |---|---|---|---|
 | 1 | BOM Phase B schema → `WO_RM_ALLOCATION` Phase 2 | Phase 2 | ETA 2–3 hari |
+| 2 | Validasi definisi break metrics TXT (original vs inspection) dgn tim produksi | Phase 1 | Open |
+| 3 | Sumber resmi data Overtime (HR) — sementara input manual `AREA_SHIFT_LOG` | Phase 2 | Open |
+| 4 | Denier produk untuk theoretical calc — konfirmasi field di CPM_ master | Phase 1 | Open |
+
+---
+
+## Changelog
+
+| Versi | Tanggal | Perubahan |
+|---|---|---|
+| v1.1 | Juli 2026 | **Halaman 13 baru**: Daily Performance (efficiency, waste, downtime/idle, shift entry operator) — hasil analisa daily report Excel TXT/TWT/SPG. Revisi: hal 2 (scope Operator), hal 5 (dual qty SPG doffed vs transferred, `wo_prod_category`), hal 8 (catatan pemakaian GROSS vs TRANSFERRED), hal 10 (Daily Performance Dashboard + export Excel), hal 11 (scope phase), hal 12 (7 tabel baru + kolom baru) |
+| v1.0 | Juni 2026 | Draft awal dari sesi brainstorming |
+
+> **Konvensi versioning:** file di-replace langsung di repo (git = version control);
+> versi dokumen dicatat di sini, bukan lewat nama file.
 
 ---
 
