@@ -115,82 +115,84 @@ CREATE TABLE production_plan_log (
 -- ─────────────────────────────────────────────
 -- LAYER 3: WORK ORDER
 -- ─────────────────────────────────────────────
+-- ═════════════ WORK ORDER (v1.2: route + product-parameter driven) ═════════════
 CREATE TABLE work_order (
     wo_id                    BIGSERIAL PRIMARY KEY,
-    wo_area_code             CHAR(3)       NOT NULL,  -- TXT / SPG / TWT
-    wo_trans_no              VARCHAR(30)   NOT NULL UNIQUE,
-    wo_plan_item_id          BIGINT        NOT NULL,
+    wo_no                    VARCHAR(30)   NOT NULL UNIQUE,
+    wo_lot_no                VARCHAR(30)   NOT NULL UNIQUE,   -- di-generate PPC; dipakai bobbin tracking
+    wo_area                  CHAR(3)       NOT NULL,          -- TXT / SPG / TWT
     wo_machine_id            BIGINT        NOT NULL,
-    wo_lot_no                VARCHAR(30)   NOT NULL,
-    wo_lot_remark            CHAR(3),                  -- NEW / OLD
-    wo_lot_ref               VARCHAR(30),
+    wo_crh_head_id           BIGINT        NOT NULL,          -- snapshot cost_route_head
+    wo_crh_version           INT           NOT NULL,          -- snapshot versi route
+    wo_plan_item_id          BIGINT        NOT NULL,
+    wo_demand_id             BIGINT,                          -- customer/grade req mengalir dari sini
+    wo_ref_wo_id             BIGINT        REFERENCES work_order(wo_id), -- duplicate/continuation
+    wo_ref_type              VARCHAR(15),                     -- TEMPLATE / CONTINUATION
     wo_qty_target            DECIMAL(18,3) NOT NULL,
+    wo_grade_requirement     VARCHAR(5),                      -- default demand, WO boleh override
     wo_deadline              DATE          NOT NULL,
-    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL', -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT (v1.1)
-    wo_grade_req_ref         BIGINT,
-    wo_packing_box_type      VARCHAR(10),
-    wo_packing_pallet_type   VARCHAR(10),
-    wo_status                VARCHAR(20)   NOT NULL,
-    wo_ref_id                BIGINT        REFERENCES work_order(wo_id),
+    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL',  -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT → Incl/Excl
+    wo_spec_snapshot         JSONB,                           -- den/fil/type/ply/shade/twist saat approve
+    wo_packing_snapshot      JSONB,                           -- box/paper tube/pallet (default master + override)
     wo_revision_no           SMALLINT      NOT NULL DEFAULT 0,
-    wo_pc_approved_at        TIMESTAMPTZ,
+    wo_revision_reason       TEXT,                            -- tampil di muka WO (mis. "PINDAH MC 05")
+    wo_status                VARCHAR(20)   NOT NULL DEFAULT 'DRAFT',
+    wo_pc_approved_at        TIMESTAMPTZ,                     -- PC → PM sequential
     wo_pc_approved_by        BIGINT,
     wo_pm_approved_at        TIMESTAMPTZ,
     wo_pm_approved_by        BIGINT,
-    wo_qty_actual            DECIMAL(18,3),
-    wo_qty_source            VARCHAR(20),              -- CALCULATED / MANUAL_OVERRIDE
-    wo_qty_calculated        DECIMAL(18,3),
-    wo_qty_manual_reason     TEXT,
-    wo_qty_final_locked_at   TIMESTAMPTZ,
-    wo_bobbin_sync_status    VARCHAR(20),              -- OK / SYNC_FAILED / PENDING
-    wo_bobbin_sync_at        TIMESTAMPTZ,
+    wo_auto_approve_disabled BOOLEAN       DEFAULT FALSE,     -- kalau true, tak jalan tanpa PM eksplisit
     wo_plan_change_flag      BOOLEAN       DEFAULT FALSE,
     wo_plan_change_note      TEXT,
     wo_created_by            BIGINT        NOT NULL,
     wo_created_at            TIMESTAMPTZ   DEFAULT NOW(),
     wo_updated_at            TIMESTAMPTZ   DEFAULT NOW()
 );
+-- Qty aktual & efisiensi → wo_production_actual (model dua-sumbu, v1.2). Auto-approve 24j (config global).
 
+-- Parameter planned = baris per param (bukan kolom fixed). Sumber: product-parameter
+-- master (mst_parameter, display_group='Machine'). Dual PPC/PC hanya utk 8 param.
 CREATE TABLE wo_parameter (
     wop_id                   BIGSERIAL PRIMARY KEY,
-    wop_wo_id                BIGINT        NOT NULL UNIQUE,
-    wop_speed                DECIMAL(8,2),
-    wop_nozzle               VARCHAR(20),
-    wop_oil                  VARCHAR(30),
-    wop_disc                 VARCHAR(20),
-    wop_bar                  DECIMAL(5,2),
-    wop_air                  VARCHAR(20),
-    wop_opu                  DECIMAL(6,3),
-    wop_twist                VARCHAR(20),
-    wop_pc_approved_by       BIGINT,
-    wop_pc_approved_at       TIMESTAMPTZ
+    wop_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    wop_param_id             UUID          NOT NULL,          -- FK mst_parameter (costing)
+    wop_value_ppc_num        DECIMAL(20,6),
+    wop_value_ppc_text       TEXT,
+    wop_value_ppc_flag       BOOLEAN,
+    wop_value_pc_num         DECIMAL(20,6),                   -- diisi PC saat approve; default = PPC
+    wop_value_pc_text        TEXT,
+    wop_value_pc_flag        BOOLEAN,
+    wop_is_dual              BOOLEAN       DEFAULT FALSE,      -- true: speed/disc/nozzle1&2/bar/air/oil/opu/taper
+    UNIQUE (wop_wo_id, wop_param_id)
 );
 
+-- Parameter actual (per date+shift+param). Juga menampung actual-only (Heater/DR/Steps ACY).
 CREATE TABLE wo_execution (
     woe_id                   BIGSERIAL PRIMARY KEY,
-    woe_wo_id                BIGINT        NOT NULL,
-    woe_shift                CHAR(1)       NOT NULL,  -- 1 / 2 / 3
-    woe_executed_by          BIGINT        NOT NULL,
-    woe_speed_actual         DECIMAL(8,2),
-    woe_nozzle_actual        VARCHAR(20),
-    woe_oil_actual           VARCHAR(30),
-    woe_disc_actual          VARCHAR(20),
-    woe_bar_actual           DECIMAL(5,2),
-    woe_air_actual           VARCHAR(20),
-    woe_opu_actual           DECIMAL(6,3),
-    woe_twist_actual         VARCHAR(20),
-    woe_notes                TEXT,
-    woe_input_at             TIMESTAMPTZ   DEFAULT NOW()
+    woe_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    woe_date                 DATE          NOT NULL,
+    woe_shift                CHAR(1)       NOT NULL,   -- 1 / 2 / 3
+    woe_param_id             UUID          NOT NULL,   -- FK mst_parameter
+    woe_value_num            DECIMAL(20,6),
+    woe_value_text           TEXT,
+    woe_value_flag           BOOLEAN,
+    woe_input_by             BIGINT        NOT NULL,
+    woe_input_at             TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (woe_wo_id, woe_date, woe_shift, woe_param_id)
 );
 
+-- N baris per komponen RM route (cost_route_rm). type=PRODUCT ⇒ genealogy antar produk.
 CREATE TABLE wo_rm_allocation (
     wra_id                   BIGSERIAL PRIMARY KEY,
-    wra_wo_id                BIGINT        NOT NULL,
-    wra_bom_component_id     BIGINT,                  -- FK ke BOM Phase B (nullable Phase 1)
-    wra_lot_no               VARCHAR(30)   NOT NULL,
+    wra_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    wra_crm_rm_id            BIGINT        NOT NULL,   -- FK cost_route_rm
+    wra_rm_type              VARCHAR(10),              -- PRODUCT / ITEM / GROUP
+    wra_lot_no               VARCHAR(30)   NOT NULL,   -- lot aktual dipilih
+    wra_rm_source            VARCHAR(10),              -- STORE / CAPTIVE / MIXED
+    wra_fresh_box            VARCHAR(5),               -- Fresh / Box
+    wra_shade_code           VARCHAR(30),
     wra_qty_allocated        DECIMAL(18,3) NOT NULL,
     wra_lot_picking_mode     VARCHAR(10),              -- STRICT / FLEXIBLE / FIFO
-    wra_rm_source            VARCHAR(10),              -- STORE / CAPTIVE / MIXED
     wra_notes                TEXT
 );
 
@@ -247,15 +249,21 @@ CREATE TABLE wo_production_actual (
     wpa_not_checked_bobs     INT,           -- TRN_APP_REL_DT IS NULL
     wpa_weight_per_bob       DECIMAL(10,4), -- DOFF_WT (rata-rata shift)
 
-    -- Calculated qty (hasil kalkulasi dari bobbin count × std_weight)
-    wpa_calculated_qty_kg    DECIMAL(18,3), -- auto-calculated
-    wpa_qty_doffed_kg        DECIMAL(18,3), -- SPG: GROSS × weight — basis efficiency (v1.1)
-    wpa_qty_transferred_kg   DECIMAL(18,3), -- SPG: TRANSFERRED × weight — basis fulfillment (v1.1)
-    wpa_qty_source           VARCHAR(20),   -- ETL_SUGGEST / MANUAL_OVERRIDE
-    wpa_manual_reason        TEXT,          -- alasan jika MANUAL_OVERRIDE
+    -- ── Model dua-sumbu (v1.2) ──
+    -- Sumbu Audit: baseline objektif (pengganti _ORGL) + current editable
+    wpa_qty_bobbin           DECIMAL(18,3), -- ETL bobbin, immutable (baseline)
+    wpa_qty_actual           DECIMAL(18,3), -- current, editable, default = qty_bobbin (basis efisiensi)
+    wpa_qty_source           VARCHAR(10)    DEFAULT 'BOBBIN', -- BOBBIN / ADJUSTED
+    wpa_manual_reason        TEXT,          -- alasan jika ADJUSTED (log detail di wo_actual_log)
+    -- SPG dual basis (doffed=efficiency, transferred=fulfillment)
+    wpa_qty_doffed_kg        DECIMAL(18,3), -- SPG: basis qty_bobbin/efficiency
+    wpa_qty_transferred_kg   DECIMAL(18,3), -- SPG: basis fulfillment
+    -- Sumbu Scope: Incl/Excl DERIVED dari qty_actual + wo_prod_category (tidak disimpan manual)
 
-    -- KPI shift input operator (v1.1, halaman 13)
-    wpa_breaks_count         INT,
+    -- KPI shift input operator (v1.2, halaman 13)
+    wpa_breaks_shift1        INT,
+    wpa_breaks_shift2        INT,
+    wpa_breaks_shift3        INT,           -- breaks per shift (legacy YARNBREAK_1/2/3)
     wpa_doff_full_count      INT,
     wpa_doff_manual_count    INT,           -- revolving manual
     wpa_co_failure_count     INT,           -- change over failure
@@ -329,9 +337,9 @@ CREATE TABLE machine_shift_log (
     msl_shift                CHAR(1)       NOT NULL,   -- 1 / 2 / 3
     msl_positions_total      INT,
     msl_positions_running    DECIMAL(8,2),              -- bisa fraksi
-    msl_running_minutes      INT,
-    msl_activity_note        TEXT,
-    msl_status               VARCHAR(20)   DEFAULT 'DRAFT', -- DRAFT / FINAL
+    msl_running_minutes      INT,                       -- DERIVED dari downtime (v1.2), bukan diketik
+    -- msl_activity_note dihapus (v1.2) → digantikan shift_log_note (INSTRUKSI/ACTIVITY)
+    msl_status               VARCHAR(20)   DEFAULT 'DRAFT', -- DRAFT / FINAL (tanpa approval)
     msl_input_by             BIGINT        NOT NULL,
     msl_input_at             TIMESTAMPTZ   DEFAULT NOW(),
     msl_updated_at           TIMESTAMPTZ   DEFAULT NOW(),
@@ -372,6 +380,8 @@ CREATE TABLE downtime_event (
     de_shift                 CHAR(1),
     de_position_no           VARCHAR(10),
     de_reason_id             BIGINT        NOT NULL REFERENCES downtime_reason_master(drm_id),
+    de_loss_type             VARCHAR(10),               -- POSITION / TIME (v1.2)
+    de_idle_type             VARCHAR(5),                -- 24 / N24 (v1.2)
     de_start_at              TIMESTAMPTZ,
     de_end_at                TIMESTAMPTZ,
     de_duration_min          INT,
@@ -379,6 +389,18 @@ CREATE TABLE downtime_event (
     de_notes                 TEXT,
     de_input_by              BIGINT        NOT NULL,
     de_input_at              TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- Log book dua tipe (INSTRUKSI/ACTIVITY) — pengganti msl_activity_note (v1.2)
+CREATE TABLE shift_log_note (
+    sln_id                   BIGSERIAL PRIMARY KEY,
+    sln_machine_id           BIGINT        NOT NULL,
+    sln_date                 DATE          NOT NULL,
+    sln_shift                CHAR(1)       NOT NULL,
+    sln_type                 VARCHAR(15)   NOT NULL,   -- INSTRUKSI / ACTIVITY
+    sln_note                 TEXT          NOT NULL,
+    sln_input_by             BIGINT        NOT NULL,
+    sln_input_at             TIMESTAMPTZ   DEFAULT NOW()
 );
 
 CREATE TABLE waste_category_master (
@@ -450,17 +472,29 @@ CREATE TABLE product_ppc_config (
     ppc_updated_at           TIMESTAMPTZ   DEFAULT NOW()
 );
 
+-- v1.2: planning-math only. speed/positions/draw_ratio → product_machine_parameter.
 CREATE TABLE product_machine_capacity (
     pmc_id                   BIGSERIAL PRIMARY KEY,
     pmc_cpm_product_sys_id   BIGINT        NOT NULL,
     pmc_machine_id           BIGINT        NOT NULL,
-    pmc_speed                DECIMAL(8,2),
-    pmc_no_of_positions      INT,
-    pmc_prod_per_day         DECIMAL(10,3),
-    pmc_efficiency_pct       DECIMAL(5,2),
-    pmc_draw_ratio           DECIMAL(6,3),
+    pmc_prod_per_day         DECIMAL(10,3),             -- kapasitas planning
+    pmc_efficiency_pct       DECIMAL(5,2),              -- target eff planning (bukan actual)
     pmc_updated_at           TIMESTAMPTZ   DEFAULT NOW(),
     UNIQUE (pmc_cpm_product_sys_id, pmc_machine_id)
+);
+
+-- Layer nilai parameter per PRODUK+MESIN (v1.2, Opsi A). Satu definisi (mst_parameter),
+-- dua grain nilai: cost_product_parameter (per produk) + ini (per produk+mesin).
+CREATE TABLE product_machine_parameter (
+    pmp_id                   BIGSERIAL PRIMARY KEY,
+    pmp_cpm_product_sys_id   BIGINT        NOT NULL,
+    pmp_machine_id           BIGINT        NOT NULL,
+    pmp_param_id             UUID          NOT NULL,    -- FK mst_parameter (costing)
+    pmp_value_num            DECIMAL(20,6),
+    pmp_value_text           TEXT,
+    pmp_value_flag           BOOLEAN,
+    pmp_updated_at           TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (pmp_cpm_product_sys_id, pmp_machine_id, pmp_param_id)
 );
 
 CREATE TABLE machine_group (
@@ -473,11 +507,22 @@ CREATE TABLE machine_master (
     machine_id               BIGSERIAL PRIMARY KEY,
     machine_no               VARCHAR(10)   NOT NULL UNIQUE,
     machine_area             CHAR(3)       NOT NULL,   -- TXT / SPG / TWT
-    machine_line             VARCHAR(20),
+    machine_line             VARCHAR(20),              -- SPG: nama line
+    machine_kind             VARCHAR(15),              -- MACHINE / LINE (SPG=LINE) (v1.2)
     machine_group_id         BIGINT,
     machine_doff_weight_kg   DECIMAL(8,3),
     machine_is_active        BOOLEAN       DEFAULT TRUE,
     machine_orion_code       VARCHAR(30)
+);
+
+-- SPG: winder di bawah line (Line → Position/winder → bobbin/end number) (v1.2)
+CREATE TABLE machine_position (
+    mp_id                    BIGSERIAL PRIMARY KEY,
+    mp_machine_id            BIGINT        NOT NULL,   -- FK machine_master (line)
+    mp_position_no           VARCHAR(10)   NOT NULL,   -- nomor winder
+    mp_bobbin_per_doff       INT,                      -- 4/8/10/12
+    mp_is_active             BOOLEAN       DEFAULT TRUE,
+    UNIQUE (mp_machine_id, mp_position_no)
 );
 
 CREATE TABLE lot_master (
@@ -543,4 +588,4 @@ CREATE TABLE common_lot_component (
 ---
 
 *PRD dibuat Juni 2026 via sesi brainstorming di Claude AI*
-*Version: Draft v1.1 — Juli 2026*
+*Version: Draft v1.2 — Juli 2026*

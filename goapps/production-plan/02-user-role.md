@@ -85,12 +85,19 @@
 
 ## Auto-Approval
 
+Approval **PC → PM sequential** (PM approve **setelah** PC).
+
 | Approval | Timer | Trigger |
 |---|---|---|
-| PC — parameter teknis | **4 jam** setelah WO disubmit | Notifikasi email + in-app. Auto-approve jika tidak ada response |
-| PM — WO overall | **4 jam** setelah PC approve | Notifikasi email + in-app. Auto-approve jika tidak ada response |
+| PC — parameter teknis | **24 jam** setelah WO disubmit | Notifikasi email + in-app. Auto-approve jika tidak ada response |
+| PM — WO overall | **24 jam** setelah PC approve | Notifikasi email + in-app. Auto-approve jika tidak ada response |
 
-Reject selalu manual. Jika di-reject, WO kembali ke PPC dengan catatan.
+**Auto-approve bisa di-disable** (config). Kalau di-disable, WO **tidak jalan** tanpa approval
+PM eksplisit — menghindari skenario "sistem jalan tanpa PM lalu disalahkan". PM tetap
+bertanggung jawab. Reject / revoke / cancel selalu manual + alasan + audit trail.
+
+> Diubah dari v1.1 (dual PC+PM paralel, auto 4 jam) sesuai masukan PPC. **Daily performance /
+> shift entry tidak pakai approval** (final dari packing) — lihat halaman 13.
 
 ---
 

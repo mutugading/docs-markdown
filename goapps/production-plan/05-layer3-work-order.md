@@ -1,367 +1,378 @@
 # 5. Layer 3 — Work Order
 
+> **Ditulis ulang di v1.2.** WO sekarang **route-driven & product-parameter-driven**,
+> menggantikan MLR (`PRD_TXT_MLR_ENTRY`) dengan cara **rebuild native** — bukan menarik
+> data MLR. Referensi legacy (DDL MLR, JSON web app) dipakai sebagai acuan rancang-ulang.
+
 ## Konsep
 
-Work Order (WO) adalah **instruksi produksi konkret per mesin per lot** yang dikeluarkan PPC.
-Menggantikan MLR (`PRD_TXT_MLR_ENTRY`).
+Work Order (WO) adalah **instruksi produksi konkret per mesin per lot** yang di-generate
+dari Production Plan. Rantai turunannya:
+
+```
+Product Route (Costing)  →  Production Plan Item  →  WORK ORDER  →  Realisasi
+  resep + RM + routing        alokasi mesin+waktu      instruksi       (bobbin ETL + shift entry + packing)
+   cost_route_head/seq/rm      consider route           snapshot route
+```
+
+WO **mewarisi** dari route (spec, komposisi RM, routing) dan dari plan (mesin, periode).
+Karena route sudah menyimpan komposisi RM & urutan proses, WO **tidak mengulang** field
+berulang ala MLR (POY merge 1/2/3, chips 1/2/3) — itu jadi relasi ke route.
 
 ```
 WORK_ORDER (header)
-    ├── WO_PARAMETER      (1:1)  parameter planned, diapprove PC
-    ├── WO_EXECUTION      (1:N per date+shift)  parameter actual saat running
-    ├── WO_PRODUCTION_ACTUAL (1:N per date+shift)  qty aktual dari ETL, editable
-    └── WO_GRADE_ACTUAL   (1:N per grade)  packing aktual dari ETL
+    ├── WO_PARAMETER          (1:N per param)  planned: nilai PPC + nilai PC
+    ├── WO_EXECUTION          (1:N per date+shift+param)  parameter actual saat running
+    ├── WO_RM_ALLOCATION      (1:N per komponen RM route)  lot aktual + genealogy
+    ├── WO_PRODUCTION_ACTUAL  (1:N per date+shift)  qty aktual (lihat halaman 13)
+    └── WO_GRADE_ACTUAL       (1:N per grade)  packing aktual dari ETL, link by lot
 ```
 
 ---
 
-## WO Area
+## Prinsip rebuild: "jangan dikurangi" = artefak, bukan schema
 
-| Area | Kode | Parameter |
+User tidak akan menerima WO sebagai pengganti MLR kalau informasinya berkurang. Tapi
+"jangan dikurangi" berlaku untuk **informasi yang user lihat, pakai, dan cetak** — bukan
+untuk 180 kolom mentah MLR (yang berisi kolom recycle-bin `BIN$`, field PHP-undefined
+tech-debt, dan duplikasi).
+
+**Acceptance test = cetakan.** Cetakan WO / MCN harus minimal selengkap cetakan MLR/MCN
+sekarang, field-per-field. Gerbang sign-off bareng produksi = **side-by-side cetakan MLR
+lama vs cetakan WO baru**. Field yang dulu flat di MLR tetap **tercetak** di kartu WO,
+di-resolve dari relasinya (route / demand / allocation).
+
+**Yang jadi relasi/turunan (bukan lagi field flat):**
+
+| MLR (legacy flat) | Sistem baru | Sumber |
 |---|---|---|
-| Texturising | `TXT` | speed, nozzle, oil, disc, bar, OPU |
-| Spinning | `SPG` | speed, spin pump |
-| Twisting | `TWT` | speed, twist direction |
+| POY merge 1/2/3 + chips 1/2/3 + Fresh/Box | `WO_RM_ALLOCATION` (N baris) | `cost_route_rm` |
+| Customer / end-use | referensi demand | `production_demand` |
+| Next process / produk lanjutan | urutan route | `cost_route_seq` |
+| Grade requirement ×3 | grade req WO | demand (WO boleh override) |
+| Entry-type A/B, TWT group | **tidak ada** | tiap route = WO sendiri |
+| Parameter mesin (speed/nozzle/dll) | `WO_PARAMETER` | product-parameter master |
 
 ---
 
-## WO Lifecycle
+## WORK_ORDER (header)
+
+**Identity & genealogy:**
+- `wo_no` — nomor WO
+- `wo_lot_no` — **di-generate PPC** saat WO dibuat. Ini jadi **sumber lot** yang harus
+  dipakai bobbin tracking Oracle, supaya ETL produksi bisa nyambung ke WO by lot.
+- `wo_area` (TXT / SPG / TWT), `wo_machine_id`
+- `wo_ref_wo_id` + `wo_ref_type` — **referensi WO sebelumnya** (lihat "WO Reference")
+- `wo_revision_no` + `wo_revision_reason` — revisi tampil di muka WO (mis. "PINDAH MC 05")
+
+**Link (integrasi sistematis):**
+- `wo_crh_head_id` + `wo_crh_version` — **snapshot route** yang dipakai (route bisa
+  di-fork/lock; WO mengunci versi yang benar saat generate/approve)
+- `wo_plan_item_id` — plan item asal
+- `wo_demand_id` — demand asal (customer, order, grade req mengalir dari sini)
+
+**Target:**
+- `wo_qty_target`, `wo_deadline`, tanggal jadwal
+- `wo_grade_requirement` — default dari demand, **WO boleh override** (produksi realistis
+  bisa beda dari yang dipesan)
+
+**Klasifikasi (untuk Incl/Excl, lihat halaman 13):**
+- `wo_prod_category` — NORMAL / B_TO_B / APQ / TRIAL / SMALL_LOT
+
+**Snapshot spesifikasi (saat approve):**
+- den/fil/type, ply, yarn_type, shade, twist — **di-snapshot dari route/produk saat
+  approve**, supaya WO closed tetap arsip instruksi apa adanya walau master berubah.
+
+**Packing instruction:**
+- tipe box, paper tube, package weight, pallet — **default dari product master, WO boleh
+  override** (cara mengemas = properti produk).
+
+**Status & audit:** lihat "Lifecycle" & "Approval".
+
+---
+
+## Parameter Mesin — Product-Parameter Model (v1.2)
+
+Parameter mesin **tidak lagi kolom fixed**. Sistem baru mengonsumsi **modul product-parameter
+milik Costing** (definisi + akses sudah diatur di modul costing, termasuk untuk orang
+produksi). PPC hanya **konsumen** + menyimpan layer nilai per-mesin.
+
+### Sumber definisi & nilai
 
 ```
-DRAFT → SUBMITTED → APPROVED → SCHEDULED → CHANGEOVER → RUNNING → COMPLETED → CLOSED
+mst_parameter (definisi global parameter)
+  param_code, param_name, data_type (NUMBER/TEXT/BOOLEAN),
+  param_category (INPUT/RATE/CALCULATED/MASTER_LOOKUP),
+  lookup_master_code (enum combobox, mis. YARN_TYPE),
+  uom_id, default_value, min_value, max_value,
+  owner_department, display_group (Spec/Machine/Grade/Packing/Cost/…),
+  display_order, is_required_for_costing
+
+cost_product_parameter (nilai per PRODUK)
+  cpp_product_sys_id, cpp_param_id → mst_parameter,
+  cpp_value_numeric / cpp_value_text / cpp_value_flag  (three-column typed)
 ```
 
-- **APPROVED** = PC + PM keduanya approve (atau auto-approve 4 jam)
+### Selector parameter WO
+
+Parameter yang mengalir ke WO dipilih dengan **`display_group`**:
+- `Machine` → `WO_PARAMETER` (setup mesin; dual PPC/PC untuk 8 param)
+- `Spec` → snapshot spesifikasi
+- `Packing` → packing instruction
+- `Grade` → grade requirement
+- `Cost` → costing-only, WO abaikan
+
+> **Rekomendasi ke tim costing (Open Item):** tambah flag `is_for_production` di
+> `mst_parameter` (mirror `is_required_for_costing`) untuk kontrak yang bersih. Sementara
+> pakai `display_group='Machine'`.
+
+### Rantai resolusi nilai (dua-grain — Opsi A)
+
+`cost_product_parameter` grain-nya **per produk saja** (tidak ada dimensi mesin). Padahal
+speed/posisi/draw-ratio **bervariasi per mesin** untuk produk sama. Karena itu ada **dua
+lapis nilai** dengan **satu definisi** (`mst_parameter`):
+
+Untuk WO produk P di mesin M, tiap parameter di-resolve berurutan:
+
+```
+1. WO referensi / WO running terakhir (duplicate/continuation)   → layer histori PPC
+2. Override per PRODUK+MESIN                                       → PRODUCT_MACHINE_PARAMETER (PPC)
+3. Nilai per PRODUK                                                → cost_product_parameter (Costing)
+4. mst_parameter.default_value                                    → fallback
+```
+
+Costing membaca layer 3; produksi/WO membaca 2→3→4 (plus 1 kalau ada referensi). Kalau
+suatu saat costing butuh speed berbeda dari produksi, cukup isi di layer produk — model
+parameter yang bisa ditambah/dikurangi menampung ini tanpa ubah schema.
+
+### WO_PARAMETER — planned (dual PPC vs PC)
+
+Materialisasi baris parameter saat WO generate. Pola **3-tingkat**: nilai PPC (usulan) →
+nilai PC (konfirmasi saat approve) → actual (`WO_EXECUTION`).
+
+| Field | Deskripsi |
+|---|---|
+| `wop_wo_id` | FK WO |
+| `wop_param_id` | FK `mst_parameter` (UUID) |
+| `wop_value_ppc_num/text/flag` | nilai usulan PPC (typed sesuai `data_type`) |
+| `wop_value_pc_num/text/flag` | nilai konfirmasi PC (diisi saat approve; default = PPC) |
+| `wop_is_dual` | true hanya untuk 8 param dual |
+
+**Dual PPC/PC hanya untuk 8 parameter** (dari MLR `_PC`): speed, disc, nozzle 1, nozzle 2,
+air (bar), air (m³/hr), oil, opu, taper angle. Sisanya single value (PC = PPC). Flag `is_dual`
+= config sisi PPC (tidak ada di master).
+
+**Well-known codes** — efficiency engine butuh parameter tertentu stabil & selalu ada:
+**denier, yarn speed (YS), no-of-position, std-weight**. Ini di-**pin ke `param_id`
+spesifik** (bukan dicari by nama), supaya kalkulasi tidak jebol kalau param free-form
+ditambah/di-rename.
+
+### WO_EXECUTION — parameter actual (1:N per date+shift+param)
+
+Input operator saat running. Parameter bisa berubah selama WO berjalan → entry baru per
+date+shift untuk param yang berubah. Juga menampung parameter **actual-only** yang bukan
+bagian MLR (mis. Heater 1/2, D/R, Steps Process untuk ACY) — ini bagian daily report,
+bukan planned.
+
+```
+Contoh: speed berubah di hari ke-2 shift 2 → satu record WO_EXECUTION baru
+        untuk (wo, date, shift, param_id=SPEED, value=760)
+```
+
+### ACY / Spandex — extension khusus, lintas area
+
+Produk ACY punya set parameter tambahan (EDR Spandex, SOF, TOF, D/W, Steps Process 2–6,
+Cycle Time, Axial Disp/Dwell, T2 Unitens, CV). Karena ACY ada di **area TXT maupun TWT**,
+set ini di-attach ke **product type = ACY** (bukan ke area) — jadi otomatis ikut ke mana
+pun ACY diproduksi. Di model product-parameter ini natural: parameter melekat ke produk.
+
+---
+
+## WO_RM_ALLOCATION — dari Route (pengganti POY/chips 1/2/3)
+
+Satu baris per **komponen RM yang didefinisikan route** (`cost_route_rm`), N komponen —
+bukan 3 slot. "RM lebih dari 1" = N baris, natural.
+
+| Field | Deskripsi |
+|---|---|
+| `wra_wo_id` | FK WO |
+| `wra_crm_rm_id` | FK `cost_route_rm` (komponen RM di route) |
+| `wra_rm_type` | PRODUCT / ITEM / GROUP (dari `crm_rm_type`) |
+| `wra_lot_no` | **lot aktual** yang dipilih |
+| `wra_rm_source` | STORE / CAPTIVE / MIXED |
+| `wra_fresh_box` | Fresh / Box |
+| `wra_shade_code` | shade RM |
+| `wra_qty_allocated` | qty dialokasikan |
+
+**Genealogy otomatis.** `crm_rm_type = PRODUCT` berarti RM-nya produk lain (mis. POY jadi
+RM untuk DTY). Kalau lot POY yang dialokasikan ke WO TXT ini diproduksi oleh WO SPG lain,
+**link genealogy terbentuk sendiri** (rantai lot From→Into→Ref legacy = turunan, bukan
+diketik manual seperti MLR).
+
+**RM Fence:** Warning 85%, Block > limit + 1 doff (TXT). Override hanya PM.
+
+---
+
+## Model Mesin — TXT section, SPG line/position, TWT
+
+Prinsip pemersatu: **mesin punya posisi; satu WO menempati sebagian posisi mesin untuk satu
+lot; beberapa WO bisa berbagi satu mesin.** Efisiensi roll-up WO → mesin → area.
+
+- **TXT:** machine (mis. 18) + section A/B → WO per section + lot.
+- **SPG:** **Line → Position (winder) → bobbin.** Machine master SPG = line berisi N
+  winder. **WO SPG = line + lot + posisi-dipakai** (`RUN_POS`); beberapa WO bisa berbagi
+  satu line. Winder = unit efisiensi. Tiap doffing hasilkan 4/8/10/12 bobbin; **bobbin/end
+  number = grain terhalus dari bobbin tracking** (bukan input manual). Lihat halaman 9.
+- **TWT:** per mesin + lot. **Tidak ada TWT group** — tiap route didefinisikan sendiri lalu
+  generate WO masing-masing.
+
+---
+
+## WO Reference — Duplicate & Continuation
+
+Suggestion parameter PPC merujuk WO historis, bukan diketik dari nol. Dua rasa:
+
+**Duplicate (referensi lunak).** Produk+mesin sama, lot beda. PPC klik "Duplikasi sebagai
+WO baru" → parameter PPC ter-copy sebagai titik awal → boleh diubah → lot baru → **tanpa
+ikatan** ke WO sumber. Murni akselerator input. `wo_ref_type = TEMPLATE`.
+
+**Continuation (referensi keras).** WO selesai tapi barang kurang, produksi lagi. WO baru
+**menunjuk** WO lama (`wo_ref_wo_id`) → mewarisi parameter **dan** konteks demand yang sama
+→ sisa qty menambal demand yang sama (fulfillment nyambung). `wo_ref_type = CONTINUATION`.
+
+Suggestion parameter berlapis (lihat rantai resolusi di atas): WO referensi → WO running
+terakhir produk+mesin sama → default product-parameter.
+
+---
+
+## Lifecycle
+
+```
+DRAFT → SUBMITTED → PC APPROVED → PM APPROVED → SCHEDULED → CHANGEOVER → RUNNING → COMPLETED → CLOSED
+                                                                         ↘ CANCELLED / REVOKE (manual + alasan)
+```
+
 - DRAFT: bisa auto-update/cancel jika plan berubah
 - RUNNING+: read-only, perlu PM untuk cancel
+- Revisi (Rev.N + alasan) tampil di muka WO
 
 ---
 
-## Dual Approval — Paralel
+## Approval — PC → PM Sequential
 
 ```
-WO SUBMITTED
-    ├── PC: review parameter teknis → APPROVE/REJECT (auto 4 jam)
-    └── PM: review WO overall → APPROVE/REJECT (auto 4 jam)
-WO APPROVED = keduanya selesai
+PPC submit (isi nilai PPC)
+    → PC approve  : review + isi/konfirmasi nilai PC (konfirmasi teknis)
+    → PM approve  : izin jalan (responsibility produksi)
+WO APPROVED = PC dan PM keduanya approve
 ```
+
+- **Sequential**: PM approve **setelah** PC.
+- **Auto-approve 24 jam** — tapi **bisa di-disable** lewat config. Kalau di-disable, WO
+  **tidak jalan** tanpa approval PM eksplisit (menghindari skenario "sistem jalan tanpa PM
+  lalu disalahkan").
+- **PM juga untuk eksepsi**: override RM fence, block over-production, cancel WO running.
+- Reject / revoke / cancel **selalu manual** + alasan + tercatat di audit trail.
+
+> Berbeda dari v1.1 (dual PC+PM paralel + auto 4 jam). Diubah sesuai masukan PPC:
+> tanggung jawab PM harus eksplisit.
 
 ---
 
-## WO_PARAMETER — Parameter Planned (1:1 dengan WO)
+## Mapping MLR → Sistem Baru (rebuild)
 
-Input oleh PPC berdasarkan historical data. Diapprove oleh PC.
-
-| Field | Deskripsi | Area |
+| MLR Entity | Sistem Baru | Keterangan |
 |---|---|---|
-| `wop_speed` | Kecepatan (m/min) | TXT, TWT |
-| `wop_nozzle` | Tipe nozzle | TXT |
-| `wop_oil` | Tipe oli / OPU setting | TXT |
-| `wop_disc` | Disc setting | TXT |
-| `wop_bar` | Air pressure (bar) | TXT |
-| `wop_opu` | Oil pick-up % | TXT |
-| `wop_twist` | Twist direction (S/Z) dan level | TWT |
+| Header MLR (lot, mesin) | `WORK_ORDER` | lot di-generate PPC |
+| Merge / spesifikasi produk | snapshot dari route/produk | saat approve |
+| POY/chips 1/2/3 + Fresh/Box | `WO_RM_ALLOCATION` (N) | dari `cost_route_rm` |
+| Parameter mesin (+`_PC`) | `WO_PARAMETER` (PPC/PC) | dari product-parameter master |
+| Parameter actual | `WO_EXECUTION` | per date+shift+param |
+| Grade req ×3 | `wo_grade_requirement` | dari demand, override |
+| Customer / next process | demand / route seq | relasi, bukan field |
+| Approval 5-level + revoke | PC→PM + revisi | disederhanakan |
+| TWT group / SPG detail | route → WO / SPG position | lihat model mesin |
+
+**Cutover, bukan parallel-feed.** Karena data MLR tidak ditarik, MLR lama dan sistem baru
+tidak sinkron otomatis. Transisi = **cutover per area** (bukan MLR jalan paralel sebagai
+fallback seperti v1.1). Lihat halaman 11.
 
 ---
 
-## WO_EXECUTION — Parameter Actual (1:N per date+shift)
+## Schema WO
 
-Input oleh operator. Bisa berubah selama WO berlangsung — setiap ada perubahan
-parameter, operator buat entry baru untuk date + shift tersebut.
-
-```
-Contoh: WO berjalan 5 hari
-  Day 1 Shift 1: speed=750 (entry pertama)
-  Day 2 Shift 2: speed=760 (speed naik → entry baru)
-  Day 4 Shift 1: speed=750 (turun lagi → entry baru)
-→ 3 records WO_EXECUTION untuk 1 WO
-```
-
----
-
-## WO_PRODUCTION_ACTUAL — Qty Aktual (1:N per date+shift)
-
-**Source:** ETL dari Oracle summary tables (suggest otomatis)
-**Editable:** Ya — operator atau PPC bisa koreksi dengan reason
-**Granularity:** Per date + per shift (tidak sampai per doff)
-
-```
-Mirror struktur Oracle PPC_TXT_PRODUCTION / PPC_SPG_PRODUCTION
-tapi sudah diagregasi ke level date + shift.
-
-Suggest logic (priority):
-  P1: WO_GRADE_ACTUAL ada (packing selesai) → qty dari total packing
-  P2: NORMAL_BOBS dari PPC_TXT_PRODUCTION (QC released)
-  P3: TRANSFERRED_BOBS dari PPC_SPG_PRODUCTION
-  P4: TOTAL_BOBBINS dari PPC_TXT_PRODUCTION (semua transferred)
-  P5: INCLUDE_IN_SUGGEST dari PPC_SPG_PRODUCTION (doff estimate)
-```
-
-**Kalkulasi qty TXT/TWT:**
-```
-⚠️ TRN_STS: 0=Full, 1=Unfull (KEBALIKAN dari SPG)
-  Full (TRN_STS=0)  : count × lm_std_weight_full
-  Unfull (TRN_STS=1): count × lm_std_weight_unfull
-  calculated_qty_kg = (full_bobbins × std_full) + (unfull_bobbins × std_unfull)
-```
-
-**Kalkulasi qty SPG — dual qty (v1.1):**
-```
-wpa_qty_doffed_kg      = gross_bobbins × weight_per_bob      → basis EFFICIENCY & daily report
-wpa_qty_transferred_kg = transferred_bobs × weight_per_bob   → basis PEMENUHAN WO & feeding RM TXT
-calculated_qty_kg      = wpa_qty_transferred_kg (fulfillment)
-```
-Doffed ≥ transferred (selisih = POY doffed belum transfer / aging di lag area = `NOT_TRANSFER`).
-Daily report Excel existing berbasis **doffed**, realisasi WO berbasis **transferred** —
-keduanya disimpan. Lihat halaman 13.
-
----
-
-## WO_GRADE_ACTUAL — Packing Aktual (1:N per grade)
-
-**Source:** ETL dari Oracle `PPC_GRADE_ACTUAL` → `MGTDAT.PPC_GRADE_ACTUAL`
-**Granularity:** Per original_lot_no + grade
-**Editable:** Tidak — ini data factual dari packing system Oracle
-
-Grade AX/AE/A9/A/AM/APQ/B/BB/C/JLT dengan total qty kg dan bobbin count.
-
----
-
-## RM Allocation
-
-### Phase 1 — Manual Input PPC
-```
-Baris 1: POY 250/48 RND · Lot A2-16 · 1,000 kg · STORE · FIFO
-Baris 2: POY 250/48 RND-S · Lot B1-22 · 500 kg · STORE · STRICT
-```
-
-### Phase 2 — Connect BOM Phase B
-Auto-populate dari product route. PPC review dan adjust.
-
-**RM Fence:** Warning 85%, Block > limit + 1 doff (TXT).
-
----
-
-## TQM Logic TXT/TWT
-
-TQM embedded di TXTTRANSFER — tidak ada tabel terpisah.
-Status final = TYPE dan APP_REL dari **TRN_NO terbesar** per posisi.
-
-```
-TYPE=1 → APP_REL=2          → NORMAL
-TYPE=1 → APP_REL=1          → TYPE=6 → APP_REL=2 → NORMAL (lulus retest)
-TYPE=1 → APP_REL=1          → TYPE=6 → APP_REL=1 → TYPE=7 → DOWNGRADE FINAL
-APP_REL=1 tanpa lanjutan    → PENDING (di-hold TQM)
-```
-
----
-
-## Over-Production Threshold
-
-**5-level:** WO override → Product → Product type → Machine group → System default
-
-- Default: Warning 3%, Block 6%
-- TXT: absolut 1 doff (TXT-1: 1,200 kg · TXT-2: 600 kg)
-
----
-
-## Schema
+Prefix: `wo_` WORK_ORDER · `wop_` WO_PARAMETER · `woe_` WO_EXECUTION ·
+`wra_` WO_RM_ALLOCATION · `wpa_` WO_PRODUCTION_ACTUAL · `wga_` WO_GRADE_ACTUAL ·
+`wal_` WO_ACTUAL_LOG. (DDL lengkap di halaman 12.)
 
 ```sql
--- ─────────────────────────────────────────────
--- WORK ORDER (header)
--- ─────────────────────────────────────────────
 CREATE TABLE work_order (
     wo_id                    BIGSERIAL PRIMARY KEY,
-    wo_area_code             CHAR(3)       NOT NULL,  -- TXT / SPG / TWT
-    wo_trans_no              VARCHAR(30)   NOT NULL UNIQUE,
-    wo_plan_item_id          BIGINT        NOT NULL,
+    wo_no                    VARCHAR(30)   NOT NULL UNIQUE,
+    wo_lot_no                VARCHAR(30)   NOT NULL UNIQUE,   -- di-generate PPC; dipakai bobbin tracking
+    wo_area                  CHAR(3)       NOT NULL,          -- TXT / SPG / TWT
     wo_machine_id            BIGINT        NOT NULL,
-    wo_lot_no                VARCHAR(30)   NOT NULL,
-    wo_lot_remark            CHAR(3),                  -- NEW / OLD
+    wo_crh_head_id           BIGINT        NOT NULL,          -- snapshot route (cost_route_head)
+    wo_crh_version           INT           NOT NULL,
+    wo_plan_item_id          BIGINT        NOT NULL,
+    wo_demand_id             BIGINT,                          -- customer/grade req mengalir dari sini
+    wo_ref_wo_id             BIGINT        REFERENCES work_order(wo_id), -- duplicate/continuation
+    wo_ref_type              VARCHAR(15),                     -- TEMPLATE / CONTINUATION
     wo_qty_target            DECIMAL(18,3) NOT NULL,
+    wo_grade_requirement     VARCHAR(5),                      -- default demand, override
     wo_deadline              DATE          NOT NULL,
-    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL', -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT (v1.1)
-    wo_grade_req_ref         BIGINT,                   -- FK ke PRODUCTION_DEMAND
-    wo_packing_box_type      VARCHAR(10),
-    wo_packing_pallet_type   VARCHAR(10),
-    wo_status                VARCHAR(20)   NOT NULL,
-    wo_ref_id                BIGINT,                   -- FK ke WO sebelumnya (revision)
-    wo_revision_no           SMALLINT      NOT NULL DEFAULT 0,
-    wo_pc_approved_at        TIMESTAMPTZ,
-    wo_pc_approved_by        BIGINT,
-    wo_pm_approved_at        TIMESTAMPTZ,
-    wo_pm_approved_by        BIGINT,
-    wo_qty_final             DECIMAL(18,3),            -- qty final (sum dari WO_PRODUCTION_ACTUAL)
-    wo_qty_final_locked_at   TIMESTAMPTZ,
-    wo_plan_change_flag      BOOLEAN       DEFAULT FALSE,
-    wo_plan_change_note      TEXT,
+    wo_prod_category         VARCHAR(15)   DEFAULT 'NORMAL',  -- NORMAL/B_TO_B/APQ/TRIAL/SMALL_LOT
+    wo_spec_snapshot         JSONB,                           -- den/fil/type/ply/shade/twist saat approve
+    wo_packing_snapshot      JSONB,                           -- box/paper tube/pallet (default master + override)
+    wo_revision_no           INT           DEFAULT 0,
+    wo_revision_reason       TEXT,
+    wo_status                VARCHAR(20)   DEFAULT 'DRAFT',
     wo_created_by            BIGINT        NOT NULL,
     wo_created_at            TIMESTAMPTZ   DEFAULT NOW(),
     wo_updated_at            TIMESTAMPTZ   DEFAULT NOW()
 );
 
--- ─────────────────────────────────────────────
--- WO_PARAMETER (1:1 dengan WO)
--- Parameter planned, diinput PPC, diapprove PC
--- ─────────────────────────────────────────────
 CREATE TABLE wo_parameter (
     wop_id                   BIGSERIAL PRIMARY KEY,
-    wop_wo_id                BIGINT        NOT NULL UNIQUE,
-    wop_speed                DECIMAL(8,2),
-    wop_nozzle               VARCHAR(20),
-    wop_oil                  VARCHAR(30),
-    wop_disc                 VARCHAR(20),
-    wop_bar                  DECIMAL(5,2),
-    wop_air                  VARCHAR(20),
-    wop_opu                  DECIMAL(6,3),
-    wop_twist                VARCHAR(20),
-    wop_notes                TEXT,
-    wop_pc_approved_by       BIGINT,
-    wop_pc_approved_at       TIMESTAMPTZ
+    wop_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    wop_param_id             UUID          NOT NULL,          -- FK mst_parameter (costing)
+    wop_value_ppc_num        DECIMAL(20,6),
+    wop_value_ppc_text       TEXT,
+    wop_value_ppc_flag       BOOLEAN,
+    wop_value_pc_num         DECIMAL(20,6),
+    wop_value_pc_text        TEXT,
+    wop_value_pc_flag        BOOLEAN,
+    wop_is_dual              BOOLEAN       DEFAULT FALSE,      -- true utk 8 param
+    UNIQUE (wop_wo_id, wop_param_id)
 );
 
--- ─────────────────────────────────────────────
--- WO_EXECUTION (1:N per date+shift)
--- Parameter actual saat running, input operator
--- Bisa ada multiple records per WO jika parameter berubah
--- ─────────────────────────────────────────────
 CREATE TABLE wo_execution (
     woe_id                   BIGSERIAL PRIMARY KEY,
-    woe_wo_id                BIGINT        NOT NULL,
-    woe_date                 DATE          NOT NULL,  -- tanggal parameter berlaku
-    woe_shift                CHAR(1)       NOT NULL,  -- 1 / 2 / 3
-    woe_speed_actual         DECIMAL(8,2),
-    woe_nozzle_actual        VARCHAR(20),
-    woe_oil_actual           VARCHAR(30),
-    woe_disc_actual          VARCHAR(20),
-    woe_bar_actual           DECIMAL(5,2),
-    woe_air_actual           VARCHAR(20),
-    woe_opu_actual           DECIMAL(6,3),
-    woe_twist_actual         VARCHAR(20),
-    woe_notes                TEXT,
-    woe_input_by             BIGINT,
-    woe_input_at             TIMESTAMPTZ   DEFAULT NOW()
-);
-
--- ─────────────────────────────────────────────
--- WO_PRODUCTION_ACTUAL (1:N per date+shift)
--- Qty aktual produksi — suggest dari ETL Oracle, editable
--- Granularity: per date + shift (agregasi, tidak per doff)
--- ─────────────────────────────────────────────
-CREATE TABLE wo_production_actual (
-    wpa_id                   BIGSERIAL PRIMARY KEY,
-    wpa_wo_id                BIGINT        NOT NULL,
-    wpa_date                 DATE          NOT NULL,  -- tanggal produksi
-    wpa_shift                CHAR(1)       NOT NULL,  -- 1 / 2 / 3
-    wpa_area                 CHAR(3)       NOT NULL,  -- TXT / SPG / TWT
-
-    -- TXT/TWT columns
-    -- ⚠️ TRN_STS: 0=Full, 1=Unfull (KEBALIKAN dari SPG DOFF_OPTION)
-    wpa_total_bobbins        INT,
-    wpa_full_bobbins         INT,          -- TRN_STS=0
-    wpa_unfull_bobbins       INT,          -- TRN_STS=1
-    wpa_normal_bobs          INT,          -- TQM lulus (TYPE!=7, APP_REL=2)
-    wpa_downgrade_bobs       INT,          -- TQM final defect (TYPE=7)
-    wpa_pending_bobs         INT,          -- masih di-hold TQM
-    wpa_pack_cek_bobs        INT,          -- handover ke packing
-
-    -- SPG columns
-    wpa_gross_bobbins        INT,          -- dari DOFFCONT
-    wpa_transferred_bobs     INT,          -- TRN_TYPE!=4, TRN_STATUS=2
-    wpa_cut_bobbins          INT,          -- TRN_TYPE=4
-    wpa_not_transfer         INT,          -- belum ada di TRANSFER
-    wpa_normal_bobs_spg      INT,          -- TQM_GRADE=1
-    wpa_downgrade_bobs_spg   INT,          -- TQM_GRADE=0
-    wpa_not_checked_bobs     INT,          -- TRN_APP_REL_DT IS NULL
-    wpa_weight_per_bob       DECIMAL(10,4), -- DOFF_WT dari DOFFCONT
-
-    -- Calculated qty (hasil kalkulasi dari bobbin count × std_weight)
-    wpa_calculated_qty_kg    DECIMAL(18,3), -- auto-calculated dari bobbin count
-    wpa_qty_doffed_kg        DECIMAL(18,3), -- SPG: GROSS × weight — basis efficiency (v1.1)
-    wpa_qty_transferred_kg   DECIMAL(18,3), -- SPG: TRANSFERRED × weight — basis fulfillment (v1.1)
-    wpa_qty_source           VARCHAR(20),   -- ETL_SUGGEST / MANUAL_OVERRIDE
-    wpa_manual_reason        TEXT,          -- alasan jika MANUAL_OVERRIDE
-
-    -- KPI shift input operator (v1.1, lihat halaman 13)
-    wpa_breaks_count         INT,
-    wpa_doff_full_count      INT,
-    wpa_doff_manual_count    INT,           -- revolving manual
-    wpa_co_failure_count     INT,           -- change over failure
-
-    -- ETL metadata
-    wpa_sync_status          VARCHAR(20)   DEFAULT 'OK', -- OK / SYNC_FAILED / PENDING
-    wpa_synced_at            TIMESTAMPTZ,
-    wpa_last_edited_by       BIGINT,
-    wpa_last_edited_at       TIMESTAMPTZ,
-
-    UNIQUE (wpa_wo_id, wpa_date, wpa_shift)
-);
-
--- ─────────────────────────────────────────────
--- WO_GRADE_ACTUAL (1:N per grade)
--- Packing aktual dari ETL PPC_GRADE_ACTUAL Oracle
--- ─────────────────────────────────────────────
-CREATE TABLE wo_grade_actual (
-    wga_id                   BIGSERIAL PRIMARY KEY,
-    wga_wo_id                BIGINT        NOT NULL,
-    wga_lot_no               VARCHAR(30)   NOT NULL,  -- original lot
-    wga_grade                VARCHAR(5)    NOT NULL,  -- AX/AE/A9/A/AM/APQ/B/BB/C/JLT
-    wga_dept                 CHAR(3),                  -- TXT / TWT
-    wga_total_qty_kg         DECIMAL(14,3),
-    wga_bobbin_count         INT,
-    wga_last_packing_date    DATE,
-    wga_synced_at            TIMESTAMPTZ   DEFAULT NOW(),
-
-    UNIQUE (wga_wo_id, wga_lot_no, wga_grade)
-);
-
--- Supporting tables
-CREATE TABLE wo_plan_item_link (
-    wpl_id                   BIGSERIAL PRIMARY KEY,
-    wpl_wo_id                BIGINT        NOT NULL,
-    wpl_plan_item_id         BIGINT        NOT NULL,
-    wpl_qty_contribution     DECIMAL(18,3),
-    UNIQUE (wpl_wo_id, wpl_plan_item_id)
+    woe_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    woe_date                 DATE          NOT NULL,
+    woe_shift                CHAR(1)       NOT NULL,
+    woe_param_id             UUID          NOT NULL,          -- FK mst_parameter (incl actual-only ACY/heater)
+    woe_value_num            DECIMAL(20,6),
+    woe_value_text           TEXT,
+    woe_value_flag           BOOLEAN,
+    woe_input_by             BIGINT        NOT NULL,
+    woe_input_at             TIMESTAMPTZ   DEFAULT NOW(),
+    UNIQUE (woe_wo_id, woe_date, woe_shift, woe_param_id)
 );
 
 CREATE TABLE wo_rm_allocation (
     wra_id                   BIGSERIAL PRIMARY KEY,
-    wra_wo_id                BIGINT        NOT NULL,
-    wra_bom_component_id     BIGINT,                  -- FK ke BOM Phase B (nullable Phase 1)
+    wra_wo_id                BIGINT        NOT NULL REFERENCES work_order(wo_id),
+    wra_crm_rm_id            BIGINT        NOT NULL,          -- FK cost_route_rm
+    wra_rm_type              VARCHAR(10),                     -- PRODUCT/ITEM/GROUP
     wra_lot_no               VARCHAR(30)   NOT NULL,
+    wra_rm_source            VARCHAR(10),                     -- STORE/CAPTIVE/MIXED
+    wra_fresh_box            VARCHAR(5),                      -- Fresh/Box
+    wra_shade_code           VARCHAR(30),
     wra_qty_allocated        DECIMAL(18,3) NOT NULL,
-    wra_lot_picking_mode     VARCHAR(10),              -- STRICT / FLEXIBLE / FIFO
-    wra_rm_source            VARCHAR(10),              -- STORE / CAPTIVE / MIXED
     wra_notes                TEXT
-);
-
-CREATE TABLE wo_actual_log (
-    wal_id                   BIGSERIAL PRIMARY KEY,
-    wal_wo_id                BIGINT        NOT NULL,
-    wal_wpa_id               BIGINT,                  -- FK ke WO_PRODUCTION_ACTUAL (nullable)
-    wal_qty_before           DECIMAL(18,3),
-    wal_qty_after            DECIMAL(18,3),
-    wal_source_before        VARCHAR(20),
-    wal_source_after         VARCHAR(20),
-    wal_reason               TEXT,
-    wal_edited_by            BIGINT        NOT NULL,
-    wal_edited_at            TIMESTAMPTZ   DEFAULT NOW()
 );
 ```
 
----
-
-## Mapping MLR → Sistem Baru
-
-| MLR Entity | Sistem Baru | Keterangan |
-|---|---|---|
-| Header MLR (lot, mesin) | `WORK_ORDER` | WO = header instruksi |
-| Parameter mesin (speed, nozzle, dll) | `WO_PARAMETER` + `WO_EXECUTION` | Planned vs actual |
-| Qty produksi per shift | `WO_PRODUCTION_ACTUAL` | Suggest dari ETL, editable |
-| Packing data | `WO_GRADE_ACTUAL` | Dari ETL packing Oracle |
-
-**Phase 1:** MLR Oracle tetap jalan paralel. Sistem PPC menggunakan data yang
-sama (dari ETL Oracle summary tables) sebagai suggest. User bisa koreksi di PPC.
-
-**Phase 2+:** MLR bisa diretire secara bertahap setelah adoption stabil.
+`WO_PRODUCTION_ACTUAL`, `WO_GRADE_ACTUAL`, `WO_ACTUAL_LOG` → lihat halaman 13 (model
+produksi dua-sumbu) & halaman 12.

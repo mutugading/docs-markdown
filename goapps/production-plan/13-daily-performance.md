@@ -22,19 +22,28 @@ Konsekuensi arsitektur:
 
 ## Shift Entry — Input Operator per Shift
 
-Titik input tunggal: **entry operator di akhir tiap shift, per mesin**. Form dua bagian
+Titik input tunggal: **entry operator di akhir tiap shift, per mesin**. Layar **berbasis
+mesin + shift** — operator pilih mesin+shift, lalu muncul semua lot/WO yang running di mesin
+itu (multi-lot per mesin, cocok cara mereka duduk di satu mesin per shift). Form dua bagian
 karena granularity campur:
 
 | Bagian | Granularity | Isi |
 |---|---|---|
-| **Level mesin** | machine + date + shift | Posisi running, running time (menit), downtime/idle event per posisi + reason, activity note |
-| **Level WO/lot** | WO + date + shift | Qty produksi (prefill dari ETL bobbin sebagai suggest), waste per kategori, breaks, doff count, changeover failure |
+| **Level mesin** | machine + date + shift | Posisi running, **downtime/idle event** per posisi + reason (running time **diturunkan**, tidak diketik), log book (INSTRUKSI/ACTIVITY) |
+| **Level WO/lot** | WO + date + shift | Qty produksi (**prefill bobbin**, editable → `qty_actual`), waste per kategori, breaks per shift, doff count, changeover failure |
 
-Prinsip form:
-- **Prefill dari ETL** — bobbin count dari Oracle muncul sebagai suggest; operator konfirmasi/koreksi
-- **Cepat** — default kategori waste = 0, hanya isi yang ada
-- Parameter mesin actual tetap di `WO_EXECUTION` (existing, tidak berubah)
-- Reminder H+1 jika shift log belum lengkap
+Prinsip form (lihat "Model Data Produksi" untuk detail):
+- **Prefill dari ETL bobbin** — qty muncul sebagai `qty_actual` (default = `qty_bobbin`),
+  operator konfirmasi/koreksi. Tidak pernah blank.
+- **Running time diturunkan** dari downtime (waktu penuh − downtime) — operator hanya catat
+  kejadian idle, tidak menghitung jam.
+- **Efisiensi dihitung sistem**, tidak diketik. Data pendukung (YS, denier, posisi,
+  std-weight) prefill dari WO/master (well-known param codes).
+- **Cepat** — default kategori waste = 0, hanya isi yang ada.
+- Parameter mesin actual tetap di `WO_EXECUTION`.
+- **Tanpa approval** — daily data diperlakukan seperti Excel MIS sekarang: draft → submit,
+  tetap bisa dikoreksi, **tidak digerbang approval**. Kebenaran final produksi ada di
+  **packing** (ETL), bukan daily report. Reminder H+1 jika shift log belum lengkap.
 
 ---
 
@@ -114,15 +123,77 @@ Trial & Small lot — dan *Including*), **Efficiency ACY** (rewinding AM→AX), 
 
 ---
 
-## Klasifikasi Produksi — Excluding / Including
+## Model Data Produksi — Dua Sumbu (v1.2)
 
-Report menyajikan efficiency versi *Excluding (Power failure, B-to-B, APQ, Trial & Small lot)*
-dan *Including*. Implementasi:
+Legacy (`PRD_TXT_MCHN_ACT`) menyimpan tiga angka produksi manual: current, `_ORGL`, `_REAL`.
+Analisa membuktikan itu **dua sumbu berbeda**, dan di sistem baru dua-duanya **diturunkan** —
+tidak ada kolom `_ORGL`/`_REAL` yang diisi tangan.
+
+### Prinsip perilaku input (dasar desain)
+
+Jangan pernah tampilkan kosong kalau ada default yang bisa dipertanggungjawabkan. Prefill
+semua yang bisa dihitung; angka final editable dan jadi "milik" operator. Worst case = angka
+agak meleset **tapi ada jejaknya**, bukan blank/hilang.
+
+### Sumbu A — Audit (jejak koreksi) = `_ORGL`
+
+- `wpa_qty_bobbin` — dari ETL bobbin tracking, **immutable** (baseline objektif).
+- `wpa_qty_actual` — current, **editable**, default = `wpa_qty_bobbin` (tidak pernah blank).
+- `wpa_qty_source` — BOBBIN / ADJUSTED; koreksi dicatat di `WO_ACTUAL_LOG` (before/after/by/when/reason).
+- Delta `qty_actual − qty_bobbin` = sinyal audit. Lebih kuat dari legacy karena baseline-nya
+  scan bobbin (objektif), bukan entry manual. Pola koreksi berulang jadi kelihatan.
+
+> **Bobbin tracking = supporting data.** Aktual boleh beda dari bobbin: kalau operator
+> koreksi → angkanya milik mereka; kalau tidak dikoreksi → ter-justifikasi oleh bobbin.
+> Dua-duanya cocok dengan model mental user. Efisiensi **selalu** dari `qty_actual`.
+
+### Sumbu B — Scope (Including vs Excluding) = `_REAL`
+
+`_REAL` = basis **Excluding** (dikonfirmasi dari Excel: Produksi Excl 105.043 < Incl 108.772;
+Eff DTY Excl 95,26% > Incl 93,38%). Tidak disimpan manual — diturunkan dari tag:
 
 - `wo_prod_category` di `WORK_ORDER`: `NORMAL / B_TO_B / APQ / TRIAL / SMALL_LOT`
-- Power failure = downtime event dengan reason kategori `POWER_FAILURE`
-  (flag `drm_is_exclude_from_eff`)
-- Kalkulasi *Excluding* = exclude WO ber-kategori ≠ NORMAL + exclude loss power failure
+- Power failure = downtime event `drm_is_exclude_from_eff = true`
+- **Including = Σ qty_actual (semua)**
+- **Excluding = Σ qty_actual yang NORMAL & bukan power-failure**
+- Dua-duanya on-the-fly, Today + Todate.
+
+### Efficiency — derived-only dari `qty_actual`
+
+Tidak ada opsi ketik %. Kalau hasil "harusnya 96% tapi 94%", operator perbaiki **input**
+(qty / running time / posisi), bukan mengetik %. Lebih jujur & tetap terkendali. Semua input
+pembentuk efisiensi (qty, YS, posisi, running time) ditampilkan & bisa di-adjust.
+
+### Beban input operator (ringan)
+
+Dari ~34 kolom manual legacy → tinggal: (1) konfirmasi/koreksi qty (prefill bobbin),
+(2) log downtime/idle → sistem turunkan running time & lost kg, (3) waste per kategori +
+breaks. Sisanya (theoretical, semua efficiency, break/ton) dihitung sistem; data pendukung
+(YS, denier, posisi, std-weight) prefill dari WO/master (well-known param codes).
+
+### Efficiency sliceable (kasus ATEJA)
+
+ATEJA = nama customer; dulu di-hardcode sebagai exclusion permanen (spec tinggi → efisiensi
+rendah → merusak agregat). Itu bikin sistem tidak standar. **Solusi:** angka headline
+Excluding **hanya** pakai exclusion universal-objektif (power failure, B-to-B, APQ, trial,
+small lot) — customer **tidak** masuk. Kebutuhan "lihat efisiensi ATEJA" atau "exclude ATEJA"
+= **filter/slice dashboard** (per customer/produk/grade/mesin/line), gratis karena customer
+mengalir demand → WO → produksi. Kalau memang mau memperhitungkan produk rewel, caranya
+**target efisiensi per produk** (dari route), bukan exclude customer dari agregat.
+
+---
+
+## Produksi ↔ Packing — nyambung by lot
+
+Dua angka, dua sumber, dua tujuan — penggabungan box **tidak** memengaruhi efisiensi:
+
+- **Efisiensi mesin** dari **produksi** (`qty_actual` per WO/lot/mesin, dari doff bobbin),
+  di-capture **sebelum** packing → presisi per mesin.
+- **Angka final + grade** dari **packing** (`WO_GRADE_ACTUAL`, ETL Oracle), per lot/merge,
+  **di-link by lot**; satu box boleh gabung beberapa lot → presisi per-mesin bisa hilang di
+  packing, **by design**, karena efisiensi tidak pernah ambil dari packing.
+- Lot = jembatan: produksi per-lot (→ mesin presisi), packing per-box (→ berisi beberapa lot).
+- Info machine no tetap ada di packing tapi tidak dipakai hitung efisiensi.
 
 ---
 
@@ -147,14 +218,20 @@ Input: operator per shift, per WO (atau per mesin untuk waste yang tidak terikat
 
 - **Downtime/idle event**: per mesin (opsional per posisi & per WO), start–end / durasi menit,
   reason code, lost production (kg + %) — lost kg auto-calculated dari theoretical rate.
-- **Reason master** per area (configurable):
-  - TXT idle position: `XST`, `LB`, `TP`, `Fuse`, `Bowl`, …
+- **Dua jenis loss** (dari legacy `PTMA_IDLE_POSITION_KGS` vs `PTMA_IDLE_TIME_KGS`):
+  `de_loss_type` = `POSITION` (posisi idle) atau `TIME` (waktu idle), plus `de_idle_type`
+  = `24` / `N24` (idle 24 jam vs non-24 jam). Running time diturunkan dari sini
+  (waktu penuh − downtime); operator **tidak** mengetik running time.
+- **Reason master** per area (configurable), seed direkonsiliasi dari app + Excel:
+  - TXT idle position: `XST`, `YB`, `TP`, `OLT`, `LB`, `Fuse`, `Bowl`, … (app: TP/YB/XST/OLT)
   - SPG production loss: `Reguler`, `CPF`, `Utility`, `Electric`, `Power Plants`, `Others`
   - TWT: start up, MC off, ganti proses, breakdown, …
-- **Activity log** naratif per mesin per shift (changeover, stop doff, thread up,
-  premature doff kg/BB, perbaikan mekanik/elektrik) — menggantikan sheet `ACTIVITY`/`Reason`.
-- Changeover yang sudah dimodelkan di `CHANGEOVER_EVENT` **tetap di sana**; downtime event
-  dapat me-refer `ce_id` agar tidak dobel hitung.
+  - Konfirmasi arti kode & kelengkapan dengan tim produksi sebelum development.
+- **Log book dua tipe** (dari `PTMAL_` INSTRUKSI vs ACTIVITY): `SHIFT_LOG_NOTE` per mesin per
+  shift dengan `sln_type` = `INSTRUKSI` (handover) atau `ACTIVITY` (kegiatan) — menggantikan
+  sheet `ACTIVITY`/`Reason` + log book legacy.
+- Changeover di `CHANGEOVER_EVENT` **tetap di sana**; downtime event me-refer `ce_id` agar
+  tidak dobel hitung.
 
 ---
 
@@ -219,9 +296,9 @@ CREATE TABLE machine_shift_log (
     msl_shift                CHAR(1)       NOT NULL,   -- 1 / 2 / 3
     msl_positions_total      INT,                       -- posisi terpasang
     msl_positions_running    DECIMAL(8,2),              -- posisi running (bisa fraksi)
-    msl_running_minutes      INT,                       -- menit running mesin
-    msl_activity_note        TEXT,                      -- activity log naratif
-    msl_status               VARCHAR(20)   DEFAULT 'DRAFT', -- DRAFT / FINAL
+    msl_running_minutes      INT,                       -- DERIVED dari downtime (v1.2), bukan diketik
+    -- activity note → shift_log_note (INSTRUKSI/ACTIVITY), v1.2
+    msl_status               VARCHAR(20)   DEFAULT 'DRAFT', -- DRAFT / FINAL (tanpa approval)
     msl_input_by             BIGINT        NOT NULL,
     msl_input_at             TIMESTAMPTZ   DEFAULT NOW(),
     msl_updated_at           TIMESTAMPTZ   DEFAULT NOW(),
@@ -348,18 +425,46 @@ CREATE TABLE efficiency_snapshot (
 
 ```sql
 -- WORK_ORDER: klasifikasi produksi utk versi Excluding/Including
-ALTER TABLE work_order ADD COLUMN wo_prod_category VARCHAR(15) DEFAULT 'NORMAL';
-       -- NORMAL / B_TO_B / APQ / TRIAL / SMALL_LOT
+--   (wo_prod_category sudah didefinisikan di halaman 5 / 12)
 
--- WO_PRODUCTION_ACTUAL: dual qty SPG + KPI shift dari operator
+-- WO_PRODUCTION_ACTUAL: model dua-sumbu (v1.2)
 ALTER TABLE wo_production_actual
-    ADD COLUMN wpa_qty_doffed_kg      DECIMAL(18,3),  -- SPG: GROSS × weight (basis efficiency)
-    ADD COLUMN wpa_qty_transferred_kg DECIMAL(18,3),  -- SPG: TRANSFERRED × weight (basis fulfillment)
-    ADD COLUMN wpa_breaks_count       INT,            -- input operator
-    ADD COLUMN wpa_doff_full_count    INT,
-    ADD COLUMN wpa_doff_manual_count  INT,            -- revolving manual
-    ADD COLUMN wpa_co_failure_count   INT;            -- change over failure
+    -- Sumbu Audit: baseline objektif + current editable (pengganti _ORGL)
+    ADD COLUMN wpa_qty_bobbin        DECIMAL(18,3),  -- ETL bobbin, immutable (baseline)
+    ADD COLUMN wpa_qty_actual        DECIMAL(18,3),  -- current, editable, default = qty_bobbin
+    ADD COLUMN wpa_qty_source        VARCHAR(10)   DEFAULT 'BOBBIN', -- BOBBIN / ADJUSTED
+    -- SPG dual basis (doffed = efficiency, transferred = fulfillment)
+    ADD COLUMN wpa_qty_doffed_kg     DECIMAL(18,3),  -- SPG: basis qty_bobbin/efficiency
+    ADD COLUMN wpa_qty_transferred_kg DECIMAL(18,3), -- SPG: basis fulfillment
+    -- KPI shift input operator
+    ADD COLUMN wpa_breaks_shift1     INT,
+    ADD COLUMN wpa_breaks_shift2     INT,
+    ADD COLUMN wpa_breaks_shift3     INT,            -- breaks per shift (legacy YARNBREAK_1/2/3)
+    ADD COLUMN wpa_doff_full_count   INT,
+    ADD COLUMN wpa_doff_manual_count INT,            -- revolving manual
+    ADD COLUMN wpa_co_failure_count  INT;            -- change over failure
+-- Incl/Excl & efisiensi = DERIVED dari wpa_qty_actual + wo_prod_category (tidak disimpan manual)
+
+-- SHIFT_LOG_NOTE: log book dua tipe (INSTRUKSI / ACTIVITY)
+CREATE TABLE shift_log_note (
+    sln_id                   BIGSERIAL PRIMARY KEY,
+    sln_machine_id           BIGINT        NOT NULL,
+    sln_date                 DATE          NOT NULL,
+    sln_shift                CHAR(1)       NOT NULL,
+    sln_type                 VARCHAR(15)   NOT NULL,   -- INSTRUKSI / ACTIVITY
+    sln_note                 TEXT          NOT NULL,
+    sln_input_by             BIGINT        NOT NULL,
+    sln_input_at             TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- DOWNTIME_EVENT: tambah dua jenis loss + tipe 24/N24
+ALTER TABLE downtime_event
+    ADD COLUMN de_loss_type          VARCHAR(10),   -- POSITION / TIME
+    ADD COLUMN de_idle_type          VARCHAR(5);    -- 24 / N24
 ```
+
+> `machine_shift_log.activity_note` (v1.1) digantikan `shift_log_note` (dua tipe).
+> `wpa_breaks_count` (v1.1) digantikan breaks per shift.
 
 ---
 
@@ -371,8 +476,8 @@ ALTER TABLE wo_production_actual
 | `TX` Effcy. TX1/TX2 | `efficiency_snapshot` (MACHINE_SHIFT/DAY) per lot |
 | `Eff_*` grid MC EFF | Heatmap MC EFF (snapshot MACHINE_SHIFT sebulan) |
 | `TX` waste & pck prodn | `waste_actual` + `wo_grade_actual` (FQ/AX dari packing) |
-| `TX` Idle TX1/TX2 | `downtime_event` kategori IDLE_POSITION |
-| `TX/TWT/SPG` Activity / Reason | `machine_shift_log.activity_note` + `downtime_event` |
+| `TX` Idle TX1/TX2 | `downtime_event` (loss_type POSITION) |
+| `TX/TWT/SPG` Activity / Reason | `shift_log_note` (INSTRUKSI/ACTIVITY) + `downtime_event` |
 | `TWT` daily per autoclave/mesin | `efficiency_snapshot` + `wo_production_actual` |
 | `TWT` WASTE | `waste_actual` per tipe mesin |
 | `TWT` DOWNTIME MEERABAH | `downtime_event` + target di `downtime_reason_master`/config |
@@ -381,3 +486,7 @@ ALTER TABLE wo_production_actual
 | `SPG` WASTE | `waste_actual` rollup per line, with/without upsets |
 | `SPG` DG | `waste_actual` tipe DOWNGRADE |
 | `SPG` Report (WIP POY + Chips) | **Di luar scope** (lihat catatan di atas) |
+
+> **Sumber data (v1.2):** efficiency/waste/idle/activity **dibangun native** (input operator
+> + kalkulasi sistem), **tidak** ditarik dari `PRD_TXT_MCHN_ACT`. Satu-satunya ETL Oracle =
+> bobbin tracking (qty) + packing (grade). Transisi = cutover per area (lihat halaman 11).

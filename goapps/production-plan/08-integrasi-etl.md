@@ -144,9 +144,15 @@ bila diperlukan = `NOT_TRANSFER × weight` (turunan, tanpa tabel baru).
 | PostgreSQL write | UPSERT by natural key | `ON CONFLICT DO UPDATE` |
 | On ETL fail | `wpa_sync_status = SYNC_FAILED` | Alert ke PPC |
 
-**Catatan v1.1:** Efficiency, waste, downtime/idle, running time & posisi running
-**tidak tersedia di Oracle** — bukan scope ETL. Sumbernya input operator per shift
-(shift entry) dan kalkulasi engine di sistem PPC. Lihat halaman 13.
+**Catatan v1.2 — batas scope ETL Oracle:** Satu-satunya pull dari Oracle =
+**(1) bobbin tracking** (qty produksi + TQM) dan **(2) packing** (grade). Efficiency,
+waste, downtime/idle, running time & posisi running, activity **dibangun native** (input
+operator + kalkulasi sistem PPC) — bukan scope ETL.
+
+MLR (`PRD_TXT_MLR_ENTRY`) dan machine daily report (`PRD_TXT_MCHN_ACT`) **tidak ditarik** —
+dua-duanya di-rebuild native di sistem baru (referensi DDL/JSON dipakai untuk rancang-ulang,
+bukan feed data). Karena tidak ditarik, transisi = **cutover per area**, bukan parallel-feed.
+Lihat halaman 5 & 13.
 
 ---
 

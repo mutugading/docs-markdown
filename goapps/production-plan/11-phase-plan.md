@@ -10,7 +10,9 @@ scope dibatasi per area.
 
 ## Phase 1 — Foundation + TXT (Bulan 1–4)
 
-**Target:** PPC mulai pakai sistem baru untuk area TXT. MLR tetap jalan paralel sebagai fallback.
+**Target:** PPC mulai pakai sistem baru untuk area TXT. Transisi = **cutover per area**
+(bukan MLR jalan paralel — data MLR/daily tidak ditarik, jadi parallel = double-entry).
+Overlap double-entry singkat opsional demi keamanan saat go-live.
 
 ### Scope
 
@@ -21,8 +23,10 @@ scope dibatasi per area.
 - IAM integration: role PPC, PC, PM, Marketing
 
 **Master Data**
-- `PRODUCT_PPC_CONFIG` (extend dari CPM_ BOM Phase B)
-- `PRODUCT_MACHINE_CAPACITY` (dari data `01_PROD` Excel)
+- `PRODUCT_PPC_CONFIG` (extend dari CPM_)
+- Konsumsi **product route** (`cost_route_head/seq/rm`) + **product-parameter**
+  (`mst_parameter` + `cost_product_parameter`) dari Costing
+- `PRODUCT_MACHINE_PARAMETER` (layer nilai per produk+mesin, Opsi A) + `PRODUCT_MACHINE_CAPACITY` (planning)
 - `LOT_MASTER`, `MACHINE_MASTER` (TXT)
 
 **Layer 1 — Production Demand (full scope)**
@@ -34,10 +38,13 @@ scope dibatasi per area.
 - CRUD plan item TXT
 - Gantt view per mesin per hari
 
-**Layer 3 — Work Order TXT**
-- Generate WO, dual approval (PC + PM)
-- WO parameter teknis + WO_EXECUTION
-- RM Allocation manual (Phase 1)
+**Layer 3 — Work Order TXT (route + product-parameter driven, v1.2)**
+- Generate WO dari plan (snapshot route `crh_head_id`+version), lot no di-generate PPC
+- WO_PARAMETER dari product-parameter (`display_group='Machine'`), dual PPC/PC (8 param), well-known codes
+- WO_RM_ALLOCATION dari `cost_route_rm` (N komponen) + genealogy otomatis
+- Approval **PC → PM sequential**, auto-approve 24 jam (bisa di-disable)
+- WO reference (duplicate / continuation)
+- Snapshot spec saat approve · grade req dari demand (override)
 - Over-production threshold
 
 **ETL TXT**
@@ -45,12 +52,14 @@ scope dibatasi per area.
 - `PPC_TXT_PRODUCTION` → `WO_PRODUCTION_ACTUAL`
 - TQM breakdown: NORMAL / DOWNGRADE / PENDING per doff
 
-**Daily Performance TXT (v1.1 — halaman 13)**
-- Shift entry operator TXT: produksi (prefill ETL), running posisi & waktu,
-  waste, downtime/idle + reason master, breaks, activity
-- Efficiency engine TXT: Production/Running Eff, MC EFF grid, versi Excl/Incl
-- `EFFICIENCY_SNAPSHOT`, `WASTE_ACTUAL`, `DOWNTIME_EVENT` + master
-- Dashboard Daily Performance TXT + Export to Excel
+**Daily Performance TXT (v1.2 — halaman 13, rebuild native)**
+- Shift entry berbasis mesin+shift: qty prefill bobbin (→ `qty_actual`, editable),
+  running time diturunkan dari downtime, waste, breaks per shift, log book (INSTRUKSI/ACTIVITY)
+- Model dua-sumbu: audit (`qty_bobbin`/`qty_actual`) + scope (tag → Incl/Excl); efisiensi derived-only
+- Efficiency engine TXT: Production/Running Eff, MC EFF grid; sliceable per customer/produk (ATEJA=filter)
+- `EFFICIENCY_SNAPSHOT`, `WASTE_ACTUAL`, `DOWNTIME_EVENT`, `SHIFT_LOG_NOTE` + master
+- **Tanpa approval** (final dari packing). Dashboard + Export to Excel
+- **Tidak** ada ETL dari `PRD_TXT_MCHN_ACT` — dibangun native
 
 **Dashboard**
 - Morning review TXT
@@ -60,10 +69,13 @@ scope dibatasi per area.
 
 | Item | Status |
 |---|---|
-| BOM Phase B schema | ETA 2–3 hari |
 | ETL Bobbin queries + DDL Oracle | ✅ Selesai |
 | MACH_DEPT konfirmasi | ✅ TXT='TXT', TWT='TWT' |
 | SO Orion via MGT_SO_PENDING_WEB | ✅ Selesai |
+| Product route (`cost_route_head/seq/rm`) | ✅ DDL diterima |
+| `cost_product_parameter` + `mst_parameter` | ✅ DDL diterima |
+| **`is_for_production` flag di `mst_parameter`** (tim Costing) | ⏳ rekomendasi — sementara pakai `display_group='Machine'` |
+| **Parameter type=PRODUCTION diisi per produk** (produksi via modul Costing) | ⏳ butuh koordinasi tim produksi/costing |
 
 ---
 
@@ -78,7 +90,7 @@ scope dibatasi per area.
   Yield/Efficiency/Plant/Machine Eff, waste 8 kategori (with/without upsets),
   production loss 6 kategori, downgrade record, Change Over % & Breaks/Ton
 - Captive RM tracking (STORE/CAPTIVE/MIXED)
-- RM Allocation connect BOM Phase B
+- RM Allocation connect product route (`cost_route_rm`) — genealogy otomatis
 - Changeover component-based (C1–C7)
 - Balance for Sale full
 - MTS demand full workflow
@@ -120,7 +132,7 @@ Bulan 8–9:  Full analytics + Excel retirement
 
 | # | Item | Phase | Status |
 |---|---|---|---|
-| 1 | BOM Phase B schema → `WO_RM_ALLOCATION` Phase 2 | Phase 2 | ETA 2–3 hari |
+| 1 | `is_for_production` flag di `mst_parameter` (tim Costing) — sementara `display_group='Machine'` | Phase 1 | Open |
 | 2 | Changeover durasi & waste — validasi tim produksi | Phase 2 | Open |
 | 3 | Threshold SPG & TWT data aktual | Phase 2 | Open |
 | 4 | Validasi definisi break metrics TXT (original vs inspection) | Phase 1 | Open |
