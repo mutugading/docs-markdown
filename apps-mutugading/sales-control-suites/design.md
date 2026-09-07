@@ -353,33 +353,53 @@ for the message.
 
 ## 8. Routes
 
+Every page sits under a `sales-control` segment, so the suite is one branch of the URL tree rather
+than nine names scattered through `master.` and `transaction.`.
+
 ```php
 // Modules/Finance/routes/web.php, inside the existing dashboard/module-finance group
 
 Route::prefix('master')->name('master.')->group(function () {
-    Route::get('min-price', MinPriceManager::class)
-        ->name('min-price')->middleware(['can:finance-min_price-view']);
-    Route::get('min-price-approval', MinPriceApprovalManager::class)
-        ->name('min-price-approval')->middleware(['can:finance-min_price-approve']);
+    Route::prefix('sales-control')->name('sales-control.')->group(function () {
+        Route::get('min-price', MinPriceManager::class)
+            ->name('min-price')->middleware(['can:finance-min_price-view']);
+        Route::get('min-price-approval', MinPriceApprovalManager::class)
+            ->name('min-price-approval')->middleware(['can:finance-min_price-approve']);
+    });
 });
 
 Route::prefix('transaction')->name('transaction.')->group(function () {
-    Route::get('price-check', PriceCheckPreview::class)
-        ->name('price-check')->middleware(['can:finance-price_exception-view']);
-    Route::get('price-exception', PriceExceptionRequest::class)
-        ->name('price-exception')->middleware(['can:finance-price_exception-create']);
-    Route::get('price-exception-approval', PriceExceptionApproval::class)
-        ->name('price-exception-approval')->middleware(['can:finance-price_exception-approve']);
-    Route::get('price-exception-report', PriceExceptionReport::class)
-        ->name('price-exception-report')->middleware(['can:finance-price_exception-report']);
-    Route::get('price-rejection-report', PriceRejectionReport::class)
-        ->name('price-rejection-report')->middleware(['can:finance-price_exception-report']);
+    Route::prefix('sales-control')->name('sales-control.')->group(function () {
+        // The suite's landing page. The Finance dashboard links here once
+        // instead of carrying all eight pages itself.
+        Route::get('/', SalesControlDashboard::class)->name('index')
+            ->middleware(['permission:finance-sales_control-dashboard-view']);
+
+        Route::get('min-price-active-report', MinPriceActiveReport::class)
+            ->name('min-price-active-report')->middleware(['can:finance-min_price-view']);
+        Route::get('price-exception-report', PriceExceptionReport::class)
+            ->name('price-exception-report')->middleware(['can:finance-price_exception-report']);
+        Route::get('price-rejection-report', PriceRejectionReport::class)
+            ->name('price-rejection-report')->middleware(['can:finance-price_exception-report']);
+
+        Route::get('price-check', PriceCheckPreview::class)
+            ->name('price-check')->middleware(['can:finance-price_exception-view']);
+        Route::get('price-exception', PriceExceptionRequest::class)
+            ->name('price-exception')->middleware(['can:finance-price_exception-create']);
+        Route::get('price-exception-approval', PriceExceptionApproval::class)
+            ->name('price-exception-approval')->middleware(['can:finance-price_exception-approve']);
+    });
 });
 ```
 
 The existing `master` group is wrapped in `role_or_permission:Super Admin|manage-master-finance`; the
 two min-price routes need their own `can:` on top, so declare them in a sibling group rather than
 inside it.
+
+The landing page's gate is the one dedicated `finance-sales_control-dashboard-view`, not a list of
+the others: opening the page is not the same as being able to use anything on it. Each link and
+counter on it is gated on the permission for the page it points at, so a holder of the dashboard
+permission alone sees an empty page rather than links that 403.
 
 Breadcrumbs for every route in `Modules/Finance/routes/breadcrumbs.php` — required anyway, and
 `PageTitleHelper` derives the browser tab title from the last crumb, so a missing breadcrumb is also
@@ -394,6 +414,8 @@ own `Modules\Auth\Models\RolePermission\{Role,Permission}` (they pin the connect
 `oracle_mgthris`), and `forgetCachedPermissions()` either side.
 
 ```
+finance-sales_control-dashboard-view    # open the suite's landing page
+
 finance-min_price-view
 finance-min_price-draft         # create and edit DRAFT rules
 finance-min_price-submit        # raise the PRICELIST request
@@ -410,7 +432,13 @@ finance-price_exception-report
 
 Roles: `Min Price - Maker` (view, draft, submit, print), `Min Price - Approver` (view, print, approve,
 void), `Sales Exception - Requester` (exception view, create, print), `Sales Exception - Approver`
-(exception view, print, approve, report). `Super Admin` gets all of them.
+(exception view, print, approve, report). All four also get
+`finance-sales_control-dashboard-view` — every one of them starts from the landing page.
+`Super Admin` gets all of them.
+
+There is no `Gate::before` bypass for `Super Admin` in this app: it can do everything only because
+the seeder grants it every permission explicitly. So a new permission is invisible to *everyone*,
+Super Admin included, until this seeder is re-run.
 
 Print is separate from draft on purpose: printing is what freezes the content and starts the paper
 trail, and it is worth being able to say who did it.
