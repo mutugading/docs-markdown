@@ -47,38 +47,38 @@
 -- ---------------------------------------------------------------------
 CREATE TABLE MGTHRIS.SALES_CTL_APPR_REQUEST
 (
-    SCAR_SYS_ID          NUMBER(12)          NOT NULL,
-    SCAR_REQ_NO          VARCHAR2(30 BYTE)   NOT NULL,
-    SCAR_REVISION        NUMBER(3)           DEFAULT 0 NOT NULL,
-    SCAR_CTRL_TYPE       VARCHAR2(12 BYTE)   NOT NULL,
-    SCAR_STATUS          VARCHAR2(12 BYTE)   DEFAULT 'DRAFT' NOT NULL,
-    SCAR_CUST_CODE       VARCHAR2(12 BYTE),
-    SCAR_SOH_SYS_ID      NUMBER(12),
-    SCAR_TXN_CODE        VARCHAR2(12 BYTE),
-    SCAR_DOC_NO          NUMBER(10),
-    SCAR_DOC_DT          DATE,
-    SCAR_CURR_CODE       VARCHAR2(12 BYTE),
-    SCAR_AMOUNT          NUMBER,
-    SCAR_VALID_FROM      DATE,
-    SCAR_VALID_TO        DATE,
-    SCAR_REASON          VARCHAR2(2000 BYTE),
-    SCAR_PRINT_COUNT     NUMBER(4)           DEFAULT 0,
-    SCAR_PRINT_DT        DATE,
-    SCAR_PRINT_UID       VARCHAR2(12 BYTE),
-    SCAR_BOD_DOC_NO      VARCHAR2(60 BYTE),
-    SCAR_BOD_DOC_DT      DATE,
-    SCAR_BOD_SIGNER      VARCHAR2(120 BYTE),
-    SCAR_ATTACH_PATH     VARCHAR2(500 BYTE),
-    SCAR_ATTACH_HASH     VARCHAR2(64 BYTE),
-    SCAR_APPR_UID        VARCHAR2(12 BYTE),
-    SCAR_APPR_DT         DATE,
-    SCAR_REJ_REASON      VARCHAR2(2000 BYTE),
-    SCAR_CR_UID          VARCHAR2(12 BYTE)   NOT NULL,
-    SCAR_CR_DT           DATE                NOT NULL,
-    SCAR_UPD_UID         VARCHAR2(12 BYTE),
-    SCAR_UPD_DT          DATE
+  SCAR_SYS_ID          NUMBER(12)          NOT NULL,
+  SCAR_REQ_NO          VARCHAR2(30 BYTE)   NOT NULL,
+  SCAR_REVISION        NUMBER(3)           DEFAULT 0 NOT NULL,
+  SCAR_CTRL_TYPE       VARCHAR2(12 BYTE)   NOT NULL,
+  SCAR_STATUS          VARCHAR2(12 BYTE)   DEFAULT 'DRAFT' NOT NULL,
+  SCAR_CUST_CODE       VARCHAR2(12 BYTE),
+  SCAR_SOH_SYS_ID      NUMBER(12),
+  SCAR_TXN_CODE        VARCHAR2(12 BYTE),
+  SCAR_DOC_NO          NUMBER(10),
+  SCAR_DOC_DT          DATE,
+  SCAR_CURR_CODE       VARCHAR2(12 BYTE),
+  SCAR_AMOUNT          NUMBER,
+  SCAR_VALID_FROM      DATE,
+  SCAR_VALID_TO        DATE,
+  SCAR_REASON          VARCHAR2(2000 BYTE),
+  SCAR_PRINT_COUNT     NUMBER(4)           DEFAULT 0,
+  SCAR_PRINT_DT        DATE,
+  SCAR_PRINT_UID       VARCHAR2(12 BYTE),
+  SCAR_BOD_DOC_NO      VARCHAR2(60 BYTE),
+  SCAR_BOD_DOC_DT      DATE,
+  SCAR_BOD_SIGNER      VARCHAR2(120 BYTE),
+  SCAR_ATTACH_PATH     VARCHAR2(500 BYTE),
+  SCAR_ATTACH_HASH     VARCHAR2(64 BYTE),
+  SCAR_APPR_UID        VARCHAR2(12 BYTE),
+  SCAR_APPR_DT         DATE,
+  SCAR_REJ_REASON      VARCHAR2(2000 BYTE),
+  SCAR_CR_UID          VARCHAR2(12 BYTE)   NOT NULL,
+  SCAR_CR_DT           DATE                NOT NULL,
+  SCAR_UPD_UID         VARCHAR2(12 BYTE),
+  SCAR_UPD_DT          DATE
 )
-    TABLESPACE ORION
+TABLESPACE ORION
 PCTFREE 10 INITRANS 50 MAXTRANS 255
 STORAGE (INITIAL 1M NEXT 1M MINEXTENTS 1 MAXEXTENTS UNLIMITED PCTINCREASE 0);
 
@@ -88,20 +88,20 @@ COMMENT ON COLUMN MGTHRIS.SALES_CTL_APPR_REQUEST.SCAR_AMOUNT    IS 'Nominal tamb
 COMMENT ON COLUMN MGTHRIS.SALES_CTL_APPR_REQUEST.SCAR_ATTACH_HASH IS 'SHA-256 file scan, untuk deteksi file diganti';
 
 CREATE UNIQUE INDEX MGTHRIS.SALES_CTL_APPR_REQUEST_PK
-    ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_SYS_ID)
-    TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_SYS_ID)
+  TABLESPACE ORION;
 
 CREATE UNIQUE INDEX MGTHRIS.SALES_CTL_APPR_REQUEST_UK01
-    ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_REQ_NO, SCAR_REVISION)
-    TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_REQ_NO, SCAR_REVISION)
+  TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_CTL_APPR_REQUEST_NX01
-    ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_CTRL_TYPE, SCAR_STATUS, SCAR_CUST_CODE)
-    TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_CTRL_TYPE, SCAR_STATUS, SCAR_CUST_CODE)
+  TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_CTL_APPR_REQUEST_NX02
-    ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_SOH_SYS_ID)
-    TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_REQUEST (SCAR_SOH_SYS_ID)
+  TABLESPACE ORION;
 
 ALTER TABLE MGTHRIS.SALES_CTL_APPR_REQUEST ADD (
   CONSTRAINT SALES_CTL_APPR_REQUEST_PK PRIMARY KEY (SCAR_SYS_ID)
@@ -122,22 +122,22 @@ ALTER TABLE MGTHRIS.SALES_CTL_APPR_REQUEST ADD (
 -- ---------------------------------------------------------------------
 CREATE TABLE MGTHRIS.SALES_CTL_APPR_LINE
 (
-    SCAL_SYS_ID           NUMBER(12)         NOT NULL,
-    SCAL_SCAR_SYS_ID       NUMBER(12)         NOT NULL,
-    SCAL_SOI_SYS_ID       NUMBER(12),
-    SCAL_ITEM_CODE        VARCHAR2(20 BYTE),
-    SCAL_GRADE_CODE_1     VARCHAR2(12 BYTE),
-    SCAL_GRADE_CODE_2     VARCHAR2(40 BYTE),
-    SCAL_UOM_CODE         VARCHAR2(12 BYTE),
-    SCAL_CURR_CODE        VARCHAR2(12 BYTE),
-    SCAL_APPROVED_RATE    NUMBER,
-    SCAL_APPROVED_QTY_BU  NUMBER,
-    SCAL_MIN_PRICE_USD    NUMBER(18,3),
-    SCAL_RATE_USD         NUMBER(18,6),
-    SCAL_CR_UID           VARCHAR2(12 BYTE)  NOT NULL,
-    SCAL_CR_DT            DATE               NOT NULL
+  SCAL_SYS_ID           NUMBER(12)         NOT NULL,
+  SCAL_SCAR_SYS_ID       NUMBER(12)         NOT NULL,
+  SCAL_SOI_SYS_ID       NUMBER(12),
+  SCAL_ITEM_CODE        VARCHAR2(20 BYTE),
+  SCAL_GRADE_CODE_1     VARCHAR2(12 BYTE),
+  SCAL_GRADE_CODE_2     VARCHAR2(40 BYTE),
+  SCAL_UOM_CODE         VARCHAR2(12 BYTE),
+  SCAL_CURR_CODE        VARCHAR2(12 BYTE),
+  SCAL_APPROVED_RATE    NUMBER,
+  SCAL_APPROVED_QTY_BU  NUMBER,
+  SCAL_MIN_PRICE_USD    NUMBER(18,3),
+  SCAL_RATE_USD         NUMBER(18,6),
+  SCAL_CR_UID           VARCHAR2(12 BYTE)  NOT NULL,
+  SCAL_CR_DT            DATE               NOT NULL
 )
-    TABLESPACE ORION
+TABLESPACE ORION
 PCTFREE 10 INITRANS 50 MAXTRANS 255
 STORAGE (INITIAL 1M NEXT 1M MINEXTENTS 1 MAXEXTENTS UNLIMITED PCTINCREASE 0);
 
@@ -145,13 +145,13 @@ COMMENT ON COLUMN MGTHRIS.SALES_CTL_APPR_LINE.SCAL_APPROVED_RATE IS
   'Harga yang disetujui dalam currency transaksi. Pengikat: harus sama persis dengan SOI_RATE saat approve.';
 
 CREATE UNIQUE INDEX MGTHRIS.SALES_CTL_APPR_LINE_PK
-    ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SYS_ID) TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_CTL_APPR_LINE_NX01
-    ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SOI_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SOI_SYS_ID) TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_CTL_APPR_LINE_NX02
-    ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SCAR_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_CTL_APPR_LINE (SCAL_SCAR_SYS_ID) TABLESPACE ORION;
 
 ALTER TABLE MGTHRIS.SALES_CTL_APPR_LINE ADD (
   CONSTRAINT SALES_CTL_APPR_LINE_PK PRIMARY KEY (SCAL_SYS_ID)
@@ -166,25 +166,25 @@ ALTER TABLE MGTHRIS.SALES_CTL_APPR_LINE ADD (
 -- ---------------------------------------------------------------------
 CREATE TABLE MGTHRIS.SALES_MIN_PRICE
 (
-    SMP_SYS_ID          NUMBER(12)          NOT NULL,
-    SMP_SCAR_SYS_ID      NUMBER(12),
-    SMP_SCOPE_LEVEL     VARCHAR2(6 BYTE)    NOT NULL,
-    SMP_SCOPE_VALUE     VARCHAR2(20 BYTE)   NOT NULL,
-    SMP_GRADE_CODE_1    VARCHAR2(12 BYTE)   DEFAULT '*' NOT NULL,
-    SMP_GRADE_CODE_2    VARCHAR2(40 BYTE)   DEFAULT '*' NOT NULL,
-    SMP_UOM_CODE        VARCHAR2(12 BYTE)   NOT NULL,
-    SMP_MIN_PRICE_USD   NUMBER(18,3)        NOT NULL,
-    SMP_TOLERANCE_PCT   NUMBER(5,2)         DEFAULT 0,
-    SMP_VALID_FROM      DATE                NOT NULL,
-    SMP_VALID_TO        DATE,
-    SMP_STATUS          VARCHAR2(10 BYTE)   DEFAULT 'DRAFT' NOT NULL,
-    SMP_REMARKS         VARCHAR2(2000 BYTE),
-    SMP_CR_UID          VARCHAR2(12 BYTE)   NOT NULL,
-    SMP_CR_DT           DATE                NOT NULL,
-    SMP_UPD_UID         VARCHAR2(12 BYTE),
-    SMP_UPD_DT          DATE
+  SMP_SYS_ID          NUMBER(12)          NOT NULL,
+  SMP_SCAR_SYS_ID      NUMBER(12),
+  SMP_SCOPE_LEVEL     VARCHAR2(6 BYTE)    NOT NULL,
+  SMP_SCOPE_VALUE     VARCHAR2(20 BYTE)   NOT NULL,
+  SMP_GRADE_CODE_1    VARCHAR2(12 BYTE)   DEFAULT '*' NOT NULL,
+  SMP_GRADE_CODE_2    VARCHAR2(40 BYTE)   DEFAULT '*' NOT NULL,
+  SMP_UOM_CODE        VARCHAR2(12 BYTE)   NOT NULL,
+  SMP_MIN_PRICE_USD   NUMBER(18,3)        NOT NULL,
+  SMP_TOLERANCE_PCT   NUMBER(5,2)         DEFAULT 0,
+  SMP_VALID_FROM      DATE                NOT NULL,
+  SMP_VALID_TO        DATE,
+  SMP_STATUS          VARCHAR2(10 BYTE)   DEFAULT 'DRAFT' NOT NULL,
+  SMP_REMARKS         VARCHAR2(2000 BYTE),
+  SMP_CR_UID          VARCHAR2(12 BYTE)   NOT NULL,
+  SMP_CR_DT           DATE                NOT NULL,
+  SMP_UPD_UID         VARCHAR2(12 BYTE),
+  SMP_UPD_DT          DATE
 )
-    TABLESPACE ORION
+TABLESPACE ORION
 PCTFREE 10 INITRANS 50 MAXTRANS 255
 STORAGE (INITIAL 1M NEXT 1M MINEXTENTS 1 MAXEXTENTS UNLIMITED PCTINCREASE 0);
 
@@ -196,11 +196,11 @@ COMMENT ON COLUMN MGTHRIS.SALES_MIN_PRICE.SMP_MIN_PRICE_USD IS
   'Harga minimum USD per SMP_UOM_CODE. 3 desimal, samakan dengan batas ODBTRG_SOI_DECML_DIGIT_MGT.';
 
 CREATE UNIQUE INDEX MGTHRIS.SALES_MIN_PRICE_PK
-    ON MGTHRIS.SALES_MIN_PRICE (SMP_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_MIN_PRICE (SMP_SYS_ID) TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_MIN_PRICE_NX01
-    ON MGTHRIS.SALES_MIN_PRICE (SMP_STATUS, SMP_SCOPE_LEVEL, SMP_SCOPE_VALUE)
-    TABLESPACE ORION;
+  ON MGTHRIS.SALES_MIN_PRICE (SMP_STATUS, SMP_SCOPE_LEVEL, SMP_SCOPE_VALUE)
+  TABLESPACE ORION;
 
 ALTER TABLE MGTHRIS.SALES_MIN_PRICE ADD (
   CONSTRAINT SALES_MIN_PRICE_PK PRIMARY KEY (SMP_SYS_ID)
@@ -226,33 +226,33 @@ ALTER TABLE MGTHRIS.SALES_MIN_PRICE ADD (
 -- ---------------------------------------------------------------------
 CREATE TABLE MGTHRIS.SALES_MIN_PRICE_CHECK_LOG
 (
-    SMPCL_SYS_ID          NUMBER(12)         NOT NULL,
-    SMPCL_SOH_SYS_ID      NUMBER(12),
-    SMPCL_SOI_SYS_ID      NUMBER(12),
-    SMPCL_TXN_CODE        VARCHAR2(12 BYTE),
-    SMPCL_DOC_NO          NUMBER(10),
-    SMPCL_DOC_DT          DATE,
-    SMPCL_ITEM_CODE       VARCHAR2(20 BYTE),
-    SMPCL_GRADE_CODE_1    VARCHAR2(12 BYTE),
-    SMPCL_GRADE_CODE_2    VARCHAR2(40 BYTE),
-    SMPCL_UOM_CODE        VARCHAR2(12 BYTE),
-    SMPCL_QTY_BU          NUMBER,
-    SMPCL_CURR_CODE       VARCHAR2(12 BYTE),
-    SMPCL_RATE            NUMBER,
-    SMPCL_EXG_DIVISOR     NUMBER,
-    SMPCL_EXG_RATE_DT     DATE,
-    SMPCL_EXG_RATE_SRC    VARCHAR2(10 BYTE),
-    SMPCL_RATE_USD        NUMBER(18,6),
-    SMPCL_NET_RATE_USD    NUMBER(18,6),
-    SMPCL_HAS_DISCOUNT    VARCHAR2(1 BYTE),
-    SMPCL_SMP_SYS_ID      NUMBER(12),
-    SMPCL_MIN_PRICE_USD   NUMBER(18,3),
-    SMPCL_RESULT          VARCHAR2(12 BYTE),
-    SMPCL_SCAR_SYS_ID      NUMBER(12),
-    SMPCL_APPR_UID        VARCHAR2(12 BYTE),
-    SMPCL_CR_DT           DATE               NOT NULL
+  SMPCL_SYS_ID          NUMBER(12)         NOT NULL,
+  SMPCL_SOH_SYS_ID      NUMBER(12),
+  SMPCL_SOI_SYS_ID      NUMBER(12),
+  SMPCL_TXN_CODE        VARCHAR2(12 BYTE),
+  SMPCL_DOC_NO          NUMBER(10),
+  SMPCL_DOC_DT          DATE,
+  SMPCL_ITEM_CODE       VARCHAR2(20 BYTE),
+  SMPCL_GRADE_CODE_1    VARCHAR2(12 BYTE),
+  SMPCL_GRADE_CODE_2    VARCHAR2(40 BYTE),
+  SMPCL_UOM_CODE        VARCHAR2(12 BYTE),
+  SMPCL_QTY_BU          NUMBER,
+  SMPCL_CURR_CODE       VARCHAR2(12 BYTE),
+  SMPCL_RATE            NUMBER,
+  SMPCL_EXG_DIVISOR     NUMBER,
+  SMPCL_EXG_RATE_DT     DATE,
+  SMPCL_EXG_RATE_SRC    VARCHAR2(10 BYTE),
+  SMPCL_RATE_USD        NUMBER(18,6),
+  SMPCL_NET_RATE_USD    NUMBER(18,6),
+  SMPCL_HAS_DISCOUNT    VARCHAR2(1 BYTE),
+  SMPCL_SMP_SYS_ID      NUMBER(12),
+  SMPCL_MIN_PRICE_USD   NUMBER(18,3),
+  SMPCL_RESULT          VARCHAR2(12 BYTE),
+  SMPCL_SCAR_SYS_ID      NUMBER(12),
+  SMPCL_APPR_UID        VARCHAR2(12 BYTE),
+  SMPCL_CR_DT           DATE               NOT NULL
 )
-    TABLESPACE ORION
+TABLESPACE ORION
 PCTFREE 10 INITRANS 50 MAXTRANS 255
 STORAGE (INITIAL 4M NEXT 1M MINEXTENTS 1 MAXEXTENTS UNLIMITED PCTINCREASE 0);
 
@@ -262,13 +262,13 @@ COMMENT ON COLUMN MGTHRIS.SALES_MIN_PRICE_CHECK_LOG.SMPCL_NET_RATE_USD IS
   'Monitoring saja - validasi memakai gross. Untuk review basis validasi nanti.';
 
 CREATE UNIQUE INDEX MGTHRIS.SALES_MIN_PRICE_CHECK_LOG_PK
-    ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_SYS_ID) TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_MIN_PRICE_CHECK_LOG_NX01
-    ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_SOH_SYS_ID) TABLESPACE ORION;
+  ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_SOH_SYS_ID) TABLESPACE ORION;
 
 CREATE INDEX MGTHRIS.SALES_MIN_PRICE_CHECK_LOG_NX02
-    ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_CR_DT, SMPCL_RESULT) TABLESPACE ORION;
+  ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (SMPCL_CR_DT, SMPCL_RESULT) TABLESPACE ORION;
 
 ALTER TABLE MGTHRIS.SALES_MIN_PRICE_CHECK_LOG ADD (
   CONSTRAINT SALES_MIN_PRICE_CHECK_LOG_PK PRIMARY KEY (SMPCL_SYS_ID)
@@ -308,28 +308,28 @@ ALTER TABLE MGTHRIS.SALES_MIN_PRICE_CHECK_LOG ADD (
 --   sebagai insert gagal bertahun-tahun kemudian, dan ini surrogate key.
 -- ---------------------------------------------------------------------
 INSERT INTO MGTHRIS.HM_MST_SEQUENCES (
-    HMMS_SEQ_ID, HMMS_SEQ_NAME, HMMS_SEQ_DESC, HMMS_TABLE_NAME, HMMS_COLUMN_NAME,
-    HMMS_START_WITH, HMMS_INCREMENT_BY, HMMS_MIN_VALUE, HMMS_MAX_VALUE,
-    HMMS_LAST_VALUE, HMMS_NUMBER_FORMAT, HMMS_PREFIX, HMMS_SEQ_TYPE,
-    HMMS_CREATED_BY, HMMS_CREATED_AT)
+  HMMS_SEQ_ID, HMMS_SEQ_NAME, HMMS_SEQ_DESC, HMMS_TABLE_NAME, HMMS_COLUMN_NAME,
+  HMMS_START_WITH, HMMS_INCREMENT_BY, HMMS_MIN_VALUE, HMMS_MAX_VALUE,
+  HMMS_LAST_VALUE, HMMS_NUMBER_FORMAT, HMMS_PREFIX, HMMS_SEQ_TYPE,
+  HMMS_CREATED_BY, HMMS_CREATED_AT)
 SELECT (SELECT NVL(MAX(HMMS_SEQ_ID), 0) FROM MGTHRIS.HM_MST_SEQUENCES) + ROWNUM,
        s.nm, s.ds, s.tb, s.cl, 1, 1, 1, NULL, 0, 'TM9', NULL, 0, 'SYSTEM', SYSDATE
-FROM (
-         SELECT 'SALES_CTL_APPR_REQUEST_SCAR_SYS_ID_SEQ' nm,
-                'Sales Control SALES_CTL_APPR_REQUEST.SCAR_SYS_ID primary key' ds,
-                'sales_ctl_appr_request' tb, 'scar_sys_id' cl FROM DUAL
-         UNION ALL SELECT 'SALES_CTL_APPR_LINE_SCAL_SYS_ID_SEQ',
-                          'Sales Control SALES_CTL_APPR_LINE.SCAL_SYS_ID primary key',
-                          'sales_ctl_appr_line', 'scal_sys_id' FROM DUAL
-         UNION ALL SELECT 'SALES_MIN_PRICE_SMP_SYS_ID_SEQ',
-                          'Sales Control SALES_MIN_PRICE.SMP_SYS_ID primary key',
-                          'sales_min_price', 'smp_sys_id' FROM DUAL
-         UNION ALL SELECT 'SALES_MIN_PRICE_CHECK_LOG_SMPCL_SYS_ID_SEQ',
-                          'Sales Control SALES_MIN_PRICE_CHECK_LOG.SMPCL_SYS_ID primary key',
-                          'sales_min_price_check_log', 'smpcl_sys_id' FROM DUAL
-     ) s
-WHERE NOT EXISTS (
-    SELECT 1 FROM MGTHRIS.HM_MST_SEQUENCES x WHERE x.HMMS_SEQ_NAME = s.nm);
+  FROM (
+    SELECT 'SALES_CTL_APPR_REQUEST_SCAR_SYS_ID_SEQ' nm,
+           'Sales Control SALES_CTL_APPR_REQUEST.SCAR_SYS_ID primary key' ds,
+           'sales_ctl_appr_request' tb, 'scar_sys_id' cl FROM DUAL
+    UNION ALL SELECT 'SALES_CTL_APPR_LINE_SCAL_SYS_ID_SEQ',
+           'Sales Control SALES_CTL_APPR_LINE.SCAL_SYS_ID primary key',
+           'sales_ctl_appr_line', 'scal_sys_id' FROM DUAL
+    UNION ALL SELECT 'SALES_MIN_PRICE_SMP_SYS_ID_SEQ',
+           'Sales Control SALES_MIN_PRICE.SMP_SYS_ID primary key',
+           'sales_min_price', 'smp_sys_id' FROM DUAL
+    UNION ALL SELECT 'SALES_MIN_PRICE_CHECK_LOG_SMPCL_SYS_ID_SEQ',
+           'Sales Control SALES_MIN_PRICE_CHECK_LOG.SMPCL_SYS_ID primary key',
+           'sales_min_price_check_log', 'smpcl_sys_id' FROM DUAL
+  ) s
+ WHERE NOT EXISTS (
+   SELECT 1 FROM MGTHRIS.HM_MST_SEQUENCES x WHERE x.HMMS_SEQ_NAME = s.nm);
 
 COMMIT;
 
@@ -421,27 +421,27 @@ SHOW ERRORS;
 -- Mengikuti pola TOL_SO_MGT yang dipakai ODBTRG_SOI_TOL_MGT.
 -- VERIFIKASI struktur IM_VS_STATIC_VALUE sebelum jalan.
 INSERT INTO MGTDAT.IM_VS_STATIC_VALUE (VSSV_VS_CODE, VSSV_CODE, VSSV_FRZ_FLAG_NUM)
-VALUES ('MINPRC_MGT', 'ESC', 2);
+  VALUES ('MINPRC_MGT', 'ESC', 2);
 INSERT INTO MGTDAT.IM_VS_STATIC_VALUE (VSSV_VS_CODE, VSSV_CODE, VSSV_FRZ_FLAG_NUM)
-VALUES ('MINPRC_MGT', 'LSC', 2);
+  VALUES ('MINPRC_MGT', 'LSC', 2);
 INSERT INTO MGTDAT.IM_VS_STATIC_VALUE (VSSV_VS_CODE, VSSV_CODE, VSSV_FRZ_FLAG_NUM)
-VALUES ('MINPRC_MGT', 'STA', 2);
+  VALUES ('MINPRC_MGT', 'STA', 2);
 
 -- Message registry. VERIFIKASI nama kolom dengan DESC IM_APP_ERROR_MESSAGE.
 INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
-VALUES ('CUST', 1012110,
-        'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.',
-        'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.');
+  VALUES ('CUST', 1012110,
+          'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.',
+          'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.');
 
 INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
-VALUES ('CUST', 1012111,
-        'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.',
-        'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.');
+  VALUES ('CUST', 1012111,
+          'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.',
+          'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.');
 
 INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
-VALUES ('CUST', 1012112,
-        'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.',
-        'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.');
+  VALUES ('CUST', 1012112,
+          'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.',
+          'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.');
 
 COMMIT;
 
@@ -514,9 +514,9 @@ CREATE OR REPLACE PACKAGE BODY MGTDAT.PKG_MGT_PRICE_CTRL AS
       o_divisor    OUT NUMBER,
       o_rate_dt    OUT DATE,
       o_source     OUT VARCHAR2)
-IS
+  IS
     v_cer NUMBER;
-BEGIN
+  BEGIN
     o_divisor := NULL;
     o_rate_dt := NULL;
     o_source  := NULL;
@@ -526,85 +526,85 @@ BEGIN
       o_rate_dt := p_txn_dt;
       o_source  := 'USD';
       RETURN;
-END IF;
+    END IF;
 
     IF p_curr_code <> 'IDR' THEN
       RAISE_APPLICATION('CUST', 1012112, p_curr_code, '', '', '', '', '', '', '');
-END IF;
+    END IF;
 
     -- 1. Kurs BCA pada tanggal dokumen
-BEGIN
-SELECT MERS_VALUE, TO_DATE(MERS_DATE,'DD/MM/RR')
-INTO o_divisor, o_rate_dt
-FROM MGTAPPS.MST_EXC_RATE_SAL
-WHERE MERS_TERMS = 'LC_0_DAYS'
-  AND MERS_TYPE  = 'EXCHANGE'
-  AND NVL(MERS_VALUE,0) <> 0
-  AND TO_DATE(MERS_DATE,'DD/MM/RR') = TRUNC(p_txn_dt);
-o_source := 'BCA';
-EXCEPTION
+    BEGIN
+      SELECT MERS_VALUE, TO_DATE(MERS_DATE,'DD/MM/RR')
+        INTO o_divisor, o_rate_dt
+        FROM MGTAPPS.MST_EXC_RATE_SAL
+       WHERE MERS_TERMS = 'LC_0_DAYS'
+         AND MERS_TYPE  = 'EXCHANGE'
+         AND NVL(MERS_VALUE,0) <> 0
+         AND TO_DATE(MERS_DATE,'DD/MM/RR') = TRUNC(p_txn_dt);
+      o_source := 'BCA';
+    EXCEPTION
       WHEN NO_DATA_FOUND THEN o_divisor := NULL;
-WHEN TOO_MANY_ROWS THEN o_divisor := NULL;
-END;
+      WHEN TOO_MANY_ROWS THEN o_divisor := NULL;
+    END;
 
     -- 2. Kurs BCA terakhir sebelum tanggal dokumen, maksimal mundur 7 hari.
     --    Beda dengan fungsi lama yang memakai < tanggal - 1 (melewati H-1).
     IF o_divisor IS NULL THEN
-BEGIN
-SELECT MERS_VALUE, MERS_DT
-INTO o_divisor, o_rate_dt
-FROM (SELECT MERS_VALUE, TO_DATE(MERS_DATE,'DD/MM/RR') MERS_DT
-      FROM MGTAPPS.MST_EXC_RATE_SAL
-      WHERE MERS_TERMS = 'LC_0_DAYS'
-        AND MERS_TYPE  = 'EXCHANGE'
-        AND NVL(MERS_VALUE,0) <> 0
-        AND TO_DATE(MERS_DATE,'DD/MM/RR') <  TRUNC(p_txn_dt)
-        AND TO_DATE(MERS_DATE,'DD/MM/RR') >= TRUNC(p_txn_dt) - C_MAX_FALLBACK_DAYS
-      ORDER BY TO_DATE(MERS_DATE,'DD/MM/RR') DESC)
-WHERE ROWNUM = 1;
-o_source := 'BCA_PREV';
-EXCEPTION
+      BEGIN
+        SELECT MERS_VALUE, MERS_DT
+          INTO o_divisor, o_rate_dt
+          FROM (SELECT MERS_VALUE, TO_DATE(MERS_DATE,'DD/MM/RR') MERS_DT
+                  FROM MGTAPPS.MST_EXC_RATE_SAL
+                 WHERE MERS_TERMS = 'LC_0_DAYS'
+                   AND MERS_TYPE  = 'EXCHANGE'
+                   AND NVL(MERS_VALUE,0) <> 0
+                   AND TO_DATE(MERS_DATE,'DD/MM/RR') <  TRUNC(p_txn_dt)
+                   AND TO_DATE(MERS_DATE,'DD/MM/RR') >= TRUNC(p_txn_dt) - C_MAX_FALLBACK_DAYS
+                 ORDER BY TO_DATE(MERS_DATE,'DD/MM/RR') DESC)
+         WHERE ROWNUM = 1;
+        o_source := 'BCA_PREV';
+      EXCEPTION
         WHEN NO_DATA_FOUND THEN o_divisor := NULL;
-END;
-END IF;
+      END;
+    END IF;
 
     -- 3. Fallback kurs Orion. Query langsung, TIDAK lewat mgt_get_exg_rate:
     --    fallback di fungsi itu tidak memfilter currency pair di subquery.
     IF o_divisor IS NULL THEN
-BEGIN
-SELECT CER_EXG_RATE, CER_EFF_FRM_DT
-INTO v_cer, o_rate_dt
-FROM (SELECT CER_EXG_RATE, CER_EFF_FRM_DT
-      FROM MGTDAT.FM_EXCHANGE_RATE
-      WHERE CER_CONV_FM_CURR_CODE = 'IDR'
-        AND CER_CONV_TO_CURR_CODE = 'USD'
-        AND CER_EXG_RATE_TYPE     = 'B'
-        AND NVL(CER_EXG_RATE,0)  <> 0
-        AND CER_EFF_FRM_DT <= TRUNC(p_txn_dt)
-        AND CER_EFF_TO_DT   >= TRUNC(p_txn_dt)
-      ORDER BY CER_EFF_FRM_DT DESC)
-WHERE ROWNUM = 1;
+      BEGIN
+        SELECT CER_EXG_RATE, CER_EFF_FRM_DT
+          INTO v_cer, o_rate_dt
+          FROM (SELECT CER_EXG_RATE, CER_EFF_FRM_DT
+                  FROM MGTDAT.FM_EXCHANGE_RATE
+                 WHERE CER_CONV_FM_CURR_CODE = 'IDR'
+                   AND CER_CONV_TO_CURR_CODE = 'USD'
+                   AND CER_EXG_RATE_TYPE     = 'B'
+                   AND NVL(CER_EXG_RATE,0)  <> 0
+                   AND CER_EFF_FRM_DT <= TRUNC(p_txn_dt)
+                   AND CER_EFF_TO_DT   >= TRUNC(p_txn_dt)
+                 ORDER BY CER_EFF_FRM_DT DESC)
+         WHERE ROWNUM = 1;
 
--- Orion menyimpan 1/kurs (mis. 0.000058). Balik ke IDR per USD.
-o_divisor := 1 / v_cer;
+        -- Orion menyimpan 1/kurs (mis. 0.000058). Balik ke IDR per USD.
+        o_divisor := 1 / v_cer;
         o_source  := 'ORION';
-EXCEPTION
+      EXCEPTION
         WHEN NO_DATA_FOUND THEN o_divisor := NULL;
-END;
-END IF;
+      END;
+    END IF;
 
     IF o_divisor IS NULL THEN
       RAISE_APPLICATION('CUST', 1012111, p_curr_code,
                         TO_CHAR(p_txn_dt,'DD-MON-YYYY'), '', '', '', '', '', '');
-END IF;
+    END IF;
 
     -- Sanity check. Kalau asumsi arah kurs salah, gagalnya di sini -
     -- bukan diam-diam meloloskan harga.
     IF o_divisor < C_DIV_MIN OR o_divisor > C_DIV_MAX THEN
       RAISE_APPLICATION('CUST', 1012111, p_curr_code || ' divisor=' || TO_CHAR(o_divisor),
                         TO_CHAR(p_txn_dt,'DD-MON-YYYY'), '', '', '', '', '', '');
-END IF;
-END P_GET_USD_DIVISOR;
+    END IF;
+  END P_GET_USD_DIVISOR;
 
 
   -- -------------------------------------------------------------------
@@ -613,9 +613,9 @@ END P_GET_USD_DIVISOR;
   -- -------------------------------------------------------------------
   FUNCTION F_GET_ITEM_GROUP (p_item_code IN VARCHAR2) RETURN VARCHAR2
   IS
-BEGIN
-RETURN NULL;
-END F_GET_ITEM_GROUP;
+  BEGIN
+    RETURN NULL;
+  END F_GET_ITEM_GROUP;
 
 
   -- -------------------------------------------------------------------
@@ -631,43 +631,43 @@ END F_GET_ITEM_GROUP;
       o_smp_sys_id OUT NUMBER,
       o_min_price  OUT NUMBER,
       o_tolerance  OUT NUMBER)
-IS
+  IS
     v_group VARCHAR2(20);
-BEGIN
+  BEGIN
     o_smp_sys_id := NULL;
     o_min_price  := NULL;
     o_tolerance  := 0;
 
     v_group := F_GET_ITEM_GROUP(p_item_code);
 
-BEGIN
-SELECT SMP_SYS_ID, SMP_MIN_PRICE_USD, NVL(SMP_TOLERANCE_PCT,0)
-INTO o_smp_sys_id, o_min_price, o_tolerance
-FROM (SELECT SMP_SYS_ID, SMP_MIN_PRICE_USD, SMP_TOLERANCE_PCT
-      FROM MGTHRIS.SALES_MIN_PRICE
-      WHERE SMP_STATUS = 'APPROVED'
-        AND TRUNC(p_txn_dt) >= SMP_VALID_FROM
-        AND TRUNC(p_txn_dt) <= NVL(SMP_VALID_TO, TO_DATE('31-12-2099','DD-MM-YYYY'))
-        AND SMP_UOM_CODE = p_uom_code
-        AND SMP_GRADE_CODE_1 IN ('*', p_grade_1)
-        AND SMP_GRADE_CODE_2 IN ('*', p_grade_2)
-        AND (   (SMP_SCOPE_LEVEL = 'ITEM'  AND SMP_SCOPE_VALUE = p_item_code)
-          OR (SMP_SCOPE_LEVEL = 'GROUP' AND SMP_SCOPE_VALUE = v_group)
-          OR (SMP_SCOPE_LEVEL = 'ALL'))
-      ORDER BY CASE SMP_SCOPE_LEVEL
-                   WHEN 'ITEM'  THEN 100
-                   WHEN 'GROUP' THEN 50
-                   ELSE 0 END
-                   + CASE WHEN SMP_GRADE_CODE_2 <> '*' THEN 2 ELSE 0 END
-                   + CASE WHEN SMP_GRADE_CODE_1 <> '*' THEN 1 ELSE 0 END DESC,
-               SMP_VALID_FROM DESC)
-WHERE ROWNUM = 1;
-EXCEPTION
+    BEGIN
+      SELECT SMP_SYS_ID, SMP_MIN_PRICE_USD, NVL(SMP_TOLERANCE_PCT,0)
+        INTO o_smp_sys_id, o_min_price, o_tolerance
+        FROM (SELECT SMP_SYS_ID, SMP_MIN_PRICE_USD, SMP_TOLERANCE_PCT
+                FROM MGTHRIS.SALES_MIN_PRICE
+               WHERE SMP_STATUS = 'APPROVED'
+                 AND TRUNC(p_txn_dt) >= SMP_VALID_FROM
+                 AND TRUNC(p_txn_dt) <= NVL(SMP_VALID_TO, TO_DATE('31-12-2099','DD-MM-YYYY'))
+                 AND SMP_UOM_CODE = p_uom_code
+                 AND SMP_GRADE_CODE_1 IN ('*', p_grade_1)
+                 AND SMP_GRADE_CODE_2 IN ('*', p_grade_2)
+                 AND (   (SMP_SCOPE_LEVEL = 'ITEM'  AND SMP_SCOPE_VALUE = p_item_code)
+                      OR (SMP_SCOPE_LEVEL = 'GROUP' AND SMP_SCOPE_VALUE = v_group)
+                      OR (SMP_SCOPE_LEVEL = 'ALL'))
+               ORDER BY CASE SMP_SCOPE_LEVEL
+                          WHEN 'ITEM'  THEN 100
+                          WHEN 'GROUP' THEN 50
+                          ELSE 0 END
+                      + CASE WHEN SMP_GRADE_CODE_2 <> '*' THEN 2 ELSE 0 END
+                      + CASE WHEN SMP_GRADE_CODE_1 <> '*' THEN 1 ELSE 0 END DESC,
+                        SMP_VALID_FROM DESC)
+       WHERE ROWNUM = 1;
+    EXCEPTION
       WHEN NO_DATA_FOUND THEN
         o_smp_sys_id := NULL;
         o_min_price  := NULL;
-END;
-END P_GET_MIN_PRICE;
+    END;
+  END P_GET_MIN_PRICE;
 
 
   -- -------------------------------------------------------------------
@@ -681,25 +681,25 @@ END P_GET_MIN_PRICE;
       p_qty_bu     IN NUMBER) RETURN NUMBER
   IS
     v_scar_sys_id NUMBER;
-BEGIN
-SELECT SCAR_SYS_ID
-INTO v_scar_sys_id
-FROM (SELECT SCAR_SYS_ID
-      FROM MGTHRIS.SALES_CTL_APPR_LINE, MGTHRIS.SALES_CTL_APPR_REQUEST
-      WHERE SCAL_SCAR_SYS_ID = SCAR_SYS_ID
-        AND SCAR_CTRL_TYPE  = 'MINPRICE'
-        AND SCAR_STATUS     = 'APPROVED'
-        AND TRUNC(SYSDATE) <= NVL(SCAR_VALID_TO, TO_DATE('31-12-2099','DD-MM-YYYY'))
-        AND SCAL_SOI_SYS_ID = p_soi_sys_id
-        AND SCAL_APPROVED_RATE = p_rate
-        AND NVL(SCAL_APPROVED_QTY_BU,0) >= NVL(p_qty_bu,0)
-      ORDER BY SCAR_APPR_DT DESC)
-WHERE ROWNUM = 1;
+  BEGIN
+    SELECT SCAR_SYS_ID
+      INTO v_scar_sys_id
+      FROM (SELECT SCAR_SYS_ID
+              FROM MGTHRIS.SALES_CTL_APPR_LINE, MGTHRIS.SALES_CTL_APPR_REQUEST
+             WHERE SCAL_SCAR_SYS_ID = SCAR_SYS_ID
+               AND SCAR_CTRL_TYPE  = 'MINPRICE'
+               AND SCAR_STATUS     = 'APPROVED'
+               AND TRUNC(SYSDATE) <= NVL(SCAR_VALID_TO, TO_DATE('31-12-2099','DD-MM-YYYY'))
+               AND SCAL_SOI_SYS_ID = p_soi_sys_id
+               AND SCAL_APPROVED_RATE = p_rate
+               AND NVL(SCAL_APPROVED_QTY_BU,0) >= NVL(p_qty_bu,0)
+             ORDER BY SCAR_APPR_DT DESC)
+     WHERE ROWNUM = 1;
 
-RETURN v_scar_sys_id;
-EXCEPTION
+    RETURN v_scar_sys_id;
+  EXCEPTION
     WHEN NO_DATA_FOUND THEN RETURN NULL;
-END F_GET_OVERRIDE;
+  END F_GET_OVERRIDE;
 
 
   -- -------------------------------------------------------------------
@@ -713,25 +713,25 @@ END F_GET_OVERRIDE;
       p_curr_code  IN VARCHAR2,
       p_ref_sys_id IN NUMBER,
       p_appr_uid   IN VARCHAR2)
-IS
+  IS
     CURSOR c_scope IS
-SELECT 'X' FROM MGTDAT.IM_VS_STATIC_VALUE
-WHERE VSSV_VS_CODE = 'MINPRC_MGT'
-  AND VSSV_CODE    = p_txn_code;
+      SELECT 'X' FROM MGTDAT.IM_VS_STATIC_VALUE
+       WHERE VSSV_VS_CODE = 'MINPRC_MGT'
+         AND VSSV_CODE    = p_txn_code;
 
-CURSOR c_item IS
-SELECT SOI_SYS_ID, SOI_SOI_SYS_ID, SOI_ITEM_CODE,
-       SOI_GRADE_CODE_1, SOI_GRADE_CODE_2, SOI_UOM_CODE,
-       NVL(SOI_RATE,0) SOI_RATE, NVL(SOI_QTY_BU,0) SOI_QTY_BU,
-       NVL(SOI_DISC_PERC,0) SOI_DISC_PERC
-FROM MGTDAT.OT_SO_ITEM
-WHERE SOI_SOH_SYS_ID = p_soh_sys_id
-  AND NVL(SOI_SHORT_CLO_STATUS,2) = 2
-  AND NVL(SOI_FOC_YN,'N') <> 'Y'
-  AND NVL(SOI_RATE,0) > 0
-ORDER BY SOI_SYS_ID;
+    CURSOR c_item IS
+      SELECT SOI_SYS_ID, SOI_SOI_SYS_ID, SOI_ITEM_CODE,
+             SOI_GRADE_CODE_1, SOI_GRADE_CODE_2, SOI_UOM_CODE,
+             NVL(SOI_RATE,0) SOI_RATE, NVL(SOI_QTY_BU,0) SOI_QTY_BU,
+             NVL(SOI_DISC_PERC,0) SOI_DISC_PERC
+        FROM MGTDAT.OT_SO_ITEM
+       WHERE SOI_SOH_SYS_ID = p_soh_sys_id
+         AND NVL(SOI_SHORT_CLO_STATUS,2) = 2
+         AND NVL(SOI_FOC_YN,'N') <> 'Y'
+         AND NVL(SOI_RATE,0) > 0
+       ORDER BY SOI_SYS_ID;
 
-v_dummy       VARCHAR2(1);
+    v_dummy       VARCHAR2(1);
     v_divisor     NUMBER;
     v_rate_dt     DATE;
     v_source      VARCHAR2(10);
@@ -746,18 +746,18 @@ v_dummy       VARCHAR2(1);
     v_has_disc    VARCHAR2(1);
     v_msg         VARCHAR2(1800) := NULL;
     v_cnt         NUMBER := 0;
-BEGIN
+  BEGIN
     -- Hanya TXN_CODE yang terdaftar
     IF c_scope%ISOPEN THEN CLOSE c_scope; END IF;
-OPEN c_scope; FETCH c_scope INTO v_dummy; CLOSE c_scope;
-IF NVL(v_dummy,'N') <> 'X' THEN
+    OPEN c_scope; FETCH c_scope INTO v_dummy; CLOSE c_scope;
+    IF NVL(v_dummy,'N') <> 'X' THEN
       RETURN;
-END IF;
+    END IF;
 
     -- Kurs diambil sekali per dokumen, bukan per baris
     P_GET_USD_DIVISOR(p_curr_code, p_doc_dt, v_divisor, v_rate_dt, v_source);
 
-FOR r IN c_item LOOP
+    FOR r IN c_item LOOP
 
       P_GET_MIN_PRICE(r.SOI_ITEM_CODE, r.SOI_GRADE_CODE_1, r.SOI_GRADE_CODE_2,
                       r.SOI_UOM_CODE, p_doc_dt,
@@ -768,23 +768,23 @@ FOR r IN c_item LOOP
       v_scar_sys_id := NULL;
 
       -- Monitoring keberadaan baris discount (TED type 2)
-BEGIN
-SELECT 'Y' INTO v_has_disc FROM DUAL
-WHERE EXISTS (SELECT 'X' FROM MGTDAT.OT_SO_ITEM_TED
-              WHERE ITED_H_SYS_ID = p_soh_sys_id
-                AND ITED_TED_TYPE_NUM = 2);
-EXCEPTION
+      BEGIN
+        SELECT 'Y' INTO v_has_disc FROM DUAL
+         WHERE EXISTS (SELECT 'X' FROM MGTDAT.OT_SO_ITEM_TED
+                        WHERE ITED_H_SYS_ID = p_soh_sys_id
+                          AND ITED_TED_TYPE_NUM = 2);
+      EXCEPTION
         WHEN NO_DATA_FOUND THEN v_has_disc := 'N';
-END;
+      END;
 
       IF v_min_price IS NULL THEN
         v_result := 'PASS_NORULE';
-ELSE
+      ELSE
         v_floor := v_min_price * (1 - NVL(v_tolerance,0)/100);
 
         IF v_rate_usd >= v_floor THEN
           v_result := 'PASS';
-ELSE
+        ELSE
           v_scar_sys_id := F_GET_OVERRIDE(r.SOI_SYS_ID, r.SOI_RATE, r.SOI_QTY_BU);
 
           IF v_scar_sys_id IS NOT NULL THEN
@@ -795,14 +795,14 @@ ELSE
             v_scar_sys_id := F_GET_OVERRIDE(r.SOI_SOI_SYS_ID, r.SOI_RATE, r.SOI_QTY_BU);
             IF v_scar_sys_id IS NOT NULL THEN
               v_result := 'INHERIT';
-ELSE
+            ELSE
               v_result := 'FAIL';
-END IF;
-ELSE
+            END IF;
+          ELSE
             v_result := 'FAIL';
-END IF;
-END IF;
-END IF;
+          END IF;
+        END IF;
+      END IF;
 
       IF v_result = 'FAIL' THEN
         v_cnt := v_cnt + 1;
@@ -812,35 +812,35 @@ END IF;
                 || r.SOI_ITEM_CODE || '/' || r.SOI_GRADE_CODE_1 || '/' || r.SOI_GRADE_CODE_2
                 || ' USD ' || TO_CHAR(v_rate_usd,'FM9999990.000')
                 || ' < min ' || TO_CHAR(v_min_price,'FM9999990.000');
-END IF;
-END IF;
+        END IF;
+      END IF;
 
       -- SMPCL_SYS_ID sengaja TIDAK disebut: trigger
       -- SALES_MIN_PRICE_LOG_SYS_ID_TRG (bagian B2) yang mengisinya dari
       -- HM_MST_SEQUENCES. Dulu di sini ada NEXTVAL.
-INSERT INTO MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (
-    SMPCL_SOH_SYS_ID, SMPCL_SOI_SYS_ID, SMPCL_TXN_CODE,
-    SMPCL_DOC_NO, SMPCL_DOC_DT, SMPCL_ITEM_CODE, SMPCL_GRADE_CODE_1,
-    SMPCL_GRADE_CODE_2, SMPCL_UOM_CODE, SMPCL_QTY_BU, SMPCL_CURR_CODE,
-    SMPCL_RATE, SMPCL_EXG_DIVISOR, SMPCL_EXG_RATE_DT, SMPCL_EXG_RATE_SRC,
-    SMPCL_RATE_USD, SMPCL_NET_RATE_USD, SMPCL_HAS_DISCOUNT,
-    SMPCL_SMP_SYS_ID, SMPCL_MIN_PRICE_USD, SMPCL_RESULT, SMPCL_SCAR_SYS_ID,
-    SMPCL_APPR_UID, SMPCL_CR_DT)
-VALUES (
-           p_soh_sys_id, r.SOI_SYS_ID, p_txn_code,
-           p_doc_no, p_doc_dt, r.SOI_ITEM_CODE, r.SOI_GRADE_CODE_1,
-           r.SOI_GRADE_CODE_2, r.SOI_UOM_CODE, r.SOI_QTY_BU, p_curr_code,
-           r.SOI_RATE, v_divisor, v_rate_dt, v_source,
-           v_rate_usd, v_net_usd, v_has_disc,
-           v_smp_sys_id, v_min_price, v_result, v_scar_sys_id,
-           p_appr_uid, SYSDATE);
+      INSERT INTO MGTHRIS.SALES_MIN_PRICE_CHECK_LOG (
+        SMPCL_SOH_SYS_ID, SMPCL_SOI_SYS_ID, SMPCL_TXN_CODE,
+        SMPCL_DOC_NO, SMPCL_DOC_DT, SMPCL_ITEM_CODE, SMPCL_GRADE_CODE_1,
+        SMPCL_GRADE_CODE_2, SMPCL_UOM_CODE, SMPCL_QTY_BU, SMPCL_CURR_CODE,
+        SMPCL_RATE, SMPCL_EXG_DIVISOR, SMPCL_EXG_RATE_DT, SMPCL_EXG_RATE_SRC,
+        SMPCL_RATE_USD, SMPCL_NET_RATE_USD, SMPCL_HAS_DISCOUNT,
+        SMPCL_SMP_SYS_ID, SMPCL_MIN_PRICE_USD, SMPCL_RESULT, SMPCL_SCAR_SYS_ID,
+        SMPCL_APPR_UID, SMPCL_CR_DT)
+      VALUES (
+        p_soh_sys_id, r.SOI_SYS_ID, p_txn_code,
+        p_doc_no, p_doc_dt, r.SOI_ITEM_CODE, r.SOI_GRADE_CODE_1,
+        r.SOI_GRADE_CODE_2, r.SOI_UOM_CODE, r.SOI_QTY_BU, p_curr_code,
+        r.SOI_RATE, v_divisor, v_rate_dt, v_source,
+        v_rate_usd, v_net_usd, v_has_disc,
+        v_smp_sys_id, v_min_price, v_result, v_scar_sys_id,
+        p_appr_uid, SYSDATE);
 
-END LOOP;
+    END LOOP;
 
     IF v_cnt > 0 THEN
       RAISE_APPLICATION('CUST', 1012110, v_msg, '', '', '', '', '', '', '');
-END IF;
-END P_VALIDATE_SO;
+    END IF;
+  END P_VALIDATE_SO;
 
 END PKG_MGT_PRICE_CTRL;
 /
@@ -854,8 +854,8 @@ SHOW ERRORS;
 
 CREATE OR REPLACE TRIGGER MGTDAT.ODBTRG_MIN_PRICE_MGT
    BEFORE UPDATE ON MGTDAT.OT_SO_HEAD
-                     FOR EACH ROW
-                     WHEN (NVL(NEW.SOH_APPR_STATUS,0) = 3 AND NVL(OLD.SOH_APPR_STATUS,0) <> 3)
+   FOR EACH ROW
+   WHEN (NVL(NEW.SOH_APPR_STATUS,0) = 3 AND NVL(OLD.SOH_APPR_STATUS,0) <> 3)
 BEGIN
    -- BEFORE, bukan AFTER: error muncul sebelum trigger side-effect lain
    -- jalan (ODBTRG_SO_CBD_MGT, ODBTRG_QRCODE_SO, summary WMS).
