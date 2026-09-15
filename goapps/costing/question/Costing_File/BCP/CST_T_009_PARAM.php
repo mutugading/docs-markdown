@@ -1,0 +1,506 @@
+<div class="main" style="overflow-x:auto;" align="center">
+<?php
+	$WHERE_PARAM = "";
+	$WHERE_YARN_CC = "";
+	if ($CYL_TYPE_S!=="NULL") {
+		$WHERE_PARAM = " $WHERE_PARAM and CYL_TYPE = '$CYL_TYPE_S' ";
+		$WHERE_YARN_CC= " $WHERE_YARN_CC and CYL_TYPE = '$CYL_TYPE_S' ";
+	}
+	if ($CYL_SHADE_NAME_S!=="NULL") {
+		$WHERE_PARAM = " $WHERE_PARAM and CYL_SHADE_NAME = '$CYL_SHADE_NAME_S' ";
+		$WHERE_YARN_CC= " $WHERE_YARN_CC and CYL_SHADE_NAME = '$CYL_SHADE_NAME_S' ";
+	}
+	if ($DENIER_S!=="NULL") {
+			$WHERE_PARAM 	= " $WHERE_PARAM and CYCC_TOP_13_DATA_VALUE = '$DENIER_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CYCC_TOP_13_DATA_VALUE = '$DENIER_S' ";
+	}
+	if ($FILAMENT_S!=="NULL") {
+			$WHERE_PARAM = " $WHERE_PARAM and CYCC_TOP_16_DATA_VALUE = '$FILAMENT_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CYCC_TOP_16_DATA_VALUE = '$FILAMENT_S' ";
+	}
+	if ($INTERMINGLING_S!=="NULL") {
+			$WHERE_PARAM = " $WHERE_PARAM and CYCC_TOP_18_DATA_VALUE = '$INTERMINGLING_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CYCC_TOP_18_DATA_VALUE = '$INTERMINGLING_S' ";
+	}
+	if ($HEATSET_S!=="NULL") {
+			$WHERE_PARAM = " $WHERE_PARAM and CYCC_TOP_49_DATA_VALUE = '$HEATSET_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CYCC_TOP_49_DATA_VALUE = '$HEATSET_S' ";
+	}
+	if ($CROSS_SECTION_S!=="NULL") {
+			$WHERE_PARAM = " $WHERE_PARAM and CYCC_TOP_17_DATA_VALUE = '$CROSS_SECTION_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CYCC_TOP_17_DATA_VALUE = '$CROSS_SECTION_S' ";
+	}
+	if ($CMY_LUSTURE_S!=="NULL") {
+			$WHERE_PARAM = " $WHERE_PARAM and CMY_LUSTURE = '$CMY_LUSTURE_S' ";
+			$WHERE_YARN_CC= " $WHERE_YARN_CC and CMY_LUSTURE = '$CMY_LUSTURE_S' ";
+	}
+	if ($CUSTOMER_S!=="NULL"){
+		$WHERE_PARAM = " $WHERE_PARAM and CYL_SYS_ID in
+		(
+			SELECT DISTINCT CYL_SYS_ID
+			    FROM mgtapps.CST_YARN_LEFT_CUST lc,
+			         mgtapps.CST_YARN_LEFT l,
+			         mgtapps.CST_MST_CUST_DATA cd
+			   WHERE     lc.CYLC_CYL_SYS_ID = l.CYL_SYS_ID
+			         AND lc.CYLC_CMCD_SYS_ID = CMCD_SYS_ID
+			         and CMCD_NAME = '$CUSTOMER_S'
+
+			)";
+		$WHERE_YARN_CC= " $WHERE_YARN_CC and CYL_SYS_ID in
+		(
+			SELECT DISTINCT CYL_SYS_ID
+			    FROM mgtapps.CST_YARN_LEFT_CUST lc,
+			         mgtapps.CST_YARN_LEFT l,
+			         mgtapps.CST_MST_CUST_DATA cd
+			   WHERE     lc.CYLC_CYL_SYS_ID = l.CYL_SYS_ID
+			         AND lc.CYLC_CMCD_SYS_ID = CMCD_SYS_ID
+			         and CMCD_NAME = '$CUSTOMER_S'
+
+			)";
+
+
+	}
+	if ($WHERE_YARN_CC!==""){
+		$WHERE_YARN_CC =
+		" AND CYL_TYPE in (
+		 select distinct CYL_TYPE from mgtapps.cst_yarn_calculation_cur a,mgtapps.cst_yarn_left b
+		 where a.CYCC_CYL_SYS_ID = CYL_SYS_ID $WHERE_YARN_CC)
+		";
+	}
+	if ($CYL_LEFT_NO_S!==""){
+		$WHERE_PARAM = " $WHERE_PARAM and CYL_LEFT_NO = '$CYL_LEFT_NO_S' ";
+		$WHERE_YARN_CC= " $WHERE_YARN_CC and CYL_LEFT_NO = '$CYL_LEFT_NO_S' ";
+	}
+	if ($USER_NAME==="1949"){
+		//echo "WHERE_YARN_CC $WHERE_YARN_CC";
+	}
+?>
+<table style="width:120%">
+	<tr>
+<!-- Left No -->
+		<td align="center">
+			Left No </br>
+			<input type="TEXT" id="CYL_LEFT_NO" name="CYL_LEFT_NO" style="width:75px;height:20px;"
+				value="<?php echo $CYL_LEFT_NO_S; ?>"
+				onkeypress="Javascript: if (event.keyCode==13) Process('VIEW_DATA');"
+			>
+			<button onclick="Process('VIEW_DATA')">Find</button>
+		</td>
+<!-- Left No -->
+<!-- Product Type -->
+		<td align="center">
+			<b>Product Type</b> </br>
+<?php
+		//$sqlSlct = sqlSlctPrdType();
+		$sqlSlct = " 	SELECT DISTINCT CYL_TYPE
+									from mgtapps.cst_yarn_left
+									where CYL_IS_VALID_PRD = 'Y' $WHERE_YARN_CC ";
+		//if ($USER_NAME==="1949"){echo $sqlSlct;}
+		$rsSlct = oci_parse($conn,$sqlSlct);
+		oci_execute ($rsSlct);
+?>
+		<select name="CYL_TYPE" id="CYL_TYPE" onchange="Process('VIEW_DATA')"
+
+				<?php echo $styleSlct; ?>
+		>
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CYL_TYPE']; ?>"
+				<?php
+					if ($CYL_TYPE_S=== $rowRsSlct['CYL_TYPE']) {echo "selected"; }
+				?>
+
+			>
+				<?php echo $rowRsSlct['CYL_TYPE']; ?>
+			</option>
+<?php
+		}
+?>
+		</select>
+	</td>
+<!-- Product Type -->
+<!-- Customer -->
+		<td align="center">
+			Customer </br>
+<?php
+	$sqlSlct = "
+	SELECT DISTINCT CMCD_NAME CUSTOMER
+    FROM mgtapps.CST_YARN_LEFT_CUST lc,
+         mgtapps.CST_YARN_LEFT l,
+         mgtapps.CST_MST_CUST_DATA cd
+   WHERE     lc.CYLC_CYL_SYS_ID = l.CYL_SYS_ID
+         AND lc.CYLC_CMCD_SYS_ID = CMCD_SYS_ID ";
+	$sqlSlct = "$sqlSlct $WHERE_YARN_CC ORDER BY CMCD_NAME";
+	//$sqlSlct =sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"CUSTOMER",$WHERE_PARAM);
+	//echo "$sqlSlct </br>";
+	//if ($USER_NAME==="1949"){echo $sqlSlct;}
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="CUSTOMER" id="CUSTOMER" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CUSTOMER']; ?>"
+				<?php  if ($CUSTOMER_S=== $rowRsSlct['CUSTOMER']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['CUSTOMER']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Customer -->
+<!-- Product Name -->
+		<td align="center">
+			Product Name  </br>
+<?php
+		//$sqlSlct =sqlSlctTypeBaseSuperba($conn,$sqlData,$CYL_TYPE_S,"CYL_PRODUCT_QUALITY",$WHERE_PARAM)." order by CYL_PRODUCT_QUALITY ";
+		$sqlSlct = "
+									SELECT DISTINCT CYL_PRODUCT_QUALITY
+								FROM (SELECT *
+													FROM mgtapps.cst_mst_yarn y,
+															 mgtapps.cst_yarn_left l,
+															 mgtapps.cst_yarn_calculation_cur cc
+												 WHERE     cycc_cyl_sys_id = cyl_sys_id
+															 AND cyl_cmy_sys_id = cmy_sys_id
+															 AND cyl_prs_type = cycc_prs_type
+															 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+															 $WHERE_PARAM
+															 AND CYL_IS_VALID_PRD = 'Y')
+								 WHERE CYL_PRODUCT_QUALITY IS NOT NULL
+								ORDER BY CYL_PRODUCT_QUALITY
+								";
+		//echo "$sqlSlct";
+		$rsSlct = oci_parse($conn,$sqlSlct);
+		oci_execute ($rsSlct);
+?>
+		<select name="CYL_PRODUCT_QUALITY" id="CYL_PRODUCT_QUALITY" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?>
+		>
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CYL_PRODUCT_QUALITY']; ?>"
+				<?php
+
+					if ($CYL_PRODUCT_QUALITY_S=== $rowRsSlct['CYL_PRODUCT_QUALITY']) {
+						echo "selected";
+						$CYL_PRODUCT_QUALITY_S = $rowRsSlct['CYL_PRODUCT_QUALITY'];
+					}
+				?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['CYL_PRODUCT_QUALITY']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Product Name -->
+<!-- Shade Name - Code -->
+		<td align="center">
+			Shade Name </br>
+<?php
+		//$sqlSlct =sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"CYL_SHADE_NAME",$WHERE_PARAM)." order by CYL_SHADE_NAME ";
+		$sqlSlct =
+				"SELECT DISTINCT CYL_SHADE_NAME
+					FROM (SELECT *
+									FROM mgtapps.cst_mst_yarn y,
+											 mgtapps.cst_yarn_left l,
+											 mgtapps.cst_yarn_calculation_cur cc
+								 WHERE     cycc_cyl_sys_id = cyl_sys_id
+											 AND cyl_cmy_sys_id = cmy_sys_id
+											 AND cyl_prs_type = cycc_prs_type
+											 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+											 $WHERE_PARAM
+											 AND CYL_IS_VALID_PRD = 'Y')
+				 WHERE CYL_SHADE_NAME IS NOT NULL
+				ORDER BY CYL_SHADE_NAME
+				";
+		//echo $sqlSlct;
+		$rsSlct = oci_parse($conn,$sqlSlct);
+		oci_execute ($rsSlct);
+?>
+		<select name="CYL_SHADE_NAME" id="CYL_SHADE_NAME" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?>
+<?php
+		//if ($CYL_SHADE_CODE_S !== "NULL" || $ShadeCodeName!==""){echo "disabled"; }
+?>
+		>
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CYL_SHADE_NAME']; ?>"
+				<?php
+
+					if ($SHADE_CHOICE!=="CYL_SHADE_CODE"){
+						if ($CYL_SHADE_NAME_S !== "NULL"){
+							if ($CYL_SHADE_NAME_S=== $rowRsSlct['CYL_SHADE_NAME']) {echo "selected"; }
+						}
+					} else {
+						if ($ShadeCodeName!== "") {
+							if ($ShadeCodeName=== $rowRsSlct['CYL_SHADE_NAME']) {
+								echo "selected";
+								$CYL_SHADE_NAME_S = $rowRsSlct['CYL_SHADE_NAME'];
+							}
+						}
+					}
+				?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['CYL_SHADE_NAME']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+
+		</td>
+<!-- Shade Name - Code -->
+<!-- Denier -->
+		<td  align="center">
+			Denier </br>
+<?php
+	//$sqlSlct = sqlSlctCustBase($conn,$sqlData,$CUSTOMER_S,"DENIER");
+	//$sqlSlct =sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"DENIER",$WHERE_PARAM)." order by to_number(DENIER) ";
+	$sqlSlct = "
+	SELECT DISTINCT CYCC_TOP_13_DATA_VALUE DENIER
+    FROM (SELECT *
+            FROM mgtapps.cst_mst_yarn y,
+                 mgtapps.cst_yarn_left l,
+                 mgtapps.cst_yarn_calculation_cur cc
+           WHERE     cycc_cyl_sys_id = cyl_sys_id
+                 AND cyl_cmy_sys_id = cmy_sys_id
+                 AND cyl_prs_type = cycc_prs_type
+                 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+                 $WHERE_PARAM
+                 AND CYL_IS_VALID_PRD = 'Y')
+   WHERE CYCC_TOP_13_DATA_VALUE IS NOT NULL
+ORDER BY TO_NUMBER (DENIER)
+	";
+	//echo "sqlSlct $sqlSlct</br>";
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="DENIER" id="DENIER" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['DENIER']; ?>"
+				<?php  if ($DENIER_S=== $rowRsSlct['DENIER']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['DENIER']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+</select>
+		</td>
+<!-- Denier -->
+<!-- Filament -->
+		<td  align="center">
+			Filament </br>
+<?php
+	//$sqlSlct = sqlSlctCustBase($conn,$sqlData,$CUSTOMER_S,"FILAMENT");
+	//$sqlSlct =sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"FILAMENT",$WHERE_PARAM)." order by to_number(FILAMENT) ";
+	$sqlSlct = "
+	SELECT DISTINCT CYCC_TOP_16_DATA_VALUE FILAMENT
+	FROM (SELECT *
+					FROM mgtapps.cst_mst_yarn y,
+							 mgtapps.cst_yarn_left l,
+							 mgtapps.cst_yarn_calculation_cur cc
+				 WHERE     cycc_cyl_sys_id = cyl_sys_id
+							 AND cyl_cmy_sys_id = cmy_sys_id
+							 AND cyl_prs_type = cycc_prs_type
+							 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+							 $WHERE_PARAM
+							 AND CYL_IS_VALID_PRD = 'Y')
+ WHERE CYCC_TOP_16_DATA_VALUE IS NOT NULL
+ORDER BY TO_NUMBER (FILAMENT)";
+	//echo "sqlSlct $sqlSlct</br>";
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="FILAMENT" id="FILAMENT" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['FILAMENT']; ?>"
+				<?php  if ($FILAMENT_S=== $rowRsSlct['FILAMENT']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['FILAMENT']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Filament -->
+<!-- Intermingling -->
+		<td align="center">
+			Intermingling </br>
+<?php
+	//$sqlSlct = sqlSlctCustBase($conn,$sqlData,$CUSTOMER_S,"INTERMINGLING");
+	//$sqlSlct =sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"INTERMINGLING",$WHERE_PARAM)." order by INTERMINGLING ";
+	$sqlSlct = "
+	SELECT DISTINCT CYCC_TOP_18_DATA_VALUE INTERMINGLING
+	FROM (SELECT *
+					FROM mgtapps.cst_mst_yarn y,
+							 mgtapps.cst_yarn_left l,
+							 mgtapps.cst_yarn_calculation_cur cc
+				 WHERE     cycc_cyl_sys_id = cyl_sys_id
+							 AND cyl_cmy_sys_id = cmy_sys_id
+							 AND cyl_prs_type = cycc_prs_type
+							 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+							 $WHERE_PARAM
+							 AND CYL_IS_VALID_PRD = 'Y')
+ WHERE CYCC_TOP_18_DATA_VALUE IS NOT NULL
+ORDER BY INTERMINGLING ";
+	//echo "sqlSlct $sqlSlct</br>";
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="INTERMINGLING" id="INTERMINGLING" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['INTERMINGLING']; ?>"
+				<?php  if ($INTERMINGLING_S=== $rowRsSlct['INTERMINGLING']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['INTERMINGLING']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Intermingling -->
+<!-- Heatset -->
+		<td align="center">
+			Heatset </br>
+<?php
+	$sqlSlct =//sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"HEATSET",$WHERE_PARAM)." order by HEATSET ";
+	"SELECT DISTINCT CYCC_TOP_49_DATA_VALUE HEATSET
+    FROM (SELECT *
+            FROM mgtapps.cst_mst_yarn y,
+                 mgtapps.cst_yarn_left l,
+                 mgtapps.cst_yarn_calculation_cur cc
+           WHERE     cycc_cyl_sys_id = cyl_sys_id
+                 AND cyl_cmy_sys_id = cmy_sys_id
+                 AND cyl_prs_type = cycc_prs_type
+                 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+                 $WHERE_PARAM
+                 AND CYL_IS_VALID_PRD = 'Y')
+   WHERE CYCC_TOP_49_DATA_VALUE IS NOT NULL
+	 ORDER BY HEATSET";
+	//echo "heatset $sqlSlct";
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+		<select name="HEATSET" id="HEATSET" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+			echo $rowRsSlct['heatset'];
+?>
+			<option value="<?php echo $rowRsSlct['HEATSET']; ?>"
+				<?php  if ($HEATSET_S=== $rowRsSlct['HEATSET']) {echo "selected"; } ?>
+			>
+				<?php if(!empty($rowRsSlct['HEATSET'])) {echo $rowRsSlct['HEATSET'];} ?>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Heatset -->
+<!-- Cross Section -->
+		<td align="center">
+			Cross Section </br>
+<?php
+	//$sqlSlct = sqlSlctCustBase($conn,$sqlData,$CUSTOMER_S,"CROSS_SECTION");
+	$sqlSlct =//sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"CROSS_SECTION",$WHERE_PARAM)." order by CROSS_SECTION ";
+	"SELECT DISTINCT CYCC_TOP_17_DATA_VALUE CROSS_SECTION
+	FROM (SELECT *
+					FROM mgtapps.cst_mst_yarn y,
+							 mgtapps.cst_yarn_left l,
+							 mgtapps.cst_yarn_calculation_cur cc
+				 WHERE     cycc_cyl_sys_id = cyl_sys_id
+							 AND cyl_cmy_sys_id = cmy_sys_id
+							 AND cyl_prs_type = cycc_prs_type
+							 AND CYL_PRS_TYPE = MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+							 $WHERE_PARAM
+							 AND CYL_IS_VALID_PRD = 'Y')
+ WHERE CYCC_TOP_17_DATA_VALUE IS NOT NULL
+ORDER BY CROSS_SECTION ";
+	//echo $sqlSlct;
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="CROSS_SECTION" id="CROSS_SECTION" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CROSS_SECTION']; ?>"
+				<?php  if ($CROSS_SECTION_S=== $rowRsSlct['CROSS_SECTION']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['CROSS_SECTION']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Cross Section -->
+<!-- Lusture -->
+		<td align="center">
+			Lusture </br>
+<?php
+	$sqlSlct =//sqlSlctTypeBase($conn,$sqlData,$CYL_TYPE_S,"LUSTURE",$WHERE_PARAM);
+	"  SELECT DISTINCT CMY_LUSTURE
+    FROM mgtapps.cst_mst_yarn
+   WHERE cmy_sys_id IN
+            (SELECT cmy_sys_id
+               FROM (SELECT *
+                       FROM mgtapps.cst_mst_yarn y,
+                            mgtapps.cst_yarn_left l,
+                            mgtapps.cst_yarn_calculation_cur cc
+                      WHERE     cycc_cyl_sys_id = cyl_sys_id
+                            AND cyl_cmy_sys_id = cmy_sys_id
+                            AND cyl_prs_type = cycc_prs_type
+                            AND CYL_PRS_TYPE =
+                                   MGTAPPS.pkg_yarn_calculation.fPrsIDMkt
+                            $WHERE_PARAM
+                            AND CYL_IS_VALID_PRD = 'Y'))
+  ORDER BY CMY_LUSTURE ";
+	//echo $sqlSlct;
+	$rsSlct = oci_parse($conn,$sqlSlct);
+	oci_execute ($rsSlct);
+?>
+<select name="CMY_LUSTURE" id="CMY_LUSTURE" onchange="Process('VIEW_DATA')" <?php echo $styleSlct; ?> >
+			<option value="NULL">NULL</option>
+<?php
+		while ($rowRsSlct = oci_fetch_array ($rsSlct, OCI_BOTH)) {
+?>
+			<option value="<?php echo $rowRsSlct['CMY_LUSTURE']; ?>"
+				<?php  if ($CMY_LUSTURE_S=== $rowRsSlct['CMY_LUSTURE']) {echo "selected"; } ?>
+			>
+				<b><font color='red' ><?php echo $rowRsSlct['CMY_LUSTURE']; ?></font></b>
+			</option>
+<?php
+		}
+?>
+		</select>
+		</td>
+<!-- Lusture -->
+	</tr>
+</table>
+</div>

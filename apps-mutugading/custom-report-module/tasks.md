@@ -10,8 +10,8 @@ allowed scope list in `CLAUDE.md`/`CONTRIBUTING.md` if not already there).
 
 ## Progress log
 
-**Status as of 2026-09-14: T01–T31 done (P0–P7 code complete), T04 dropped. T32 (UAT) is the only
-task left and it needs people, not code.**
+**Status as of 2026-09-15: T01–T31 done and T31 now VERIFIED against real Oracle, T04 dropped.
+T32 (UAT) is the only task left and it needs people, not code.**
 
 Committed, on its own dedicated feature branch (not merged, not pushed to remote — pushing/PR is
 manual, done by the user from GitHub, per their own request):
@@ -120,20 +120,61 @@ T03/T04 reversal, P3–P6, and P7's T30/T31 were done directly, not via a subage
   `REPORT_ORACLE_IT_SERVICE_NAME` (or `REPORT_ORACLE_IT_SID`). Without them all 8 tests skip, which
   is why CI stays green.
 
+**T31 VERIFIED against real Oracle — 2026-09-15:**
+
+An earlier version of this log said T31 could not be run here "no Oracle, no `oci8` extension". That
+was wrong: the `apps-mutugading-app-1` container has `oci8` and a live connection. Run against
+`althara` (192.168.0.7:1521, user `mgthris`): **8 passed, 19 assertions, 5.2s.** Everything the module
+had only asserted is now observed:
+
+| Behaviour | Verdict |
+|---|---|
+| `ROWNUM` wrap caps a 50-row query at `max_rows` | ✅ |
+| Inner `ORDER BY` survives the wrap (top-N is the right N) | ✅ |
+| `truncated` false when the result fits under the cap | ✅ |
+| Multi-select `IN` expansion via OCI named binds | ✅ |
+| `'-999999999'` sentinel vs. a `NUMBER` column — no `ORA-01722` | ✅ the T14 deviation is sound |
+| Same sentinel vs. a `VARCHAR2` column | ✅ |
+| `date_range` two-bind split under implicit date conversion | ✅ |
+| `timeout_sec` genuinely kills a slow query | ✅ |
+
+The timeout case is the one that mattered most: the ~10^10-row query died after 4.1s against a 2s
+budget, and `storage/logs/report_execution-*.log` names the real cause — `ORA-03156: OCI call timed
+out`. So `oci_set_call_timeout()` exists on this client (12.1+), `applyTimeout()` is not a no-op, and
+`RD_TIMEOUT_SEC` is really enforced. That same log line doubles as live proof of NFR-1.4: the `ORA-`
+detail stayed in the log while the caller saw only the generic message.
+
+**Gotcha when re-running:** `REPORT_ORACLE_IT_*` must be real *shell* variables. `.env` is read by
+Laravel, not exported to the shell, so `REPORT_ORACLE_IT_HOST="$DB_HOST"` resolves to an empty string
+and all 8 tests skip while appearing to run. Parse `.env` explicitly.
+
 **Still genuinely open (not just "not built yet"):**
 
-- **T31 is written but has never been run against a real Oracle schema** — it skips in this
-  environment (no Oracle, no `oci8` extension). So every Oracle-dependent claim the module makes is
-  still a claim: real `ROWNUM` capping, real `timeout_sec` cutoff, the `'-999999999'` sentinel against
-  a `NUMBER` column, `date_range`'s two binds under OCI's implicit date conversion. The assertions
-  exist; the verification doesn't. **Running this suite once against the test schema is the single
-  highest-value thing left** — it is also a prerequisite for T32 being meaningful.
-- The timeout test additionally self-skips when the Oracle client is older than 12.1
-  (`oci_set_call_timeout()` doesn't exist there, so `applyTimeout()` is a no-op and `timeout_sec` is
-  **not enforced at all**). If the target environment's client is 11g, that is a real functional gap,
-  not a test-environment quirk.
+- The `< 12.1` Oracle client caveat remains a **portability** note, not a live problem: on an older
+  client `oci_set_call_timeout()` doesn't exist, `applyTimeout()` silently no-ops, and `timeout_sec`
+  is not enforced at all. The test self-skips there rather than passing misleadingly — so a green run
+  on a different host only counts if that row says ✅, not "skipped".
 - Whether the `SqlGuard`-only protection (above) needs revisiting once Admin UI access is opened
   beyond a small trusted `Super Admin` group.
+- Nothing in this module has been verified in a real browser — there is no browser-test runner wired
+  up in this repo. The manual trial on 2026-09-15 caught two things the entire test suite had missed
+  for exactly this reason: the teleported-dropdown drawer bug (see below) and the sidebar menu cache.
+
+**Manual-trial findings, 2026-09-15 (not caught by any test):**
+
+- **The Group select closed the whole definition drawer.** `<x-ui::form.select>` teleports its option
+  panel into `<body>`, so clicking an option counted as a click outside the drawer and
+  `x-on:click.outside` fired — making a report definition impossible to create. Fixed with
+  `:closeOnOutside="false"` (commit `fix(report): stop the definition drawer closing when a group is
+  picked`), pinned by a structural regression test. `<x-ui::drawer>`'s own docblock had documented
+  this trap all along; the drawer was simply missing the prop.
+- **`ReportMenuSeeder` had never been run on `althara`** — `cm_menus` had no report rows, so the
+  sidebar had no "Reports" link at all even though the routes worked. Seeded 2026-09-15; the three
+  items now sit under Core. Remember `MenuTreeService` caches per user for 600s.
+- **A report left at `draft` is invisible everywhere** (catalog filters to `active`, `ReportViewer`
+  404s) and the auto-created `report.view.{id}` permission starts assigned to nobody. Both are by
+  design, but together they make "I built a report and nothing happened" the expected first
+  experience — worth saying out loud in whatever user-facing note accompanies rollout.
 
 ---
 
@@ -220,5 +261,5 @@ T03/T04 reversal, P3–P6, and P7's T30/T31 were done directly, not via a subage
 | # | Task | Depends on | Done when |
 |---|---|---|---|
 | ✅ **T30** | Pest suite covering acceptance criteria 1–11 end to end. Landed as `tests/Feature/Report/AcceptanceCriteriaTest.php` (repo-level `tests/`, not `Modules/Report/tests/` — that's where every other Report test already lives), one `AC-{n}: ...` test per criterion | T01–T29 | ✅ 12 passing tests, all 11 criteria named. AC-7's "no server round-trip" is asserted structurally, not in a browser — see the progress log |
-| ⚠️ **T31** | Integration tests against the Oracle test schema: real `ROWNUM` capping (incl. with `ORDER BY`), real `timeout_sec` cutoff, multi-select `IN` expansion under OCI named binds, the `'-999999999'` empty-selection sentinel against `NUMBER` and `VARCHAR2`, and the `date_range` two-bind split. `tests/Integration/Report/ReportOracleIntegrationTest.php` + a new `Integration` phpunit testsuite; opt-in via `REPORT_ORACLE_IT_*`, skips otherwise. No pattern existed to copy — no other module in this repo has an Oracle integration test | T15 | **Written, not yet verified.** All 8 skip here (no Oracle, no `oci8` ext). Needs one run against the test schema — see "Still genuinely open" above |
-| ⏳ **T32** | **Only task left; needs people, not code.** Run T31 against the test schema first, then UAT: a developer builds one real pilot report (group → definition → parameters) with no code deploy, assigns `report.view.{id}` to a test role via the existing Spatie UI, an end user runs it and downloads Excel. The developer here is a **`Super Admin`**, not a `Developer` — that role was dropped | T30, T31, T12 | Sign-off from both a developer and an end-user tester; the downloaded Excel matches the on-screen table exactly |
+| ✅ **T31** | Integration tests against the Oracle test schema: real `ROWNUM` capping (incl. with `ORDER BY`), real `timeout_sec` cutoff, multi-select `IN` expansion under OCI named binds, the `'-999999999'` empty-selection sentinel against `NUMBER` and `VARCHAR2`, and the `date_range` two-bind split. `tests/Integration/Report/ReportOracleIntegrationTest.php` + a new `Integration` phpunit testsuite; opt-in via `REPORT_ORACLE_IT_*`, skips otherwise. No pattern existed to copy — no other module in this repo has an Oracle integration test | T15 | ✅ **Verified 2026-09-15 against the live `althara` DB: 8 passed, 19 assertions.** `timeout_sec` confirmed real via `ORA-03156: OCI call timed out` in the log. See the progress log for the full result table |
+| ⏳ **T32** | **Only task left; needs people, not code.** T31 is green now, so nothing blocks this. UAT: a developer builds one real pilot report (group → definition → parameters) with no code deploy, assigns `report.view.{id}` to a test role via the existing Spatie UI, an end user runs it and downloads Excel. The developer here is a **`Super Admin`**, not a `Developer` — that role was dropped | T30, T31, T12 | Sign-off from both a developer and an end-user tester; the downloaded Excel matches the on-screen table exactly |
