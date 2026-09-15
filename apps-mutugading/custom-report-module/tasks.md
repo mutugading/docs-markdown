@@ -10,8 +10,8 @@ allowed scope list in `CLAUDE.md`/`CONTRIBUTING.md` if not already there).
 
 ## Progress log
 
-**Status as of 2026-09-15: T01–T31 done and T31 now VERIFIED against real Oracle, T04 dropped.
-T32 (UAT) is the only task left and it needs people, not code.**
+**Status as of 2026-09-15: T01–T31 done, T31 VERIFIED against real Oracle, T04 dropped, T33-T37 added
+and done. T32 (UAT) is the only task left and it needs people, not code.**
 
 Committed, on its own dedicated feature branch (not merged, not pushed to remote — pushing/PR is
 manual, done by the user from GitHub, per their own request):
@@ -160,6 +160,41 @@ and all 8 tests skip while appearing to run. Parse `.env` explicitly.
   up in this repo. The manual trial on 2026-09-15 caught two things the entire test suite had missed
   for exactly this reason: the teleported-dropdown drawer bug (see below) and the sidebar menu cache.
 
+**Test-environment fidelity bug found 2026-09-15 (repo-wide, not Report-specific):**
+
+`tests/TestCase.php` now forces `PDO::ATTR_CASE => PDO::CASE_LOWER` on every sqlite connection,
+mirroring what `yajra/laravel-oci8`'s connector does in production. Without it, SQLite echoed back the
+casing each migration declared — and several migrations declare columns in UPPERCASE (notably
+`HM_EMP_DATA`'s `HMEMD_SYS_ID`). The consequence was quiet and nasty: a model **re-fetched** from such
+a table under SQLite carried `HMEMD_SYS_ID`, so `$model->getKey()` returned `null` even though the row
+had loaded fine, and anything keyed off it (a morph pivot write, a relation query) silently did
+nothing — in tests only. Production, on Oracle, was never affected. Found while building T33, whose
+service looks employees up by id; four of its tests failed in a way that looked like a feature bug and
+wasn't. Worth knowing before writing any test that re-fetches an Hr model.
+
+**Tests reached real object storage — found and fixed 2026-09-15:**
+
+Eight orphaned `.xlsx` objects turned up in the shared dev MinIO bucket, written by the test suite.
+Cause: `QUEUE_CONNECTION` is `sync` under phpunit, so a test that dispatches a `ShouldQueue` job
+without `Bus::fake()` executes it **inline** — and `RunReportJob` writes to `minio_private`. One
+Report test was doing exactly that while failing for an unrelated reason. The objects were deleted
+and `tests/TestCase.php` now rewrites every `s3` disk to local scratch space for the whole test run,
+the same way it already guards against real databases. `Storage::fake()` in an individual test still
+works and is still clearer; this only makes *forgetting* it harmless.
+
+**Environment blocker found and fixed 2026-09-15 — the queue could not dispatch at all:**
+
+`.env` had `DB_QUEUE_TABLE=jobs_v2` and `DB_QUEUE_FAILED_TABLE=failed_jobs_v2`, but neither table
+exists in the schema — only `jobs` and `failed_jobs` do — and **no migration in this repo creates
+them**. Every `ShouldQueue` dispatch failed with `ORA-00942` on insert, so this was never specific to
+the Report module: **every export job in the app was equally broken in this environment.** Pointed at
+`jobs`/`failed_jobs` per the team's call — which is what `.env.example` has always said, so the `_v2`
+values were a local drift. Verified with a real worker: dispatch 0.026s, run completes in 38s,
+notification delivered.
+
+⚠️ **`.env` is not in version control, so this fix does not travel with the repo.** Any other
+environment showing `ORA-00942` on a queue insert needs the same one-line change.
+
 **Manual-trial findings, 2026-09-15 (not caught by any test):**
 
 - **The Group select closed the whole definition drawer.** `<x-ui::form.select>` teleports its option
@@ -171,6 +206,27 @@ and all 8 tests skip while appearing to run. Parse `.env` explicitly.
 - **`ReportMenuSeeder` had never been run on `althara`** — `cm_menus` had no report rows, so the
   sidebar had no "Reports" link at all even though the routes worked. Seeded 2026-09-15; the three
   items now sit under Core. Remember `MenuTreeService` caches per user for 600s.
+- **The first real report query failed twice, for two unrelated reasons**, both found by running it
+  against Oracle rather than by reading it: (1) `ORA-00942` — four of its five tables live in the
+  `MGTDAT` schema with no synonyms, so they need an explicit `MGTDAT.` prefix; `MGTHRIS` does hold
+  SELECT grants on them. (2) `ORA-00932: expected CHAR got DATE` — a `date` parameter binds as a
+  **string**, so comparing `:p_date` straight against a DATE column fails; the query must wrap it,
+  `TO_DATE(:p_date, 'YYYY-MM-DD')` (the datepicker sends `Y-m-d`). Neither is a module bug, but both
+  are traps every report author will hit, so they belong in whatever authoring guide ships with this.
+- ~~**Column aliases come back lowercased.**~~ **FIXED, T34.** `yajra/laravel-oci8`'s connector
+  hardcodes `PDO::ATTR_CASE => PDO::CASE_LOWER`, so a carefully quoted `"Item Group"` rendered as
+  `item group` in both the web table and the Excel export. Fixed by giving report execution its own
+  `oracle_report` connection with `CASE_NATURAL` — **not** by changing `oracle_mgthris`, which the
+  whole app relies on being lowercase. Verified on the live DB: all 18 headers of the pilot report now
+  come back exactly as written.
+- **The default `timeout_sec` of 30 is too low for a real analytical query, and `max_rows` of 1000
+  silently truncated 77% of the output.** The pilot report needs ~34s and produces 4,357 rows; it kept
+  failing with `ORA-03156: OCI call timed out` until `timeout_sec` was raised to 120 and `max_rows`
+  to 5000. Key insight: **`max_rows` does not make a slow report faster** — the `ROWNUM` wrap caps
+  what is transferred, but the `GROUP BY` runs over everything first. It took ~34s whether capped at
+  5 rows or 5,000. Also worth noting `ReportViewer::MAX_DOWNLOAD_ROWS` is 5,000 and this report is
+  already at 4,357 — once output crosses that, the Excel download aborts with a 400 rather than
+  truncating. Full measurements in `Modules/Report/CLAUDE.md`.
 - **A report left at `draft` is invisible everywhere** (catalog filters to `active`, `ReportViewer`
   404s) and the auto-created `report.view.{id}` permission starts assigned to nobody. Both are by
   design, but together they make "I built a report and nothing happened" the expected first
@@ -262,4 +318,9 @@ and all 8 tests skip while appearing to run. Parse `.env` explicitly.
 |---|---|---|---|
 | ✅ **T30** | Pest suite covering acceptance criteria 1–11 end to end. Landed as `tests/Feature/Report/AcceptanceCriteriaTest.php` (repo-level `tests/`, not `Modules/Report/tests/` — that's where every other Report test already lives), one `AC-{n}: ...` test per criterion | T01–T29 | ✅ 12 passing tests, all 11 criteria named. AC-7's "no server round-trip" is asserted structurally, not in a browser — see the progress log |
 | ✅ **T31** | Integration tests against the Oracle test schema: real `ROWNUM` capping (incl. with `ORDER BY`), real `timeout_sec` cutoff, multi-select `IN` expansion under OCI named binds, the `'-999999999'` empty-selection sentinel against `NUMBER` and `VARCHAR2`, and the `date_range` two-bind split. `tests/Integration/Report/ReportOracleIntegrationTest.php` + a new `Integration` phpunit testsuite; opt-in via `REPORT_ORACLE_IT_*`, skips otherwise. No pattern existed to copy — no other module in this repo has an Oracle integration test | T15 | ✅ **Verified 2026-09-15 against the live `althara` DB: 8 passed, 19 assertions.** `timeout_sec` confirmed real via `ORA-03156: OCI call timed out` in the log. See the progress log for the full result table |
+| ✅ **T33** | **Not in the original plan — added 2026-09-15 on the team's request.** "Report Access" screen (`ReportAccessManager` + `ReportAccessService`, route `report.admin.access`): per-report, per-user access control with two tabs (Per Report / Per User), a pending-decisions model that survives pagination, and a summary of direct-grantee counts. **Supersedes PRD §4's "tidak ada layar baru untuk ini"** — report *groups* organize by domain, but access cuts across domains (a Finance user needing a Material Control report), which roles express badly. Direct permissions only; role-derived access stays in Core's roles UI and is deliberately not editable here | T11, T27 | 10 passing tests incl. the direct-vs-role boundary; menu item seeded; smoke-tested against the live `althara` DB |
+| ✅ **T34** | **Not in the original plan — added 2026-09-15.** Report execution moved to its own `oracle_report` connection (`config/database.php`), identical to `oracle_mgthris` except `PDO::ATTR_CASE => PDO::CASE_NATURAL`, so a report's quoted column aliases survive as its headers instead of being flattened to lowercase by the Oracle driver. Header casing is now the report author's choice: quote the alias to control it; an unquoted identifier comes back in Oracle's uppercase. `tests/TestCase.php` was taught not to clobber a connection that states its own `ATTR_CASE` | T15 | 4 config/binding tests + 2 Oracle integration tests (both directions); the pilot report's 18 headers verified on the live DB |
+| ✅ **T35** | **Not in the original plan — added 2026-09-15, phase 1 of 2.** Background report execution: `RPT_RUNS` table + `RptRun`/`ReportRunStatusEnum`/repository, `RunReportJob` (query → xlsx + JSON snapshot → `minio_private` → `ReportStatusNotification`), `ReportRunService`, and a "Proses di Background" button on the viewer. **Reverses `plan.md`'s "nothing to queue" decision** — measurement showed the query is ~38s and the Excel formatting 3.2s, so it is the query that had to leave the request cycle, not the export. Mirrors `ExportLedgerJob`'s pipeline exactly | T15, T25 | 7 tests; verified end to end on the live DB (run #1: 4,357 rows in 40s, both artifacts on MinIO, notification delivered). `run()` stays until T36's result page lands |
+| ✅ **T36** | **Phase 2, done 2026-09-15.** `ReportRunViewer` (`/dashboard/reports/runs/{run}`) renders a finished run from its JSON snapshot — **4,357 rows in 0.4s vs 38s inline**. Notification deep-links to it. `ReportViewer` is now form-and-dispatch only (0.48s), watching its queued run via `wire:poll.5s` plus the Reverb private-channel listener, and redirecting to the result on completion. Run access is scoped to the requester, not just `report.view.{id}`. Two downloads on the result page: the pre-built full file (no row ceiling) and the client-filtered subset (AC-8, keeps the 5,000 bound) | T35 | A finished run is viewable without re-running the query; the notification opens it |
+| ✅ **T37** | **Retention sweep, done 2026-09-15.** `report:prune-runs` (nightly 03:30, `report_retention` log channel, `--dry-run`, `--limit`, `--stale-minutes`): deletes expired artifacts **then** rows — never the reverse, since the row is the only record of where the artifacts live — and marks runs whose worker died as failed so the viewer stops polling them. Sweeps by run DIRECTORY, so a file orphaned by a job that crashed mid-write is caught too. Retention window moved to `report.retention_days` config, read by both the job and the sweep | T35 | 10 tests; verified against the real bucket: `Swept 1 run(s), freed 303.7 KB` |
 | ⏳ **T32** | **Only task left; needs people, not code.** T31 is green now, so nothing blocks this. UAT: a developer builds one real pilot report (group → definition → parameters) with no code deploy, assigns `report.view.{id}` to a test role via the existing Spatie UI, an end user runs it and downloads Excel. The developer here is a **`Super Admin`**, not a `Developer` — that role was dropped | T30, T31, T12 | Sign-off from both a developer and an end-user tester; the downloaded Excel matches the on-screen table exactly |

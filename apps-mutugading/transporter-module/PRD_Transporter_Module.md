@@ -1,7 +1,7 @@
 # PRD — Transporter Module (Migrasi Oracle Forms/Reports 6i → Laravel)
 
-**Version:** 1.5 Draft
-**Date:** 2026-09-14
+**Version:** 2.2 Draft
+**Date:** 2026-09-15
 **Author:** IT — Apps Mutu Gading
 **Status:** For Review
 **Target Module:** `Modules/Transporter`
@@ -61,7 +61,7 @@ Migrasi ini bukan sekadar port 1:1. Analisa menemukan kelemahan struktural yang 
 | 4 | Biaya Lain-lain (Other Charges) | Pengganti TRNSP006 |
 | 5 | Provisi & Posting JV | Pengganti TRNSP003 |
 | 6 | Tagihan Transporter & Posting TJV | Pengganti TRNSP004 |
-| 7 | Tagihan Tambahan (Add-On) | Pengganti TRNSP007 |
+| 7 | Tagihan tanpa provisi & additional expense | Menggantikan TRNSP007 — dilebur ke modul tagihan (§5.6) dan Additional Expense (§5.4) |
 | 8 | Monitoring GRN Chip | Pengganti TRNSP005 |
 | 9 | 9 report (dikonsolidasi jadi 5) | Excel + PDF |
 | 10 | Auto-generate transaksi chip dari GRN + halaman GRN yang gagal & tarik manual | Pengganti trigger `ODBTRG_TPCHP` |
@@ -76,7 +76,9 @@ Migrasi ini bukan sekadar port 1:1. Analisa menemukan kelemahan struktural yang 
 - Perubahan proses bisnis penagihan/pembayaran vendor di luar apa yang sudah ada di sistem lama.
 - Migrasi `MGT_TP_PROVISION_DEL` dalam bentuk apa pun. Tabel itu lahir dari kekurangan sistem lama (tidak ada soft delete dan tidak ada audit trail), bukan dari kebutuhan bisnis — di sistem baru fungsinya digantikan soft delete + activity log (F-02.9). Datanya ditinggalkan di `MGTDAT` sebagai arsip pasif.
 - Rekonsiliasi ulang GL periode lampau.
-- Modul pembayaran (payment voucher) — sudah ditangani Orion / LcControl.
+- Alur gerbang & loading (pencatatan truk masuk/keluar oleh satpam) — diusulkan sebagai fase berikutnya, kaitannya disiapkan di v1 (§5.12).
+- Biaya ekspor (EMKL, kepabeanan, export cost) untuk surat jalan `EDN` — dimiliki modul **Shipping Instruction**. Yang masuk modul ini hanya trucking pabrik → bandara untuk kiriman via pesawat, dicatat sebagai `TPSVC` (F-02.12a).
+- Payment voucher / `BPS` — **rilis terpisah setelah v1**; rancangannya sudah ada di §5.11 dan tempatnya sudah disiapkan di skema.
 
 ---
 
@@ -107,11 +109,13 @@ Migrasi ini bukan sekadar port 1:1. Analisa menemukan kelemahan struktural yang 
 | TRNSP006.rdf | TRANSPORTER BILL (varian) | `MGT_TP_PROVISION_BILL` | Hampir identik dengan 005 |
 | TRNSP007.rdf | TRANSPORTER PROVISION STATUS / NOT YET PROVISION | `MGT_TP_PROVISION`, `MGT_TRANSP_HEAD` | Transaksi yang belum diprovisi |
 | TRNSP008.rdf | TRANSPORTER PROVISION | `MGT_TP_PROVISION` | Rekap provisi |
-| TRNSP009.rdf | **TRANSPORTER BUDGET** | `MGT_TP_PROVISION`, `MGT_TP_PROVISION_BILL`, `MGT_TRANSP_MASTER`, `OM_SUPPLIER`, `FV_TRANS_HEADER`, `FT_OS`, `FV_OS_MATCH` | Outstanding hutang angkutan per supplier — provisi belum ter-bill + tagihan belum lunas. Lihat rincian di bawah |
+| TRNSP009.rdf | TRANSPORTER BUDGET | idem | **Sudah tidak relevan** — logikanya digantikan `TRANSPORTER_BUDGET_V` (Apr 2025). Tidak dimigrasi; rinciannya tetap didokumentasikan di §3.2.1 sebagai rujukan |
 
 #### 3.2.1 TRNSP009 — Transporter Budget (rincian)
 
-Report ini semula tidak ikut diserahkan; berkasnya menyusul (versi 29 Oktober 2021, identik dengan salinan kerja terakhir di drive developer).
+> **Status: tidak dimigrasi.** Report ini dinyatakan sudah tidak relevan — logikanya sudah digantikan `TRANSPORTER_BUDGET_V` (April 2025), yang menjadi acuan F-08.5. Bagian ini disimpan sebagai dokumentasi bentuk laporannya, bukan sebagai kebutuhan yang harus dibangun.
+
+Berkasnya menyusul setelah review (versi 29 Oktober 2021, identik dengan salinan kerja terakhir di drive developer).
 
 **Parameter:** *tidak ada parameter user sama sekali.* Yang ada hanya parameter sistem Oracle Reports (`DESTYPE`, `DESNAME`, `DESFORMAT`, `COPIES`, `CURRENCY`, `THOUSANDS`, `DECIMAL`, `MODE`, `ORIENTATION`, `BACKGROUND`, `PRINTJOB`) plus `M_DEST_TYPE` dari template Orion — bernilai `'E'` untuk memicu ekspor Excel lewat `RPT2XLS.run`. Artinya report **selalu berjalan atas seluruh data**, tanpa filter tanggal maupun supplier, dengan header *"As On : <tanggal hari ini>"*.
 
@@ -360,6 +364,8 @@ Profil pajak per vendor disimpan di `IM_VS_STATIC_VALUE` dengan `VSSV_VS_CODE = 
 | `VSSV_FIELD_02` | `PPH 0.5` / `NON PPH` / null | Skema PPh |
 | `VSSV_FIELD_03` | `DDMMYYYY` | Tanggal berakhir berlakunya `PPH 0.5` — divalidasi `SYSDATE <= TO_DATE(VSSV_FIELD_03,'DDMMYYYY')` |
 
+> **Sudah tidak berlaku untuk vendor baru.** Per kebijakan sekarang, setiap MoU baru wajib memuat klausul bahwa tagihan dipotong PPh — sehingga **tidak ada satu pun vendor transporter aktif yang bertanda gross-up** (`SUPP_FLEX_06 = 'Y'` = 0 vendor). Provisi ber-gross-up terakhir tercatat **Juni 2024**, total 2.048 baris historis. Di sistem baru flag ini tetap ada **hanya supaya angka historis bisa direproduksi**, default mati (F-01.3a).
+
 Gross-up PPh diambil dari `OM_SUPPLIER.SUPP_FLEX_06 = 'Y'`:
 
 ```sql
@@ -368,14 +374,73 @@ DECODE(tp_amt_pph_grossup, 0,
        ROUND((NVL(tp_amt,0) + NVL(tp_oth_amt,0)) * 1.02))   -- gross-up 2%
 ```
 
+#### 3.7.4a Kode Transaksi ERP vs Nomor Transaksi Internal
+
+Dua hal yang mudah tertukar:
+
+| Jenis | Contoh | Dokumen ERP? | Butuh `FT_TXN_AUTH`? |
+|---|---|---|---|
+| Nomor transaksi angkutan | `TPDN-2026000123`, `TPCHP-2026000045` | **Tidak** — nomor internal modul, kustom, tidak punya padanan di Orion | Tidak |
+| Kode transaksi GL provisi | `JV` (lama) → **`TPJV`** (baru) | Ya | **Ya** |
+| Kode transaksi GL tagihan | `TJV` | Ya | **Ya** |
+| Kode transaksi pembayaran | `BPS` / `BPJ` | Ya | Ya (rilis lanjutan) |
+
+**Perubahan yang sudah diputuskan: provisi transporter pindah dari `JV` ke `TPJV` (Transporter Provision JV).** Selama ini provisi angkutan bercampur dengan seluruh jurnal umum perusahaan di bawah kode `JV`, sehingga sulit dipisahkan untuk rekonsiliasi maupun audit.
+
+**Status prasyarat — sudah disiapkan di Orion, diverifikasi 15 September 2026:**
+
+| Objek | Status | Isi |
+|---|---|---|
+| `IM_TXN_AUTH` | ✅ ada | 1 baris `TPJV` — type `F`, group `0`, seq `1`, approve `A`, delete `Y`, modify `Y` |
+| `IM_TXN_AUTH_USER` | ✅ ada | 1 baris |
+| `FM_TRAN_DOC_NO` | ✅ ada | 12 periode untuk `cal_year 2026`, comp `002`, `acnt_year 20`, semua `cur_no = 0` (belum terpakai) |
+| `FT_TXN_AUTH` | ⚠️ kosong | 0 baris — wajar, karena belum ada dokumen `TPJV` yang diposting. Tapi ini menimbulkan masalah, lihat di bawah |
+
+**`FT_TXN_AUTH` adalah urusan Orion, bukan urusan modul ini.**
+
+Penelusuran ke seluruh instance memastikan pembagian tugasnya:
+
+| Siapa | Melakukan apa |
+|---|---|
+| **Orion** — `STP_DINSERT_APPR_RECS` / `STP_DINSERT_APPR_RECS_NEW` | Prosedur standar Orion yang membuat baris `FT_TXN_AUTH`, dipanggil dari paket keuangannya sendiri (`FINPKG_FT2502`, `FINPKG_FT2504`, `ORNDBPKG_ADJUSTMENT`, dll.) saat transaksi dibuat lewat layar Orion |
+| **Aplikasi luar** (modul LC, dan nanti modul ini) | Hanya menulis `FT_UNPOSTED_TRANS_HEADER` + `FT_UNPOSTED_TRANS_DETAIL`, lalu memajukan `FM_TRAN_DOC_NO`. Tidak menyentuh `FT_TXN_AUTH` |
+
+Jadi modul LC sudah benar sejak awal — dan **`PKG_TRANSPORTER` yang menyimpang**, karena menulis `FT_TXN_AUTH` sendiri alih-alih membiarkan Orion yang mengurusnya lewat prosedur standar. Itu juga menjelaskan kenapa penulisannya tidak konsisten antar prosedur (T-27).
+
+Bukti pendukung dari data 2026: dari 477 dokumen `JV` yang sudah berpindah ke `FT_CUR_TRANS_HEADER`, **182 di antaranya tidak punya baris `FT_TXN_AUTH`** dan tetap terotorisasi serta terposting normal.
+
+**Keputusan: ikuti pola modul LC — tulis hanya header dan detail.** Ini bukan sekadar pilihan yang aman secara empiris, melainkan memang pembagian tanggung jawab yang benar.
+
+**Catatan kalau suatu saat diputuskan sebaliknya.** Kode lama mengambil `tauth_tbl_identifier` dengan **membaca dokumen `FT_TXN_AUTH` yang sudah ada** untuk kode transaksi tersebut:
+
+```sql
+select tauth_tbl_identifier into v_iden
+from (select tauth_txn_code, tauth_tbl_identifier from ft_txn_auth group by ...)
+where tauth_txn_code = 'JV';
+```
+
+Untuk `TPJV` belum ada satu dokumen pun, sehingga lookup ini akan melempar `NO_DATA_FOUND`. Nilainya sendiri ternyata konstan — `'GL'` baik untuk `JV` maupun `TJV`. Jadi seandainya baris ini tetap ditulis, identifier-nya harus diambil dari konfigurasi, bukan dari data dokumen.
+
+**Sisa pekerjaan rutin:** `FM_TRAN_DOC_NO` baru terisi untuk 2026. Tiap pergantian tahun, `TPJV` harus ikut dalam rutinitas pembuatan baris periode — sama seperti `JV`, yang saat ini juga hanya punya 2025 dan 2026.
+
+Konsekuensi yang harus ditangani:
+
+| # | Konsekuensi |
+|---|---|
+| 1 | `FM_TRAN_DOC_NO` perlu baris `TPJV` untuk tiap `(comp_code, cal_year, acnt_year, period)` — kalau belum ada, nomor dokumen tidak bisa di-generate |
+| 2 | `FT_TXN_AUTH` perlu satu baris acuan `tauth_tbl_identifier` untuk `TPJV`, seperti yang sudah ada untuk `JV` dan `TJV` |
+| 3 | Pengecekan idempotensi harus menyasar `th_tran_code = 'TPJV'` di `FT_UNPOSTED_` / `FT_CUR_` / `FT_PRV_TRANS_HEADER` |
+| 4 | Data historis tetap ber-`JV`. Semua laporan, rekonsiliasi, dan pencarian nomor jurnal harus menerima **keduanya** — `JV` untuk sebelum cutover, `TPJV` sesudahnya |
+| 5 | Konsumen hilir yang memfilter `th_tran_code` (mis. `UPDATE_FSFC_VCH` yang memakai daftar `'ADVP','CAS','EBJV','JJV','JV','TJV'`) perlu ditambahi `TPJV`, kalau tidak voucher provisi transporter berhenti terpetakan ke faktur pajak |
+
 #### 3.7.5 Matriks Akun GL
 
 Semua posting memakai `comp_code = '002'`, `divn_code = '001'`, `dept_code = 'FIN'`, `head_no_1 = 1`, `head_no_2 = 2`.
 
 | Proses | Prosedur | Debit | Kredit |
 |---|---|---|---|
-| Provisi Yarn (TPDN) | `jv_provision` | `404001` | `208027` |
-| Provisi Chip (TPCHP) | `jv_provision_chp` | `401001` | `208026` |
+| Provisi Yarn (TPDN) | `jv_provision` → kode GL `JV`, **menjadi `TPJV`** | `404001` | `208027` |
+| Provisi Chip (TPCHP) | `jv_provision_chp` → kode GL `JV`, **menjadi `TPJV`** | `401001` | `208026` |
 | Tagihan Yarn | `tjv_bill` | `404001` (reversal provisi), `108004` PPN masukan (atau `108005` bila nomor FP diawali `05`) | `203001` AP (sub-account = kode supplier), `206005` PPh |
 | Tagihan Chip | `tjv_bill_chp` | idem, basis `208026`/`401001` | idem |
 | Tagihan Add-On | `tjv_bill_add` / `tjv_bill_chp_add` | idem | idem |
@@ -520,6 +585,13 @@ MGT_TRANSP_HEAD / DETAIL_DN / DETAIL_COST / TP_PROVISION / TP_PROVISION_BILL
 | T-20 | **`JWDN` terlewat dari kontrol dokumen** | 14 baris `JWDN` (mulai April 2025) tidak pernah mendapat status dokumen; job `EFILL_009` hanya menangani `LDN` dan `PDN` | Tagihan angkutan `JWDN` lolos gerbang tanpa verifikasi hard copy. Dikonfirmasi sebagai kelalaian, bukan keputusan desain — wajib ditutup di sistem baru (F-10.5) |
 | T-21 | **Ambang & pesan error tidak sinkron** | `ODBTRG_TPCHP` membatasi gross weight 60.000 kg, pesan `2441456` masih berbunyi "tidak boleh lebih besar dari 50500 Kgs" | Operator disesatkan; ambang di-hardcode, sudah 4 kali diubah lewat recompile |
 | T-22 | **Dead code di trigger** | `if sql%notfound then` di dalam cursor FOR-loop — kondisi yang tidak pernah benar | Validasi "Chips Transporter Master belum di Setup" tidak pernah jalan |
+| T-23 | **"Master transporter" sebenarnya rate card, bukan master vendor** | 739 baris untuk hanya **50 vendor** (rata-rata 15,8 baris/vendor, maks 40), sedangkan `MGT_TRANSP_RATE` rata-rata cuma **1,08 baris** per master | Satu vendor tersebar di puluhan baris. Menambah satu destinasi berarti membuat "master" baru. Tidak ada satu tempat pun yang menjawab "vendor X itu siapa" |
+| T-24 | **Tarif tidak punya masa berlaku** | `MGT_TRANSP_RATE` hanya menyimpan nilai berjalan; perubahan tarif menimpa yang lama | Provisi periode lampau tidak bisa direproduksi — hitung ulang hari ini memberi angka berbeda. Tidak ada jejak kapan tarif naik |
+| T-25 | **Nama vendor disalin dari ERP dan sudah melenceng** | 59 dari 727 baris punya `MTM_TRANSP_NAME` berbeda dari `OM_SUPPLIER.SUPP_NAME`; 12 baris malah tidak punya `MTM_TRANSP_CODE` sama sekali | Nama di dokumen angkutan bisa beda dengan nama di tagihan & GL. Trigger chip mencocokkan **berdasarkan nama** (`mtm_transp_name = gh_flex_05`), jadi drift nama langsung bikin generate gagal |
+| T-26 | **23 kombinasi (vendor, destinasi, jenis truk) punya lebih dari satu baris master** | Query agregat atas `MGT_TRANSP_MASTER` | Pemilihan tarif ambigu — mana yang dipakai bergantung urutan baris |
+| T-27 | **`PKG_TRANSPORTER` menulis `FT_TXN_AUTH` sendiri, padahal itu tugas Orion** | Pembuatan baris otorisasi adalah tanggung jawab prosedur standar Orion (`STP_DINSERT_APPR_RECS_NEW`). `PKG_TRANSPORTER` melewatinya dan menulis manual — itu pun hanya di `jv_provision`, `jv_provision_chp`, dan `tjv_bill`; `tjv_bill_chp`, `tjv_bill_add`, dan `tjv_bill_chp_add` tidak sama sekali | Menduplikasi logika milik ERP, tidak konsisten antar prosedur, dan akan patah untuk kode transaksi baru. Di sistem baru tidak ditiru (F-05.9) |
+| T-29 | **Tanggung jawab biaya angkut tidak pernah dinyatakan eksplisit** | Ongkos yang ditanggung pembeli diwakili master bernama `BY PARTY` (8 baris tanpa kode vendor), armada sendiri diwakili master `MUTU GADING TEKSTIL, PT`. Tidak ada kolom yang menyatakan maksudnya | Aturannya hanya hidup di kepala user. Salah pilih master = provisi ke vendor yang tidak boleh ditagih. Sejauh ini konsisten (319 transaksi, nol provisi), tapi tanpa pengaman apa pun |
+| T-28 | **Surat jalan ekspor (`EDN`) dan `WDN` tidak masuk modul transporter** | 1.029 `EDN` dan 730 `WDN` sepanjang 2025, 100% sudah terisi kode transporter di `INVH_FLEX_06`, tetapi tidak satu pun muncul di `MGT_TRANSP_DETAIL_DN` | **Ternyata memang benar begitu.** `EDN` dimiliki modul Shipping Instruction (EMKL, export cost); hanya trucking pabrik → bandara yang masuk sini lewat `TPSVC` (F-02.12a). `WDN` tidak dikenai biaya angkut sama sekali — ongkosnya tanggungan pembeli (§5.1.2). Kode transporter di `INVH_FLEX_06` terisi sebagai catatan siapa yang mengangkut, bukan sebagai penanda ada tagihan |
 
 ---
 
@@ -557,23 +629,29 @@ Konvensi mengikuti modul terbaru (`LcControl`, `MaterialControl`): tabel `snake_
 
 | Tabel Baru (MGTHRIS) | Prefix | Menggantikan | Perubahan Utama |
 |---|---|---|---|
-| `transp_master` | `trm_` | `MGT_TRANSP_MASTER` | + unique `(transp_code, destination, truck_type, type)`; `frz_flag` → `is_active` boolean |
-| `transp_rate` | `trr_` | `MGT_TRANSP_RATE` | FK ke master (ON DELETE CASCADE); + unique `(master_id, priority)`; `max_cap` sentinel `1` diganti kolom eksplisit `is_overflow` |
+| `transp_carrier` | `tca_` | bagian pengangkut dari `MGT_TRANSP_MASTER` | **Satu baris per pengangkut** (± 50 baris, bukan 739). `tca_type` menentukan tanggung jawab biayanya: `VENDOR` / `BUYER_BORNE` / `INTERNAL` (§5.1.2). `tca_supp_code` → `MGTDAT.OM_SUPPLIER.SUPP_CODE`, unique, **wajib untuk `VENDOR` dan `INTERNAL`**, kosong untuk `BUYER_BORNE`. Nama **tidak disalin** — dibaca dari ERP (memperbaiki T-25). Profil pajak diresolusi dari `IM_VS_STATIC_VALUE` |
+| `transp_rate_card` | `trc_` | bagian tarif dari `MGT_TRANSP_MASTER` | Satu baris per kombinasi berlaku: `trc_vendor_id`, `trc_service_type` (`DESPATCH` / `CHIP`), `trc_destination` (untuk DESPATCH), **`trc_chip_vendor_code`** (untuk CHIP, FK → `OM_SUPPLIER`), `trc_truck_type`, `trc_truck_cap`, `trc_valid_from`, `trc_valid_to`, `trc_is_active`, `trc_legacy_mtm_no`. Unique `(vendor, service_type, destination, chip_vendor, truck_type, valid_from)` |
+| `transp_rate_line` | `trl_` | `MGT_TRANSP_RATE` | FK ke rate card (ON DELETE CASCADE); `trl_priority`, `trl_rate_type` (`W`/`Q`), `trl_max_cap`, **`trl_is_overflow`** (menggantikan sentinel `max_cap = 1`), `trl_rate`. Unique `(rate_card_id, priority)` |
 | `transp_order` | `tro_` | `MGT_TRANSP_HEAD` | + unique `(txn_code, transp_no)`; status jadi enum; + kolom approval (`tro_submitted_by/at`, `tro_approved_by/at`, `tro_rejected_by/at`, `tro_reject_reason`); + `tro_source` (`MANUAL` / `GRN_PULL` / `AUTO_DN`) dan `tro_source_ref` (mis. `gh_sys_id`); + soft delete (`tro_deleted_by/at`, `tro_delete_reason`) menggantikan tabel `_DEL` |
 | `transp_order_dn` | `tod_` | `MGT_TRANSP_DETAIL_DN` | FK ke order; + unique `(order_id, dn_txn_code, dn_no)` |
 | `transp_order_cost` | `toc_` | `MGT_TRANSP_DETAIL_COST` | FK ke order |
-| `transp_other_charge` | `tocg_` | `MGT_TRANSP_DETAIL_OTHCHG` | FK opsional ke order; `othchg_id` dinormalisasi ke tabel master baru |
-| `transp_charge_type` | `tct_` | *(baru)* | Master jenis biaya lain-lain (Tol, Solar, Inap, Kawal, Jalan Ditutup) — sebelumnya string bebas |
+| `transp_additional_expense` | `tae_` | `MGT_TRANSP_DETAIL_OTHCHG` + `MGT_TP_PROVISION_ADD` + `MGT_TP_PROVISION_BILL_ADD` | **Additional Expense** — transaksi tersendiri yang punya approval tetapi menempel ke induknya (§5.4). `tae_order_id` (FK ke `transp_order`, **wajib**), `tae_no`, status, kolom approval lengkap (`tae_submitted_by/at`, `tae_approved_by/at`, `tae_rejected_by/at`, `tae_reject_reason`), dan `tae_bill_line_id` saat ditarik |
+| `transp_additional_expense_line` | `tal_` | baris `MGT_TRANSP_DETAIL_OTHCHG` | Rincian per jenis biaya dalam satu dokumen: `tal_charge_type_id`, nominal, keterangan, lampiran bukti |
+| `transp_charge_type` | `tct_` | `MTDO_OTHCHG_ID` (string bebas) | Master jenis biaya tambahan (Tol, Solar, Inap, Kawal, Jalan Ditutup, Ambil Barang) |
 | `transp_dn_stage` | `tds_` | `MGT_TRANSP_DN_AUTO` | + unique `dn_sys_id`; purge otomatis setelah diproses |
-| `transp_provision` | `trp_` | `MGT_TP_PROVISION` + `_ADD` | **Digabung** dengan kolom `trp_kind` = `MAIN` / `ADDON` |
+| `transp_provision` | `trp_` | `MGT_TP_PROVISION` + `_ADD` | **Digabung.** Satu baris per transaksi angkutan — unique `(trp_order_id)`, menegakkan aturan *satu induk = satu provisi* (§5.6.1). Tidak ada provisi susulan |
 | `transp_provision_dn` | `tpd_` | `MGT_TP_PROVISION_DN` | FK ke provision |
-| `transp_bill` | `trb_` | `MGT_TP_PROVISION_BILL` + `_BILL_ADD` | **Digabung** dengan kolom `trb_kind` = `MAIN` / `ADDON` |
-| `transp_posting_log` | `tpl_` | *(baru)* | Satu baris per posting GL: jenis (`JV`/`TJV`), referensi sumber, nomor dokumen hasil, payload, status, pesan error. Menjadi kunci idempotensi menggantikan `th_flex_10` |
+| `transp_bill` | `trb_` | `MGT_TP_PROVISION_BILL` + `_BILL_ADD` | **Digabung.** Header tagihan vendor: invoice, faktur pajak, DPP, PPN, PPh, total |
+| `transp_bill_line` | `tbl_` | *(baru — sebelumnya relasi lewat `TP_TPB_SYS_ID`)* | Baris tagihan. `tbl_line_type`: `PROVISION` (me-reverse provisi yang sudah diposting) atau `EXPENSE_DIRECT` (selisih & biaya tanpa provisi). Untuk `EXPENSE_DIRECT`: `tbl_difference_type` (`ADDITIONAL` / `CANCELLATION` / `DEDUCTION`), `tbl_expense_account`, `tbl_reason`, dan `tbl_additional_expense_id` bila berasal dari §5.4 |
+| `transp_payment` | `tpy_` | *(baru — rilis lanjutan)* | Payment voucher transporter: tagihan yang dibayar, tanggal, bank/akun, nominal, referensi voucher `BPS`/`BPJ` (§5.11). Tabelnya dibuat di v1 supaya skema tidak berubah lagi nanti, tetapi belum dipakai |
+| `transp_posting_log` | `tpl_` | *(baru)* | Satu baris per posting ke ERP: jenis (`JV` / `TJV` / `BPS`), referensi sumber, nomor dokumen hasil, payload, status, pesan error. Menjadi kunci idempotensi menggantikan `th_flex_10` |
 | `transp_document_scan` | `tds_` | *(baru — menggantikan `MTDD_STS_PRS` + `MTDD_STS_DOC`)* | Satu baris per surat jalan yang wajib dikontrol dokumennya: jenis & nomor surat jalan, status (`Pending`/`Scanned`/`Waived`), path & nama berkas PDF, waktu ditemukan, sumber perubahan (job / manual), pengubah, alasan waive. Status dokumen tidak lagi menempel di baris detail DN, sehingga riwayatnya bisa disimpan utuh |
 | `transp_grn_pull_attempt` | `tgp_` | *(baru)* | Satu baris per GRN chip yang dicoba dijadikan transaksi: referensi GRN, waktu & pemicu percobaan (job / manual), hasil, dan alasan gagal. Menjadi sumber data halaman "GRN Chip Belum Ter-generate" (F-09.9) |
 | `transp_document_type` | `tdt_` | `MGTAPPS.EFILL_TYPE_DATA(_FORMAT)` (bagian yang relevan) | Konfigurasi jenis surat jalan yang dikontrol: kode (`LDN`/`PDN`/`JWDN`), prefix nama berkas, pola folder, dan flag `wajib_kontrol` — sehingga menambah jenis baru cukup lewat data |
 
-**Penggabungan `_ADD`:** tabel add-on hanya berisi 42 dan 5 baris, terakhir dipakai Desember 2022, dan strukturnya identik dengan tabel utama. Menggabungkannya menghapus duplikasi 2 × 670 baris kode PL/SQL (`tjv_bill_add`, `tjv_bill_chp_add`) menjadi satu jalur kode dengan parameter.
+**Penggabungan `_ADD`:** tabel add-on hanya berisi 42 dan 5 baris, terakhir dipakai Desember 2022, dan strukturnya identik dengan tabel utama. Menggabungkannya menghapus duplikasi 2 × 670 baris kode PL/SQL (`tjv_bill_add`, `tjv_bill_chp_add`) menjadi satu jalur kode dengan parameter. Kasus yang dulu memaksa lahirnya modul add-on — **tagihan yang tidak punya provisi sebelumnya** — sekarang cukup jadi baris `transp_bill_line` bertipe `EXPENSE_DIRECT`.
+
+**Kenapa master dipecah tiga.** `MGT_TRANSP_MASTER` sekarang bukan master vendor, melainkan baris rate card yang menyamar: 739 baris untuk hanya **50 vendor** (rata-rata 15,8 baris per vendor, maksimum 40), sementara `MGT_TRANSP_RATE` yang seharusnya memegang tarif justru rata-rata hanya berisi **1,08 baris** per master. Struktur baru mengembalikan tiap hal ke tempatnya: vendor sekali, rate card per kombinasi, rate line untuk tarif berjenjang. Rinciannya di §5.1.
 
 **Kolom traceability:** setiap tabel baru mendapat `*_legacy_id` (nilai `*_SYS_ID` lama) supaya rekonsiliasi pasca-migrasi bisa dilakukan.
 
@@ -591,6 +669,15 @@ enum TransactionStatusEnum: int {
     case Cancelled = 5;   // baru — dibatalkan sebelum masuk provisi
 }
 
+enum AdditionalExpenseStatusEnum: int {
+    case Draft = 0;
+    case Submitted = 1;
+    case Approved = 2;   // oleh user lain di tim pelapor; siap ditarik Finance
+    case Rejected = 3;
+    case Billed = 4;     // sudah ditarik ke tagihan
+    case Cancelled = 5;  // dipastikan tidak ditagih vendor
+}
+
 enum ProvisionStatusEnum: int {
     case Unposted = 0;   // TP_STATUS 'Unposted'
     case Posted = 1;     // TP_STATUS 'Posted'
@@ -601,18 +688,20 @@ enum ProvisionStatusEnum: int {
 
 Status lama yang berupa string bebas dipetakan ke enum saat migrasi (lihat §6.3).
 
-**Aturan maker-checker.** `Submitted → Approved` maupun `Submitted → Rejected` hanya boleh dilakukan oleh user yang **berbeda dari pembuat transaksi**, dan hanya oleh pemegang permission `transporter.approve-transaction`. Aturan ini berlaku untuk **semua** jalur pembuatan transaksi — manual despatch, tarik chip dari GRN, maupun generate otomatis dari surat jalan — tanpa pengecualian. Transaksi berstatus `Draft` atau `Rejected` masih bisa diubah pembuatnya; `Approved` terkunci kecuali di-*unapprove* oleh approver (kembali ke `Submitted`, tercatat di activity log) selama belum masuk provisi.
+**Jenis transaksi angkutan:** `TPDN` (yarn / surat jalan), `TPCHP` (chip / GRN), dan `TPSVC` (jasa tanpa surat jalan, §5.2.1). Nama `TPDN` dan `TPCHP` **dipertahankan apa adanya** dari sistem lama supaya nomor transaksi historis tetap terbaca sama di kedua sistem.
+
+**Aturan maker-checker.** `Submitted → Approved` maupun `Submitted → Rejected` hanya boleh dilakukan oleh user yang **berbeda dari pembuat transaksi**, dan hanya oleh pemegang permission `transporter.approve-transaction`. Aturan ini berlaku untuk **semua** jalur pembuatan transaksi — manual despatch, tarik chip dari GRN, maupun generate otomatis dari surat jalan — tanpa pengecualian, dan berlaku sama untuk **additional expense** (§5.4): penyetujunya user lain di tim pelapor (despatch untuk yarn, stores untuk chip), bukan Finance. Transaksi berstatus `Draft` atau `Rejected` masih bisa diubah pembuatnya; `Approved` terkunci kecuali di-*unapprove* oleh approver (kembali ke `Submitted`, tercatat di activity log) selama belum masuk provisi.
 
 ### 4.4 Posting GL
 
-Diusulkan **mengangkat** `JournalVoucherPostingService` + `EloquentJournalVoucherRepository` dari `Modules/LcControl` ke `Modules/Core` (namespace `Modules\Core\Services\Erp`), lalu dipakai bersama oleh LcControl dan Transporter. Alasannya:
+Diusulkan **mengangkat** `JournalVoucherPostingService` + `EloquentJournalVoucherRepository` — dan, saat rilis payment voucher dikerjakan nanti, `PaymentVoucherPostingService` + `EloquentPaymentVoucherRepository` (§5.11) — dari `Modules/LcControl` ke `Modules/Core` (namespace `Modules\Core\Services\Erp`), lalu dipakai bersama oleh LcControl dan Transporter. Alasannya:
 
 - Mekanika GL-nya persis sama: resolusi `fm_acnt_period`, nomor dari `fm_tran_doc_no`, insert `ft_unposted_trans_header` + `_detail`, update `tdoc_cur_no`.
 - Aturan modul (`CLAUDE.md` §Module Rules) melarang modul mengakses kelas internal modul lain secara langsung; komponen bersama harus berada di `Core` atau `UI`.
 
 **Yang perlu ditambahkan** ke service bersama tersebut (belum ada di implementasi LcControl saat ini):
 
-1. Insert baris `FT_TXN_AUTH` (`tauth_sys_id` dari `tauth_sys_id.nextval`, `tauth_tbl_identifier` dari `FT_TXN_AUTH` existing untuk txn code terkait). Sistem lama selalu menulis baris ini; tanpa itu dokumen JV bisa tidak muncul di layar otorisasi Orion. **Perlu dikonfirmasi ke tim Finance.**
+1. Insert baris `FT_TXN_AUTH` (`tauth_sys_id` dari `tauth_sys_id.nextval`, `tauth_tbl_identifier` diambil dari baris `FT_TXN_AUTH` yang sudah ada untuk txn code terkait). **Dikonfirmasi wajib** untuk setiap posting yang menghasilkan dokumen ERP — `TPJV` dan `TJV`. Transaksi angkutan `TPDN` / `TPCHP` bukan dokumen ERP, jadi tidak perlu baris ini.
 2. Dukungan `th_flex_10` dan `td_flex_15..20`.
 3. Pengecekan idempotensi lintas `FT_UNPOSTED_` / `FT_CUR_` / `FT_PRV_TRANS_HEADER`.
 
@@ -683,17 +772,69 @@ flowchart TD
 ```
 
 
-### 5.1 Master Transporter (pengganti TRNSP001)
+### 5.1 Master Vendor & Rate Card (pengganti TRNSP001)
+
+Struktur lama menggabungkan tiga hal berbeda ke satu tabel: identitas vendor, kombinasi layanan, dan tarif. Akibatnya 50 vendor tersebar di 739 baris (T-23). Struktur baru memisahkannya:
+
+```
+transp_carrier                     50 baris — satu per pengangkut, tipe VENDOR / BUYER_BORNE / INTERNAL
+   └── transp_rate_card            ± 716 baris — satu per kombinasi yang berlaku
+         ├─ DESPATCH: vendor × destinasi × jenis truk
+         └─ CHIP:     vendor × vendor chip × jenis truk
+         + masa berlaku (valid_from / valid_to)
+         └── transp_rate_line      tarif berjenjang: priority, W/Q, rate
+```
 
 | ID | Requirement |
 |---|---|
-| F-01.1 | CRUD master transporter: kode (auto `TR####`), nama, kode vendor Orion (`OM_SUPPLIER`), tipe (`DES`/`STO`), tujuan, jenis truk, kapasitas, status aktif |
-| F-01.2 | Tabel tarif inline (child) dengan prioritas, tipe (`W`/`Q`), kapasitas maksimum / flag kelebihan, tarif |
-| F-01.3 | Lookup tujuan & jenis truk dari `IM_VS_STATIC_VALUE` (`DESTINATION`, `TYPE_TRUCK`) |
-| F-01.4 | Validasi: tidak boleh ada duplikat `(transp_code, destination, truck_type, type)` — memperbaiki T-05 |
-| F-01.5 | Validasi: minimal 1 baris tarif prioritas 1 bertipe `W` sebelum master bisa diaktifkan |
-| F-01.6 | Export Excel daftar master + tarif |
-| F-01.7 | Soft-delete: master yang sudah dipakai transaksi tidak boleh dihapus, hanya dinonaktifkan |
+| **Vendor** | |
+| F-01.1 | CRUD pengangkut. Untuk tipe `VENDOR` dan `INTERNAL`, **wajib** terhubung ke `OM_SUPPLIER` — dipilih lewat pencarian supplier ERP, bukan diketik, satu supplier = satu pengangkut (unique). Tipe `BUYER_BORNE` tidak punya supplier (§5.1.2) |
+| F-01.2 | Nama, NPWP, dan alamat **tidak disimpan ulang** — dibaca dari `OM_SUPPLIER` saat ditampilkan. Memperbaiki T-25 (59 baris namanya sudah melenceng dari ERP). Pengangkut `BUYER_BORNE` memakai label sendiri karena tidak punya padanan di ERP |
+| F-01.3 | Profil pajak (PPN / PPN 1% / PPh 0,5 / non-PPh beserta masa berlakunya) ditarik dari `IM_VS_STATIC_VALUE`, ditampilkan read-only di halaman vendor supaya Finance bisa memverifikasi sebelum menagih |
+| F-01.3a | Flag gross-up PPh 2% **default mati** dan ditandai *deprecated*. Kebijakan sekarang mewajibkan klausul pemotongan PPh di setiap MoU baru, dan saat ini nol vendor aktif memakainya. Flag dipertahankan hanya untuk mereproduksi 2.048 provisi historis (terakhir Juni 2024); mengaktifkannya butuh persetujuan eksplisit dan tercatat di activity log |
+| **Rate card** | |
+| F-01.4 | Satu rate card = satu kombinasi yang berlaku. Untuk `DESPATCH`: vendor × destinasi × jenis truk × kapasitas. Untuk `CHIP`: vendor angkutan × **vendor chip** × jenis truk × kapasitas (§5.1.1) |
+| F-01.5 | **Masa berlaku** `valid_from` / `valid_to` per rate card — memperbaiki T-24. Perhitungan biaya selalu memakai rate card yang berlaku **pada tanggal transaksi**, bukan yang berlaku hari ini, sehingga provisi periode lampau bisa direproduksi |
+| F-01.6 | Menaikkan tarif = menutup rate card lama (`valid_to`) dan membuat yang baru, bukan menimpa. Riwayat tarif tersimpan dan bisa dilihat per vendor |
+| F-01.7 | Validasi: tidak boleh ada dua rate card aktif dengan kombinasi dan periode yang bertumpang tindih — memperbaiki T-05 dan T-26 (23 kombinasi ganda saat ini) |
+| F-01.8 | Validasi: minimal satu `transp_rate_line` prioritas 1 sebelum rate card bisa diaktifkan (`W` untuk despatch, `Q` untuk chip) |
+| F-01.9 | Lookup destinasi & jenis truk dari `IM_VS_STATIC_VALUE` (`DESTINATION`, `TYPE_TRUCK`) |
+| F-01.10 | Duplikasi rate card: salin satu rate card ke destinasi/jenis truk lain, supaya menambah cakupan vendor tidak perlu entri dari nol |
+| F-01.11 | Export Excel: daftar vendor, dan matriks tarif vendor × destinasi × jenis truk |
+| F-01.12 | Vendor maupun rate card yang sudah terpakai transaksi tidak boleh dihapus — hanya dinonaktifkan / ditutup masa berlakunya |
+
+#### 5.1.2 Tanggung Jawab Biaya Angkut
+
+Tidak semua pengiriman menimbulkan tagihan ke vendor angkutan. Ada tiga kemungkinan, dan sistem lama membedakannya secara **implisit** — lewat master mana yang dipilih, tanpa satu kolom pun yang menyatakannya:
+
+| Tipe | Di sistem lama | Volume 2025–2026 | Provisi? |
+|---|---|---:|---|
+| `VENDOR` — diangkut vendor, perusahaan yang bayar | Master dengan `MTM_TRANSP_CODE` terisi | 6.541 transaksi → 6.415 berprovisi | **Ya** |
+| `BUYER_BORNE` — ongkos ditanggung pembeli | Master bernama `BY PARTY` (8 baris, tanpa kode vendor) | 50 transaksi | **Tidak** — 0 provisi |
+| `INTERNAL` — armada sendiri | Master bernama `MUTU GADING TEKSTIL, PT` (kode `LS00550`) | 269 transaksi | **Tidak** — 0 provisi |
+
+Angkanya bersih: 319 transaksi `BY PARTY` + armada sendiri, **nol** yang berprovisi. Jadi aturannya sudah dijalankan konsisten — hanya saja tidak pernah ditulis, sehingga siapa pun yang keliru memilih master akan membuat provisi ke vendor yang tidak seharusnya ditagih.
+
+| ID | Requirement |
+|---|---|
+| F-01.16 | Setiap pengangkut punya `tca_type` eksplisit: `VENDOR`, `BUYER_BORNE`, atau `INTERNAL` |
+| F-01.17 | Transaksi angkutan dengan pengangkut `BUYER_BORNE` atau `INTERNAL` **tidak pernah masuk ke provisi maupun tagihan**, ditegakkan di service — bukan hanya disaring di UI |
+| F-01.18 | Transaksinya tetap dicatat (siapa mengangkut apa ke mana), karena tetap dibutuhkan untuk laporan pengiriman dan penelusuran, hanya tidak menghasilkan konsekuensi keuangan ke vendor |
+| F-01.19 | Biaya armada sendiri (`INTERNAL`) — gaji sopir dan bahan bakar — **di luar cakupan modul ini**; sudah ada mekanisme tersendiri. Modul ini tidak mengalokasikan apa pun untuknya |
+| F-01.20 | Halaman transaksi menampilkan tipe pengangkut secara mencolok, dan memperingatkan kalau pengiriman ke tujuan yang biasanya `VENDOR` tiba-tiba dipilihkan pengangkut `BUYER_BORNE` (atau sebaliknya) |
+| F-01.21 | `BUYER_BORNE` tidak perlu rate card. `INTERNAL` boleh punya rate card untuk keperluan pembanding biaya, tetapi tetap tidak menghasilkan provisi |
+
+#### 5.1.1 Tarif chip per vendor chip
+
+Untuk angkutan chip, tarif tidak cukup ditentukan oleh transporter saja — **tarif berbeda tergantung chip-nya diambil dari vendor mana**, karena jarak dan kondisi rutenya berbeda.
+
+Di sistem lama hal ini sudah ditangani, tetapi lewat kolom yang namanya tidak menjelaskan apa-apa: pada baris `MTM_TYPE = 'STO'`, kolom `MTM_CUST_SUPP` menyimpan **kode vendor chip** sementara `MTM_TRANSP_CODE` menyimpan kode vendor angkutan. Trigger `ODBTRG_TPCHP` mencocokkan keduanya (`mtm_cust_supp = gh_supp_code`) untuk memilih tarif. Saat ini ada **20 vendor angkutan × 7 vendor chip = 90 baris** kombinasi.
+
+| ID | Requirement |
+|---|---|
+| F-01.13 | Rate card `CHIP` memakai kolom eksplisit `trc_chip_vendor_code` (FK ke `OM_SUPPLIER`), bukan kolom serbaguna. Kunci tarifnya: **(vendor angkutan, vendor chip, jenis truk)** |
+| F-01.14 | Halaman rate card chip menampilkan matriks vendor angkutan × vendor chip, sehingga terlihat kombinasi mana yang belum punya tarif — penyebab paling sering gagalnya generate transaksi chip (F-09.9) |
+| F-01.15 | Pencocokan GRN → rate card memakai **kode vendor**, bukan nama. Sistem lama mencocokkan `mtm_transp_name = gh_flex_05` (perbandingan teks), yang rapuh terhadap perbedaan ejaan — lihat T-25 |
 
 ### 5.2 Transaksi Angkutan (pengganti TRNSP002)
 
@@ -717,6 +858,23 @@ flowchart TD
 >
 > *Asumsi:* "menu yang sama" diartikan sebagai satu halaman Transaksi Angkutan yang menaungi ketiga jalur, bukan tiga halaman berbeda dengan tampilan seragam. Kalau yang dimaksud sebaliknya, cukup beri tahu — perubahannya kecil.
 
+#### 5.2.1 Jasa Angkutan Tanpa Surat Jalan — `TPSVC`
+
+Ada jasa angkutan yang **tidak punya referensi surat jalan maupun GRN**: ambil barang, retur benang, dan angkutan pallet. Jasanya nyata dipakai dan ditagih vendor, tetapi karena tidak ada dokumen sumber, sistem lama menuliskannya langsung ke kolom nomor — menghasilkan 328 baris `TP_NO` berisi teks `AMBIL BARANG`, `RETUR BENANG`, atau `PALLET`, bukan nomor transaksi. Akibatnya parsing prefix (`SUBSTR(tp_no,1,4)`) gagal dan baris-baris itu terlewat di beberapa proses (T-06).
+
+Keputusan: jasa ini **bagian resmi dari bisnis** dan diberi jenis transaksi sendiri supaya pemetaannya benar.
+
+| ID | Requirement |
+|---|---|
+| F-02.11 | Jenis transaksi ketiga `TPSVC` (Transporter Service), sejajar dengan `TPDN` dan `TPCHP`, dengan penomoran `TPSVC-{YYYY}{6 digit}` |
+| F-02.12 | Master kategori jasa (`transp_service_category`): Ambil Barang, Retur Benang, Pallet, dan **Trucking ke Bandara** — bisa ditambah lewat data. Setiap `TPSVC` wajib memilih satu kategori |
+| F-02.12a | Kategori **Trucking ke Bandara** untuk kiriman ekspor via pesawat: barang diangkut dari pabrik ke bandara, sementara pengurusan ekspornya sendiri (EMKL, export cost) tetap milik modul Shipping Instruction. `TPSVC` ini boleh mencantumkan nomor `EDN` sebagai referensi bebas, tanpa menariknya sebagai baris surat jalan — supaya tidak bentrok dengan modul tersebut |
+| F-02.13 | `TPSVC` **tidak punya baris surat jalan**. Yang wajib diisi: vendor, tanggal, tujuan, nomor polisi, sopir, kategori jasa, dan keterangan |
+| F-02.14 | Biaya diambil dari rate card bila kombinasinya ada; bila tidak, diisi manual dengan alasan dan tetap melalui approval yang sama |
+| F-02.15 | Dibuat manual oleh despatch, memakai halaman, daftar, dan alur approval yang sama (`tro_source = MANUAL`) |
+
+> Dengan ini `TP_NO` selalu berbentuk `{KODE}-{nomor}` tanpa pengecualian, sehingga tidak ada lagi baris yang lolos dari filter prefix.
+
 ### 5.3 Tarik & Generate Otomatis (pengganti TRNSP008)
 
 | ID | Requirement |
@@ -727,16 +885,59 @@ flowchart TD
 | F-03.4 | Dijalankan sebagai queued job dengan progress & notifikasi |
 | F-03.5 | Command terjadwal opsional untuk tarik otomatis harian |
 | F-03.6 | Idempoten: baris staging yang sudah punya `transp_txn` tidak diproses ulang |
-| F-03.7 | Untuk despatch yang tidak tertangkap otomatis, user **membuat transaksinya sendiri** lewat halaman yang sama (F-02, `tro_source = MANUAL`) — misal angkutan yang surat jalannya belum lengkap datanya di Orion, atau kasus `AMBIL BARANG` / `RETUR BENANG` / `PALLET` |
+| F-03.7 | Untuk despatch yang tidak tertangkap otomatis, user **membuat transaksinya sendiri** lewat halaman yang sama (F-02, `tro_source = MANUAL`); untuk jasa tanpa surat jalan dipakai `TPSVC` (§5.2.1) |
+| F-03.9 | Jenis surat jalan yang ditarik diatur lewat konfigurasi, bukan literal di kode. Cakupan v1: `LDN`, `JWDN`, `PDN`. `EDN` **tidak** ditarik otomatis (dimiliki modul Shipping Instruction; hanya trucking ke bandara yang masuk lewat `TPSVC`). `WDN` **tidak ditarik** — tidak pernah dikenai biaya angkut |
+| F-03.10 | Terisinya `INVH_FLEX_06` **bukan** penanda bahwa ada biaya yang harus ditagih. Yang menentukan adalah tipe pengangkut (§5.1.2): `LDN` / `PDN` / `JWDN` pun bisa `BUYER_BORNE` atau `INTERNAL`, dan yang seperti itu tidak menghasilkan provisi |
 | F-03.8 | Hasil generate otomatis masuk berstatus **Submitted**, bukan langsung Approved. Wajib disetujui user lain (F-02.6) |
 
-### 5.4 Biaya Lain-lain (pengganti TRNSP006)
+### 5.4 Additional Expense (pengganti TRNSP006 "Other Charges")
+
+**Apa ini sebenarnya.** Biaya di luar tarif angkutan — tol, kawal, inap, solar, jalan ditutup. Di sistem lama ia hanya baris biaya yang menempel di TPDN (`MGT_TRANSP_DETAIL_OTHCHG`) dengan flag `Provision` / `Not Provision`: tanpa alur, tanpa pelapor, tanpa bukti, tanpa persetujuan.
+
+**Bentuk barunya: transaksi tersendiri yang punya approval, tetapi menempel ke induknya.** Additional expense adalah dokumen yang dibuat dan disetujui di dalam tim yang mengetahui kejadiannya — despatch untuk yarn, stores untuk chip — lalu **tersedia untuk ditarik Finance** saat menyusun tagihan. Fungsinya klarifikasi: memastikan setiap biaya tambahan sudah tercatat dan disahkan oleh pihak yang bertanggung jawab **sebelum** dibayarkan.
+
+**Dua arah yang harus dilayani:**
+
+| Situasi | Alurnya |
+|---|---|
+| Finance menerima tagihan tambahan yang belum ada informasinya | Finance meminta despatch / stores meng-entry additional expense-nya. Setelah disetujui internal tim tersebut, Finance **tinggal pull** datanya ke tagihan — tidak perlu lagi konfirmasi lisan atau email |
+| Despatch mencatat additional expense, tetapi vendor tidak menagihkannya | Finance **cukup tidak menarik** baris itu. Tidak ada yang perlu dibatalkan atau dihapus; barisnya tetap ada sebagai catatan, terlihat di daftar "belum tertagih" beserta umurnya |
+
+Menarik atau tidak menarik adalah **keputusan Finance saat menagih**, bukan status yang harus diurus lebih dulu. Ini titik perbedaan penting dari rancangan sebelumnya: tidak ada langkah "acknowledge" oleh Finance — persetujuannya terjadi di dalam tim pelapor, dan Finance memakainya apa adanya.
+
+**Status:**
+
+| Status | Siapa | Arti |
+|---|---|---|
+| `Draft` | Despatch / Stores | Sedang disusun, masih bisa diubah pembuatnya |
+| `Submitted` | Despatch / Stores | Menunggu persetujuan |
+| `Approved` | **User lain** di tim yang sama | Sah. Masuk kumpulan yang bisa ditarik Finance |
+| `Rejected` | User lain di tim yang sama | Ditolak dengan alasan, kembali ke `Draft` |
+| `Billed` | sistem | Sudah ditarik menjadi baris tagihan |
+| `Cancelled` | Despatch / Stores / Finance | Dipastikan tidak akan ditagih vendor; ditutup dengan alasan |
 
 | ID | Requirement |
 |---|---|
-| F-04.1 | Master jenis biaya (Tol, Solar, Inap, Kawal, Jalan Ditutup) — menggantikan `MTDO_OTHCHG_ID` string bebas |
-| F-04.2 | Entri biaya lain-lain, boleh terkait transaksi angkutan atau berdiri sendiri |
-| F-04.3 | Status `Provision` / `Not Provision`; hanya yang `Provision` ikut ke provisi |
+| F-04.1 | Master jenis biaya tambahan (Tol, Solar, Inap, Kawal, Jalan Ditutup, Ambil Barang) — menggantikan `MTDO_OTHCHG_ID` yang sekarang string bebas dan 472 barisnya malah kosong |
+| F-04.2 | **Menempel ke induk.** Setiap additional expense wajib merujuk satu transaksi angkutan (`TPDN` atau `TPCHP`). Vendor, tanggal, dan tujuan diturunkan dari induknya, tidak diketik ulang |
+| F-04.3 | **Tanpa induk dilarang.** Setiap additional expense harus menempel ke satu transaksi angkutan. Kalau jasanya tidak punya surat jalan sama sekali, jalurnya membuat transaksi `TPSVC` lebih dulu (§5.2.1) — bukan membuat additional expense menggantung |
+| F-04.4 | Isi dokumen: jenis biaya, nominal, keterangan, lampiran bukti (foto / scan). Beberapa jenis biaya boleh dalam satu dokumen |
+| F-04.5 | **Approval oleh user lain di tim yang sama** — despatch untuk yarn, stores untuk chip — memakai mekanisme maker-checker yang sama dengan transaksi angkutan (§4.3). Finance tidak ikut menyetujui; Finance yang memakai hasilnya |
+| F-04.6 | Hanya yang berstatus `Approved` yang muncul sebagai kandidat tarik di halaman tagihan vendor tersebut |
+| F-04.7 | **Tarik ke tagihan bersifat pilihan.** Finance memilih baris mana yang ditarik; yang tidak ditarik tetap `Approved` dan tidak mengubah apa pun. Tidak ada kewajiban menutup baris yang tidak tertagih |
+| F-04.8 | Baris yang sudah ditarik menjadi `Billed` dan terkunci; melepasnya dari tagihan mengembalikannya ke `Approved` |
+| F-04.9 | Selisih antara nominal yang dicatat despatch/stores dan nominal yang ditagih vendor ditampilkan saat menarik, supaya ketimpangan terlihat sebelum dibayar |
+| F-04.10 | Bila transaksi induknya **belum** diprovisi saat additional expense disetujui, nilainya ikut terbawa ke provisi — mempertahankan perilaku `TP_OTH_AMT` sistem lama, sehingga beban tetap masuk di bulan kejadian |
+| F-04.11 | Bila induknya **sudah** diprovisi, **tidak dibuat provisi susulan**. Baris ini ditarik saat menagih dan langsung membebani akun beban (§5.6.1). Aturannya tegas: **satu induk = satu provisi** |
+| F-04.12 | Notifikasi: ke approver saat ada yang menunggu persetujuan; ke pembuat saat disetujui atau ditolak |
+
+#### 5.4.1 Halaman monitoring
+
+| ID | Requirement |
+|---|---|
+| F-04.13 | **Menunggu persetujuan** — daftar `Submitted`, dikelompokkan per tim, dengan umurnya |
+| F-04.14 | **Disetujui tapi belum tertagih** — daftar `Approved` beserta umur sejak disetujui. Inilah daftar yang dilihat Finance saat menyusun tagihan, dan sekaligus yang menunjukkan biaya yang mungkin tidak akan pernah ditagih vendor |
+| F-04.16 | Rekap per vendor per bulan: dicatat vs tertagih, untuk melihat pola vendor yang sering menagih di luar catatan atau sebaliknya |
 
 ### 5.5 Provisi & Posting JV (pengganti TRNSP003)
 
@@ -749,6 +950,10 @@ flowchart TD
 | F-05.5 | Posting JV sebagai queued job; hasil dicatat di `transp_posting_log`; gagal → rollback penuh — memperbaiki T-07 |
 | F-05.6 | Idempoten: satu batch provisi tidak bisa diposting dua kali |
 | F-05.7 | Akun GL diambil dari tabel konfigurasi (`transp_posting_account`), bukan literal di kode — memperbaiki T-09 |
+| F-05.8 | Kode transaksi GL (`TPJV`) diambil dari konfigurasi, bukan literal |
+| F-05.10 | `th_cr_uid` / `td_cr_uid` diisi **Orion user id** si pemosting, diambil dari `MGTHRIS.HM_EMP_DATA.HMEMD_USER_ORION` — pemetaan yang sudah dipakai modul LC. Posting ditolak di aplikasi bila pemetaan itu kosong, dengan pesan yang jelas, bukan dibiarkan menulis nilai kosong ke GL |
+| F-05.11 | Orion menegakkan **maker ≠ approver** di level database lewat `ODBTRG_APPR_VOUCHER` pada `FT_UNPOSTED_TRANS_HEADER` (error 2441465: *"Approval Tidak Bisa di Lakukan karena User Approval Sama dengan User Created"*). Karena itu pemetaan Orion user id harus benar per individu — memakai satu akun bersama akan membuat dokumen tidak bisa diotorisasi siapa pun |
+| F-05.9 | **Baris `FT_TXN_AUTH` tidak ditulis.** Modul hanya menulis `FT_UNPOSTED_TRANS_HEADER` + `_DETAIL` dan memajukan `FM_TRAN_DOC_NO`; pembuatan baris otorisasi tetap urusan Orion lewat prosedur standarnya (§3.7.4a) |
 
 ### 5.6 Tagihan & Posting TJV (pengganti TRNSP004 + TRNSP007)
 
@@ -760,8 +965,34 @@ flowchart TD
 | F-06.4 | Blokir generate TJV bila masih ada surat jalan yang hard copy-nya belum discan (lihat F-10); tampilkan daftar LDN yang menahan, bukan sekadar pesan "Document Belum Lengkap" |
 | F-06.5 | Preview jurnal TJV (AP, PPN masukan / dikecualikan bila FP diawali `08`, PPh, reversal provisi) sebelum posting |
 | F-06.6 | Posting TJV sebagai queued job; idempoten lewat `transp_posting_log` |
-| F-06.7 | Tagihan add-on ditangani sebagai `trb_kind = ADDON` pada halaman yang sama, bukan halaman terpisah |
+| F-06.7 | **Tidak ada modul tagihan add-on terpisah** (TRNSP007 dihapus). Satu tagihan memuat dua jenis baris (`transp_bill_line`): `PROVISION` — mencocokkan provisi yang sudah diposting, dan `EXPENSE_DIRECT` — semua selisih dan biaya tanpa provisi, termasuk additional expense yang ditarik (§5.4). Boleh bercampur dalam satu tagihan |
+| F-06.7a | Baris `EXPENSE_DIRECT` wajib mengisi akun beban, jenis selisih, dan alasan; jurnalnya membebani akun tersebut, bukan me-reverse provisi. Inilah yang dulu memaksa lahirnya TRNSP007 (§5.6.1) |
+| F-06.7b | Saat menyusun baris `EXPENSE_DIRECT`, sistem menawarkan additional expense berstatus `Approved` milik vendor tersebut untuk ditarik. Menarik bersifat pilihan — yang tidak ditarik dibiarkan apa adanya (F-04.7). Selisih nominal catatan vs tagihan ditampilkan (F-04.9) |
+| F-06.7c | Total tagihan harus sama dengan jumlah barisnya sebelum TJV boleh dibuat |
 | F-06.8 | Pembatalan matching: provisi yang belum ber-TJV bisa dilepas dari tagihan. Barisnya **tidak dipindah ke tabel arsip** — cukup dikembalikan ke status sebelumnya, dengan perubahan tercatat di activity log |
+
+#### 5.6.1 Satu Induk = Satu Provisi, Selisih Langsung ke Beban
+
+Aturan pokok yang menyederhanakan seluruh alur akuntansi modul ini:
+
+> Satu transaksi angkutan menghasilkan **tepat satu** baris provisi. Setelah provisi diposting, provisi itu **tidak pernah diubah, ditambah, atau dibuatkan susulan**. Segala selisih yang muncul belakangan dibebankan langsung ke akun beban saat menagih.
+
+Selisih bisa tiga arah, dan ketiganya diperlakukan sama:
+
+| Jenis selisih | Contoh | Perlakuan |
+|---|---|---|
+| **Additional** | Ada jasa tambahan setelah provisi diposting (tol, kawal, inap) | Baris tagihan langsung ke akun beban |
+| **Cancellation** | Jasa batal dipakai padahal sudah diprovisi | Baris tagihan negatif ke akun beban |
+| **Deduction** | Vendor menagih lebih kecil dari provisi (potongan, klaim, denda) | Baris tagihan negatif ke akun beban |
+
+| ID | Requirement |
+|---|---|
+| F-06.9 | Provisi bersifat **sekali jadi per transaksi angkutan**. Tidak ada provisi susulan, tidak ada revisi provisi yang sudah diposting |
+| F-06.10 | Setiap selisih dicatat sebagai baris tagihan bertipe `EXPENSE_DIRECT` dengan `tbl_difference_type` = `ADDITIONAL` / `CANCELLATION` / `DEDUCTION`, wajib mengisi akun beban dan alasan |
+| F-06.11 | Nilai `CANCELLATION` dan `DEDUCTION` bertanda negatif, sehingga jumlah seluruh baris selalu sama dengan nilai tagihan vendor |
+| F-06.12 | Laporan selisih per vendor per periode: provisi vs tertagih, dipecah per jenis selisih — untuk melihat vendor mana yang paling sering meleset dari provisi |
+
+Penyederhanaan yang didapat: tabel provisi tidak perlu `trp_source_type`, dan jenis baris tagihan cukup dua.
 
 ### 5.7 Monitoring GRN Chip (pengganti TRNSP005)
 
@@ -770,23 +1001,65 @@ flowchart TD
 | F-07.1 | Daftar GRN `CHPGRN` sejak 1 April 2021 yang transporternya belum ter-setup, dengan status `BELUM DI SETUP` / `GRN BELUM APPROVE` |
 | F-07.2 | Aksi buat master `STO` otomatis (jenis truk `TRAILER`, kapasitas 20.000, tarif tipe `Q` prioritas 1) |
 
-### 5.8 Auto-Generate Transaksi Chip (pengganti trigger `ODBTRG_TPCHP`)
+### 5.8 Tarik Manual Transaksi Chip dari GRN (pengganti trigger `ODBTRG_TPCHP`)
+
+**Keputusan: tidak ada generate otomatis.** Trigger lama membuat transaksi `TPCHP` seketika saat GRN di-approve, di dalam transaksi approval itu sendiri — sehingga kesalahan setup transporter ikut membatalkan approval GRN, dan kesalahan entri di GRN hanya bisa diperbaiki dengan menyentuh GRN-nya lagi.
+
+Pola barunya sama dengan jalur despatch (§5.3): **staging → tinjau & koreksi → generate → approval**.
+
+```
+GRN chip di-approve di Orion
+        ↓  (dibaca, tidak menulis apa pun ke Orion)
+Data tersedia di halaman "GRN Chip Siap Digenerate"
+        ↓  user meninjau; bisa mengoreksi di aplikasi baru tanpa menyentuh GRN
+User mengeksekusi "Generate Transporter Cost"
+        ↓
+Transaksi TPCHP status Submitted  →  approval oleh user lain
+```
 
 | ID | Requirement |
 |---|---|
-| F-09.1 | Saat GRN chip (`CHPGRN` ref `JPO`) disetujui di Orion, sistem membuat transaksi `TPCHP` beserta detail DN dan detail biaya secara otomatis |
-| F-09.2 | **Dipindahkan keluar dari trigger database.** Implementasi: command terjadwal / polling terhadap `OT_GR_HEAD` (`gh_appr_status = 3`, belum punya baris di `transp_order_dn`), dijalankan sebagai queued job |
-| F-09.3 | Alasan: trigger berjalan di dalam transaksi approval GRN, sehingga kegagalan setup transporter **membatalkan approval GRN**. Pemisahan ini memutus kopling antara penerimaan barang dan biaya angkutan |
-| F-09.4 | Validasi yang dipertahankan: GRN punya batch number; master `STO` aktif dengan nama transporter & supplier cocok; tarif ≠ 0; netto item ≤ gross weight; gross weight ≤ ambang |
-| F-09.5 | Ambang gross weight (kini 60.000 kg) menjadi **parameter konfigurasi**, bukan literal di kode; pesan error mengutip nilai parameter yang berlaku — memperbaiki T-21 |
-| F-09.6 | GRN yang gagal validasi **tidak** memblokir approval; masuk ke antrean *exception* dengan alasan, dan bisa diproses ulang setelah master diperbaiki |
-| F-09.7 | Notifikasi ke tim terkait bila ada GRN chip yang gagal dibuatkan transaksi angkutan |
-| F-09.8 | Perhitungan biaya chip tetap `gross_weight × rate` (tanpa prioritas/kelebihan muatan), dipisahkan eksplisit dari kalkulator tarif yarn |
-| F-09.9 | **Halaman "GRN Chip Belum Ter-generate".** Menampilkan seluruh GRN `CHPGRN` yang sudah di-approve tetapi belum punya transaksi angkutan, lengkap dengan **alasan kegagalannya** per baris: batch number kosong, master `STO` belum di-setup, tarif belum diisi, netto item > gross weight, atau gross weight melebihi ambang. Selama ini kegagalan hanya muncul sebagai pesan error sesaat waktu approval GRN dan langsung hilang |
-| F-09.10 | **Tarik manual** dari halaman tersebut: per baris maupun massal (pilih beberapa GRN sekaligus). Dipakai kalau job otomatis gagal atau kalau master baru saja diperbaiki dan user tidak ingin menunggu jadwal berikutnya |
-| F-09.11 | Baris yang alasannya sudah teratasi (misal master `STO` baru dibuat) otomatis lolos pada percobaan berikutnya, tanpa perlu tindakan khusus. Tarik manual bersifat idempoten — GRN yang sudah punya transaksi tidak akan diproses dua kali |
-| F-09.12 | Hasil tarik manual masuk sebagai transaksi berstatus **Submitted**, bukan langsung Approved seperti di sistem lama. Tetap harus disetujui user lain (F-02.6) |
-| F-09.13 | Setiap percobaan (otomatis maupun manual) tercatat: waktu, pemicu, hasil, dan alasan bila gagal — jadi ada jejak kenapa sebuah GRN belum jadi transaksi |
+| F-09.1 | Halaman **"GRN Chip Siap Digenerate"**: seluruh GRN `CHPGRN` (ref `JPO`) yang sudah di-approve (`gh_appr_status = 3`) dan belum punya transaksi angkutan, ditarik read-only dari `OT_GR_HEAD` |
+| F-09.2 | **Tidak ada job otomatis yang membuat transaksi.** Generate selalu dieksekusi user. Menghindari transaksi yang terlanjur terbentuk dari data GRN yang keliru, dan menghilangkan kelas kegagalan "generate gagal diam-diam" |
+| F-09.3 | Approval GRN di Orion **tidak pernah terpengaruh**. Modul ini hanya membaca `OT_GR_HEAD`; tidak ada trigger, tidak ada tulis balik. Memutus total kopling yang ada sekarang |
+| F-09.4 | **Koreksi di aplikasi baru, bukan di GRN.** Sebelum generate, user boleh menyesuaikan jenis truk, kapasitas, nomor polisi, sopir, tujuan, dan berat kotor. Nilai asli dari GRN tetap disimpan berdampingan supaya selisihnya terlihat dan bisa diaudit |
+| F-09.5 | Validasi ditampilkan sebagai **peringatan di layar sebelum generate**, bukan error setelahnya: batch number kosong, rate card `(vendor angkutan × vendor chip × jenis truk)` belum ada, tarif 0, netto item > gross weight, gross weight melebihi ambang. Baris yang bermasalah ditandai dan tidak bisa di-generate sampai diperbaiki |
+| F-09.6 | Ambang gross weight jadi **parameter konfigurasi** (default 60.000 kg), bukan literal — memperbaiki T-21. Pesan validasi mengutip nilai yang berlaku. Ambang ini pagar kewajaran di level GRN, bukan batas per jenis truk — alasannya di §5.8.1 |
+| F-09.7 | Generate bisa per baris maupun massal, idempoten: GRN yang sudah punya transaksi tidak diproses dua kali |
+| F-09.8 | Hasil generate masuk berstatus **Submitted**, bukan langsung `Approved` seperti sistem lama. Tetap disetujui user lain (F-02.6) |
+| F-09.9 | Perhitungan biaya chip tetap `gross_weight × rate` (tanpa prioritas/kelebihan muatan), dipisahkan eksplisit dari kalkulator tarif yarn |
+| F-09.10 | Daftar GRN yang **sudah lama belum di-generate** beserta umurnya, supaya tidak ada biaya angkutan chip yang tertinggal. Notifikasi berkala ke tim stores bila ada yang menumpuk |
+| F-09.11 | Setiap generate tercatat di `transp_grn_pull_attempt`: pelaku, waktu, nilai asli GRN, nilai setelah koreksi, dan hasilnya |
+
+#### 5.8.1 Satu GRN Chip Sering Berisi Lebih dari Satu Truk
+
+Asumsi kerja awalnya: `GH_FLEX_06` adalah berat satu truk, dan angka yang kelewat besar kemungkinan salah entri. **Data tidak mendukung asumsi itu.**
+
+| Pengukuran | Hasil |
+|---|---|
+| Baris `CHPGRN` yang beratnya **melebihi kapasitas truk di header transaksinya** | **3.799 dari 3.937 — 96,5%** |
+| Sebaran berat | ≤ 20 rb: 134 · 20–30 rb: 174 · 30–45 rb: 1.389 · **> 45 rb: 2.269** |
+| Kapasitas truk terbesar di master (`TRAILER`) | 20.000 – 30.000 kg |
+
+Jadi satu GRN chip berisi beberapa truk adalah **pola normal, bukan kekeliruan sesekali**. Konsekuensinya:
+
+| Aspek | Dampak |
+|---|---|
+| **Nilai biaya** | **Aman.** Tarif chip per kg, jadi `berat × tarif` tetap benar berapa pun jumlah truknya |
+| **Nomor polisi & sopir** | **Tidak akurat.** Satu transaksi `TPCHP` hanya menampung satu nopol padahal muatannya dibawa beberapa truk — 96,5% baris historis punya masalah ini |
+| **Ambang per jenis truk** | **Tidak bisa dipakai sebagai penolak.** Kalau diterapkan keras, 96,5% GRN chip akan ditolak |
+
+**Yang dilakukan di v1** (tidak menambah cakupan):
+
+| ID | Requirement |
+|---|---|
+| F-09.12 | Ambang berat tetap **pagar kewajaran di level GRN** (default 60.000 kg, bisa dikonfigurasi), **bukan** batas per jenis truk. Melebihi ambang = menolak; ini menangkap salah entri ekstrem |
+| F-09.13 | Berat yang melebihi kapasitas jenis truk yang dipilih ditampilkan sebagai **peringatan, bukan penolakan**, dengan teks yang menjelaskan kemungkinannya: beberapa truk, atau salah entri |
+| F-09.14 | Nomor polisi dan sopir ditandai sebagai **truk utama** bila beratnya melebihi kapasitas satu truk, plus kolom catatan jumlah truk — supaya data tidak menyiratkan akurasi yang tidak dimilikinya |
+
+**Keputusan untuk v1: satu GRN = satu truk, datanya ditarik dari GRN.** Nomor polisi dan sopir diambil apa adanya dari `GH_FLEX_03` / `GH_FLEX_04`, karena di situlah datanya didefinisikan. Struktur beberapa truk per transaksi **tidak dibangun sekarang** — menunggu alur gerbang (§5.12), yang memang tempat data per-truk akan lahir secara alami.
+
+Yang dilakukan sementara: peringatan F-09.13 tetap ditampilkan, dan penanda "truk utama" F-09.14 membuat keterbatasan ini terlihat, bukan tersembunyi. Dengan begitu saat alur gerbang dibangun nanti, baris historis yang perlu dipecah sudah tertandai.
 
 ### 5.9 Kontrol Dokumen Surat Jalan (pengganti e-Filling `EFILL_009`)
 
@@ -795,11 +1068,14 @@ flowchart TD
 | F-10.1 | Status dokumen disimpan di **tabel tersendiri** `transp_document_scan` (satu baris per surat jalan), bukan sebagai kolom status di baris detail DN. Pasangan redundan `MTDD_STS_PRS` + `MTDD_STS_DOC` diringkas jadi satu enum `Pending` / `Scanned` / `Waived` — memperbaiki T-19 |
 | F-10.2 | Setiap perubahan status mencatat waktu, pelaku, dan sumbernya (job otomatis atau override manual), beserta nama & path berkas PDF yang ditemukan — memperbaiki T-18 |
 | F-10.3 | **Job terjadwal baru** di modul Transporter (`transporter:scan-delivery-documents`) menggantikan job e-Filling `EFILL_009`. Job mencocokkan daftar berkas di repositori dokumen dengan surat jalan berstatus `Pending`, dengan pola nama `{TYPE}-{nomor}.pdf` di `Doc_Folder/{TYPE}/{tahun}/`, lalu menandai yang ketemu sebagai `Scanned` |
+| F-10.3a | **Akses ke `Doc_Folder` lewat network share yang di-mount ke server aplikasi**, read-only. Belum ada API di sisi e-Filling, dan membangunnya di luar cakupan — perlu dibicarakan dengan tim development lebih dulu soal mount point, hak akses, dan dampaknya pada deployment container (Q-25) |
+| F-10.3b | Job harus tahan kalau mount tidak tersedia: gagal dengan bersih tanpa mengubah status apa pun, catat ke log channel, dan kirim notifikasi. **Tidak boleh** menandai berkas sebagai hilang hanya karena mount-nya sedang down — itu akan menahan tagihan secara keliru |
+| F-10.3c | Path repositori jadi konfigurasi (`config/transporter.php`), bukan literal, supaya berbeda antara staging dan produksi |
 | F-10.4 | Jalan di queue tersendiri, idempoten, punya log channel `transporter_doc_scan`, dan mencatat ringkasan tiap eksekusi (jumlah dicek / ketemu / masih pending) |
 | F-10.5 | **Cakupan jenis surat jalan: `LDN`, `PDN`, dan `JWDN`.** `JWDN` terlewat di sistem lama dan wajib ikut di sistem baru — memperbaiki T-20 |
 | F-10.6 | **`CHPGRN` tidak dikontrol dokumennya.** Penerimaan chip sudah diverifikasi lewat GRN, sehingga tagihan angkutan chip tidak boleh ter-*hold* karena alasan dokumen |
 | F-10.7 | Jenis yang dikontrol diatur lewat tabel konfigurasi `transp_document_type`, bukan literal di kode — menambah/mencabut jenis cukup lewat data |
-| F-10.8 | Override manual (`Waived`) hanya untuk role Finance tertentu, wajib mengisi alasan, dan tercatat di activity log |
+| F-10.8 | Override manual (`Waived`) boleh dilakukan **user yang membuat tagihan itu sendiri**, tanpa persetujuan berjenjang — dipakai untuk jasa yang memang tidak ditagihkan. Wajib mengisi alasan dan tercatat di activity log |
 | F-10.9 | Halaman monitoring: daftar surat jalan yang menahan tagihan, dikelompokkan per transporter dan per bulan, lengkap dengan umur *hold* |
 | F-10.10 | Tautan langsung ke berkas PDF hasil scan dari halaman tagihan, sehingga Finance bisa memverifikasi tanpa membuka aplikasi e-Filling |
 | F-10.11 | Data historis sebelum Januari 2022 (nilai NULL) dipetakan ke `Waived` dengan alasan "di luar cakupan kontrol", supaya tidak ikut menahan apa pun |
@@ -813,11 +1089,57 @@ flowchart TD
 | F-08.2 | Delivery Note Transporter Value | TRNSP002 | Excel |
 | F-08.3 | Freight Cost per Kg | TRNSP004 | Excel |
 | F-08.4 | Transporter Provision & Bill (parametrik: Provision / Bill / Not Yet Provision) | TRNSP005, TRNSP006, TRNSP007, TRNSP008 | Excel, PDF |
-| F-08.5 | Transporter Budget / Outstanding AP — per supplier, dua bagian (provisi belum ter-bill + tagihan belum lunas), dengan sub total per supplier dan grand total. **Wajib punya filter** (tanggal, supplier, tipe, status) — sistem lama tidak punya sama sekali | TRNSP009 + `TRANSPORTER_BUDGET_V` | Excel |
+| F-08.5 | Transporter Budget / Outstanding AP — per supplier, dua bagian (provisi belum ter-bill + tagihan belum lunas), dengan sub total per supplier dan grand total. **Wajib punya filter** (tanggal, supplier, tipe, status) — sistem lama tidak punya sama sekali | `TRANSPORTER_BUDGET_V` (TRNSP009 sudah tidak relevan) | Excel |
 
 Semua report dijalankan sebagai queued job dan dikirim lewat `ReportStatusNotification` dengan link unduhan, mengikuti pola modul lain.
 
 ---
+
+### 5.11 Payment Voucher / BPS — **rilis terpisah setelah v1**
+
+> **Status: di luar cakupan v1.** Dirilis terpisah setelah v1 stabil. Bagian ini disimpan supaya rancangannya tidak hilang dan supaya skema v1 sudah menyediakan tempatnya (`transp_payment`, `transp_posting_log` dengan jenis `BPS`).
+
+Sistem lama berhenti di TJV: tagihan diposting ke GL, lalu pembayarannya dikerjakan di Orion secara terpisah. Menambahkan payment voucher menutup siklusnya — dari transaksi angkutan sampai vendor dibayar — tanpa berpindah aplikasi.
+
+**Tidak perlu dibangun dari nol.** `Modules/LcControl` sudah punya `PaymentVoucherPostingService` + `EloquentPaymentVoucherRepository` yang menulis ke `MGTDAT.FT_PAYMENT_HEADER` / `FS_PAYMENT`, dan **sudah menghasilkan transaction code `BPS`** (atau `BPJ` untuk lokasi Jakarta, lewat `tranCodeForLocation()`). Pekerjaannya adalah mengangkat service itu ke `Modules/Core` — persis langkah yang sudah direncanakan untuk `JournalVoucherPostingService` (§4.4) — lalu memakainya dari sini.
+
+| ID | Requirement |
+|---|---|
+| F-11.1 | Halaman pembayaran: pilih tagihan yang sudah ber-TJV dan belum lunas, tampilkan outstanding-nya dari `FT_OS` |
+| F-11.2 | Pembayaran boleh menggabungkan beberapa tagihan dari satu vendor dalam satu voucher |
+| F-11.3 | Pembayaran sebagian (parsial) didukung; sisa outstanding tetap terlihat di daftar |
+| F-11.4 | Pilih bank / akun pembayaran dari `FM_BANK` & `FM_BANK_ACNT_DETAIL` (sudah ter-grant ke `MGTHRIS`) |
+| F-11.5 | Preview voucher sebelum posting: nomor, tanggal, akun, nominal, tagihan yang dilunasi |
+| F-11.6 | Posting menghasilkan `BPS` (atau `BPJ` untuk Jakarta) lewat service bersama di `Core`, dijalankan sebagai queued job, dicatat di `transp_posting_log` dengan `jenis = BPS` |
+| F-11.7 | Idempoten: satu tagihan tidak bisa dibayar dua kali; pengecekan lewat `transp_posting_log` + outstanding `FT_OS` |
+| F-11.8 | Otorisasi: hanya role Finance dengan permission `transporter.post-payment`. Tidak ada approval berjenjang di aplikasi baru — persetujuan pembayaran tetap milik Orion |
+| F-11.9 | Halaman monitoring: umur hutang per vendor (aging), tagihan jatuh tempo minggu ini, dan yang sudah lewat jatuh tempo |
+
+> **Sudah diputuskan:** pembayaran transporter memakai **modul pembayaran bersama** yang sudah ada di aplikasi baru — bukan implementasi tersendiri di modul ini. Posting menghasilkan `BPS` / `BPJ` di Orion, dan **alur persetujuan pembayaran di Orion tidak diintervensi** dari modul ini: modul hanya membuat voucher-nya, persetujuan tetap berjalan seperti biasa di Orion. Tidak ada approval berjenjang tambahan di sisi aplikasi baru.
+
+### 5.12 Di Luar Cakupan v1 — Usulan Alur Gerbang & Loading
+
+Gagasan yang muncul saat review: transaksi angkutan sebaiknya lahir dari proses fisik yang memang sudah terjadi, bukan dari entri manual menyusul.
+
+```
+Satpam catat truk masuk  →  truk di-loading, dipetakan ke surat jalan
+     →  satpam verifikasi saat truk keluar  →  transaksi angkutan terbentuk sendiri
+```
+
+**Penilaian.** Arahnya benar dan menyelesaikan akar masalah yang sama dengan generate otomatis: entri manual itu mahal dan telat. Kalau truk sudah tercatat sejak masuk dan dipetakan ke surat jalan saat loading, transaksi angkutan menjadi **produk sampingan operasi**, bukan pekerjaan administrasi tersendiri. Bonusnya besar: berat aktual, waktu tunggu truk (demurrage), dan verifikasi bahwa truk yang ditagih memang benar-benar keluar membawa muatan.
+
+**Tapi ini modul lain, bukan perluasan modul ini.** Penggunanya satpam, bukan despatch atau Finance. Operasinya 24/7 di pos gerbang, butuh perangkat dan ergonomi yang berbeda (layar sentuh / scanner, bukan meja kantor), dan alur kerjanya harus tahan terhadap kondisi lapangan — truk datang tanpa pesanan, sopir berganti, muatan berubah di menit terakhir. Menggabungkannya ke v1 akan menunda migrasi yang sudah mendesak, dan menambah risiko pada bagian yang paling sensitif (GL).
+
+**Rekomendasi: jadikan fase berikutnya, tetapi siapkan kaitannya sekarang.** Yang perlu disiapkan di v1 agar nanti tinggal pasang:
+
+| # | Persiapan di v1 |
+|---|---|
+| 1 | `transp_order.tro_source` sudah punya ruang untuk nilai baru `GATE` |
+| 2 | Kolom nullable `tro_gate_in_at`, `tro_gate_out_at`, `tro_gate_verified_by` — diisi belakangan, tidak mengubah skema saat fase 2 datang |
+| 3 | Pemetaan truk ↔ surat jalan sudah ada bentuknya di `transp_order_dn`; alur gerbang tinggal mengisinya lebih awal |
+| 4 | Status `Draft` sudah tersedia — truk yang baru masuk gerbang menjadi transaksi `Draft` yang dilengkapi saat loading dan disubmit saat keluar |
+
+Dengan itu, fase 2 menambah halaman dan peran baru, bukan membongkar skema.
 
 ## 6. Data Migration Plan
 
@@ -859,10 +1181,15 @@ Semua report dijalankan sebagai queued job dan dikirim lewat `ReportStatusNotifi
 | C-03 | `OTHCHG` tanpa header | 2 | Migrasi sebagai biaya berdiri sendiri (`order_id = NULL`) |
 | C-04 | Provisi tanpa transaksi induk | 331 | Migrasi tetap (nilai GL sudah terposting), tandai `is_orphan = 1` |
 | C-05 | Provisi dengan `tp_code` tidak ada di master | 4 | Migrasi, `master_id = NULL`, simpan `tp_code` mentah |
-| C-06 | `TP_NO` tanpa tanda hubung (`AMBIL BARANG`, `RETUR BENANG`, `PALLET`) | 328 | `txn_code = 'OTHERS'`, `transp_no` diisi dari sequence baru, nomor lama disimpan di `legacy_no` |
+| C-06 | `TP_NO` tanpa tanda hubung (`AMBIL BARANG`, `RETUR BENANG`, `PALLET`) | 328 | Jadi transaksi `TPSVC` (§5.2.1) dengan `tro_service_category` diisi dari teks lamanya; `transp_no` dari sequence baru, nomor lama disimpan di `tro_legacy_no` |
 | C-07 | `TP_NO` = `+TPCHP...` | 1 | Perbaiki manual ke `TPCHP` |
-| C-08 | Nomor transaksi duplikat | 21 | Beri suffix `-A`/`-B` pada `legacy_no`; `transp_no` baru dari sequence; laporkan ke Finance untuk konfirmasi |
-| C-09 | Master duplikat `(transp_code, destination, truck_type)` | 53 | Pertahankan yang punya transaksi terbanyak sebagai aktif; sisanya dinonaktifkan (`is_active = 0`), relasi diarahkan ke yang aktif |
+| C-08 | Nomor transaksi duplikat | 21 | **Dibiarkan apa adanya sebagai data historis** (keputusan Finance). Nomornya tidak diubah dan tidak dibetulkan di GL. Konsekuensinya unique constraint `(txn_code, transp_no)` tidak boleh berlaku surut — lihat catatan di bawah tabel |
+| C-09 | Master duplikat `(transp_code, destination, truck_type)` | 53 (23 di antaranya bertipe `DES` dengan vendor terisi) | Pertahankan yang punya transaksi terbanyak sebagai rate card aktif; sisanya ditutup masa berlakunya. **Wajib divalidasi Finance/Despatch** sebelum dieksekusi (Q-18) |
+| C-19 | 739 baris master dipecah jadi vendor + rate card | 739 → ± 50 vendor + ± 716 rate card | Vendor diambil dari `DISTINCT mtm_transp_code`; tiap baris master lama jadi satu rate card dengan `trc_legacy_mtm_no` = `MTM_NO`, `valid_from` = tanggal paling awal transaksi yang memakainya (atau `MTM_CR_DT`), `valid_to` = NULL |
+| C-20 | 12 baris master tanpa `MTM_TRANSP_CODE` | 12 | Tidak bisa dipetakan ke vendor ERP — masuk daftar exception untuk dilengkapi manual sebelum migrasi; transaksinya tetap dimigrasi dengan `vendor_id` kosong |
+| C-21 | 59 baris nama master melenceng dari `OM_SUPPLIER` | 59 | Nama tidak ikut dimigrasi sama sekali (F-01.2). Selisihnya dilaporkan sebagai informasi, supaya ketahuan kalau ada yang ternyata memang vendor berbeda |
+| C-22 | 90 baris `STO` (chip) | 90 | Jadi rate card `service_type = CHIP`: `trc_chip_vendor_code` ← `MTM_CUST_SUPP`, vendor angkutan ← `MTM_TRANSP_CODE`. 3 baris dengan `MTM_CUST_SUPP` kosong masuk exception |
+| C-23 | `MGT_TRANSP_DETAIL_OTHCHG` (862 baris) | 862 | Jadi `transp_additional_expense` + `_line`. Status: yang sudah ikut provisi (`Provision`, 384 baris) → `Billed` bila tagihannya sudah ada, selain itu `Approved`; `Not Provision` (478 baris) → `Approved`. Pembuat & penyetuju tidak terekam di data lama, diisi penanda `MIGRATION`. 463 dari 472 baris tanpa `MTDO_OTHCHG_ID` ternyata "Ambil Barang" — dipetakan ke jenis biaya itu; 9 sisanya masuk exception |
 | C-10 | `MTM_FRZ_FLAG_NUM` | 66 baris = 1 | `1` → `is_active = false`, `2`/null → `true` |
 | C-11 | `MTDO_OTHCHG_ID` NULL dengan nama "Ambil Barang" | 472 | Buat jenis biaya `AMBIL_BARANG` di master baru |
 | C-12 | Status string bebas | semua | Petakan ke enum: `null`→Draft, `Approved`→Approved, `Unposted`→Unposted, `Posted`→Posted, `GENERATE`→Generated, `Document Lengkap`→Complete, `Document Belum Lengkap`→Incomplete |
@@ -873,17 +1200,28 @@ Semua report dijalankan sebagai queued job dan dikirim lewat `ReportStatusNotifi
 | C-18 | Sumber transaksi historis tidak tercatat | 33.126 | Turunkan `tro_source`: `TPCHP` → `GRN_PULL`; `TPDN` dengan `mth_remark` berakhiran `'Auto'` → `AUTO_DN`; sisanya → `MANUAL` |
 | C-14 | Transaksi `TPCHP` hasil trigger tanpa jejak sumber GRN yang eksplisit | 3.937 | Isi `tod_source` = `GRN_TRIGGER` dan simpan `gh_sys_id` sebagai referensi, supaya asal-usul transaksi terbaca |
 
+> **Catatan unique constraint (akibat C-08).** Karena 21 nomor duplikat dibiarkan, `UNIQUE (txn_code, transp_no)` tidak bisa dipasang polos. Yang dipakai: **unique index fungsional yang hanya mengikat baris non-legacy** —
+>
+> ```sql
+> CREATE UNIQUE INDEX transp_order_no_uk ON transp_order (
+>     CASE WHEN tro_is_legacy = 0 THEN tro_txn_code || '-' || tro_transp_no END
+> );
+> ```
+>
+> Data lama masuk dengan `tro_is_legacy = 1` dan bebas duplikat; setiap transaksi baru tetap dijamin unik. Penomoran baru memakai sequence, bukan `MAX()+1`, sehingga T-04 tidak terulang.
+
 ### 6.4 Tahapan Eksekusi
 
 | Fase | Isi | Estimasi | Verifikasi |
 |---|---|---|---|
 | **M-0** | Snapshot penuh 14 tabel ke schema arsip; export CSV sebagai cadangan luar-database | 1 hari | Checksum baris & jumlah |
-| **M-1** | Master: `transp_charge_type`, `transp_master`, `transp_rate`, `transp_posting_account` | 1 hari | 739 + 799 baris; jumlah tarif per master cocok |
+| **M-1** | Master: `transp_charge_type`, `transp_service_category`, `transp_carrier`, `transp_rate_card`, `transp_rate_line`, `transp_posting_account` | 2 hari | 739 baris terpetakan ke ± 50 vendor + ± 716 rate card; **hasil pemetaan dan penyelesaian 23 kombinasi ganda wajib di-sign-off Head of Despatch dan Head of Finance** sebelum lanjut (Q-18) |
 | **M-2** | Transaksi: `transp_order`, `transp_order_dn`, `transp_order_cost`, `transp_other_charge` | 2 hari | Total nilai biaya per bulan cocok dengan sistem lama |
 | **M-3** | Provisi: `transp_provision`, `transp_provision_dn` | 2 hari | Total `tp_amt + tp_oth_amt` per bulan & per akun cocok; jumlah baris ber-`tp_jv_no` cocok |
 | **M-4** | Tagihan: `transp_bill` | 1 hari | Total `tpb_total` per vendor per bulan cocok; outstanding AP cocok dengan `FT_OS` |
 | **M-5** | Staging: `transp_dn_stage` (baris terbuka saja) | 0,5 hari | Jumlah baris terbuka cocok |
 | **M-6** | Sinkronisasi sequence: set nilai awal semua sequence baru di atas nilai maksimum data ter-migrasi | 0,5 hari | Insert uji tidak bentrok |
+| **M-6b** | Lengkapi & validasi `HMEMD_USER_ORION` untuk seluruh user Finance yang akan memposting | 0,5 hari | Setiap pemosting punya Orion user id yang terdaftar di `MGTDAT.MENU_USER`; nilai tidak valid seperti `2462` dibersihkan |
 | **M-7** | Pasang compatibility view di `MGTDAT` (§4.5), recompile seluruh dependent object | 1 hari | Tidak ada objek `INVALID`; uji regresi CL-5 lolos |
 | **M-8** | Jalankan job scan dokumen (F-10) dalam mode *shadow*, bandingkan hasilnya dengan `EFILL_009` | 1 minggu berjalan | Selisih 0 selama 5 hari kerja berturut-turut |
 | **M-9** | Rekonsiliasi menyeluruh & sign-off Finance | 2 hari | Lihat §6.5 |
@@ -903,6 +1241,7 @@ Semua report dijalankan sebagai queued job dan dikirim lewat `ReportStatusNotifi
 | R-09 | Output `PRC_DELVRY_MARGIN_MGT`, 10 report `SALR*`, `OPD106_MGT_1`, dan form `SALATTREKAP` sebelum vs sesudah compatibility view dipasang | 0 selisih |
 | R-10 | `FV_TRANS_DETAILS_PPH23_V`, `VIEW_SUPP_OUTSTANDING`, `UPDATE_FSFC_VCH` sebelum vs sesudah | 0 selisih |
 | R-11 | Status dokumen hasil job baru vs `EFILL_009` selama masa *shadow* | 0 selisih selama 5 hari kerja |
+| R-12 | Hitung ulang biaya 500 transaksi acak memakai rate card hasil migrasi vs `MTDC_TOTAL_RATE` yang tersimpan | 0 selisih — membuktikan pemecahan master tidak mengubah tarif |
 
 ### 6.6 Strategi Cutover
 
@@ -939,6 +1278,8 @@ H+90   Arsipkan objek lama (rename dengan prefix Z_)
 | NF-06 | Migrasi harus SQLite-compatible untuk CI |
 | NF-07 | Coverage test: unit test untuk kalkulasi tarif, due date, pajak, gross-up, dan pemetaan jurnal — bagian paling berisiko |
 | NF-08 | Aktivitas dicatat via Spatie Activitylog |
+| NF-09 | **Tidak ada purge data.** Seluruh data historis tetap bisa diakses lewat aplikasi tanpa batas retensi — pemeriksaan anti-dumping bisa menyasar periode mana pun dan rentangnya tidak dapat diprediksi. Yang boleh dilakukan hanya optimasi penyimpanan (partisi / arsip panas-dingin), bukan penghapusan |
+| NF-10 | Report harus menjangkau seluruh rentang data (2014 – sekarang): filter periode tidak boleh dibatasi ke N bulan terakhir, dan view tidak boleh memakai batas tanggal hardcode seperti sistem lama (T-11) |
 
 ---
 
@@ -948,23 +1289,59 @@ H+90   Arsipkan objek lama (rename dengan prefix Z_)
 |---|---|
 | `Super Admin` | Semua |
 | `Transporter Admin` | CRUD master, entri transaksi, tarik & generate |
+| `Despatch` | Pengiriman FG (`LDN` / `JWDN` / `EDN` / `PDN`): tarik & generate `TPDN`, buat `TPSVC`, entri & submit additional expense. Approval oleh sesama Despatch |
+| `Stores` | Chip (`CHPGRN`): tinjau, koreksi, dan generate `TPCHP` dari GRN, entri & submit additional expense. Approval oleh sesama Stores |
 | `Transporter Approver` | Approve / reject transaksi angkutan. **Tidak boleh menyetujui transaksi yang dibuatnya sendiri** — dicek di service, bukan hanya di UI |
-| `Finance` | Provisi, posting JV, tagihan, posting TJV |
+| `Finance` | Provisi & posting `TPJV`, penerimaan tagihan & posting `TJV`, kontrol dokumen, pembayaran (rilis lanjutan) |
 | `Transporter Viewer` | Baca & report saja |
 
-Middleware pada route: `role:Super Admin|Finance|Transporter Admin|Transporter Approver|Transporter Viewer`, ditambah `permission:` per aksi sensitif (`transporter.approve-transaction`, `transporter.post-jv`, `transporter.post-tjv`, `transporter.override-cost`, `transporter.waive-document`, `transporter.pull-grn`).
+Middleware pada route: `role:Super Admin|Finance|Transporter Admin|Transporter Approver|Transporter Viewer`, ditambah `permission:` per aksi sensitif (`transporter.approve-transaction`, `transporter.post-jv`, `transporter.post-tjv`, `transporter.override-cost`, `transporter.waive-document`, `transporter.pull-grn`, `transporter.approve-additional-expense`, `transporter.pull-additional-expense`).
 
 Aturan segregation of duty yang ditegakkan di service layer (bukan sekadar disembunyikan di UI):
 
 | Aksi | Larangan |
 |---|---|
 | Approve transaksi angkutan | Pelaku tidak boleh sama dengan pembuat (`tro_created_by`) |
-| Waive kontrol dokumen | Pelaku tidak boleh sama dengan pembuat tagihan terkait |
+| Waive kontrol dokumen | **Boleh oleh pembuat tagihan**, tanpa persetujuan berjenjang (keputusan Finance). Yang wajib: alasan terisi dan tercatat di activity log |
 | Posting JV / TJV | Hanya role Finance, dan hanya atas transaksi yang sudah `Approved` |
+| Approve / reject additional expense | Oleh user lain **di tim yang sama** dengan pembuatnya (despatch atau stores), bukan Finance. Pelaku tidak boleh sama dengan pembuat |
 
 Catatan basis data: mintakan grant eksplisit dari DBA sehingga aplikasi tidak bergantung pada role `DBA` milik `MGTHRIS` (lihat §3.8).
 
 ---
+
+### 8.1 Pemetaan User Orion (dilengkapi menyusul)
+
+Setiap posting ke GL menulis `th_cr_uid` / `td_cr_uid` berisi **Orion user id** pemostingnya, diambil dari `MGTHRIS.HM_EMP_DATA.HMEMD_USER_ORION` — kolom yang sudah dipakai modul LC, jadi tidak ada mekanisme baru yang perlu dibuat.
+
+**Kondisi saat ini (15 September 2026):**
+
+| Pengukuran | Nilai |
+|---|---|
+| Karyawan di `HM_EMP_DATA` | 2.838 |
+| Yang punya `HMEMD_USER_ORION` | 20 baris, **18 nilai unik** |
+| Nilai yang terisi | `ADMIN`, `ADMIN3`, `FIN5`–`FIN10`, `FIN13`, `FIN15`, `FIN19`, `FIN20`, `FIN22`, `FIN23`, `FIN25`, `FINM1`, `MANHAR`, dan `2462` |
+| Terdaftar sah di `MGTDAT.MENU_USER` | 17 dari 18 — **`2462` tidak terdaftar**, tampaknya NIK yang keliru masuk ke kolom Orion id |
+
+**Siapa yang butuh pemetaan ini:**
+
+| Peran | Butuh Orion user id? | Alasan |
+|---|---|---|
+| Finance (posting `TPJV` / `TJV`) | **Wajib** | Nilainya masuk ke `th_cr_uid`, dan menentukan siapa yang boleh mengotorisasi di Orion |
+| Finance (pembayaran `BPS`, rilis lanjutan) | **Wajib** | Idem |
+| Despatch, Stores, Approver transaksi angkutan | Tidak | Tidak menyentuh GL sama sekali |
+
+**Daftar periksa sebelum go-live** (dikerjakan di fase M-6b):
+
+| # | Langkah |
+|---|---|
+| 1 | Finance menyerahkan daftar user yang akan memposting `TPJV` / `TJV` dari modul ini |
+| 2 | Isi `HMEMD_USER_ORION` untuk setiap user tersebut, **satu Orion id per individu** — bukan akun bersama, karena Orion menolak dokumen yang pembuat dan penyetujunya sama (F-05.11, error 2441465) |
+| 3 | Validasi setiap nilai ada di `MGTDAT.MENU_USER`; bersihkan `2462` yang sekarang tidak valid |
+| 4 | Verifikasi di staging: posting satu `TPJV` per user, pastikan `th_cr_uid` terisi benar dan dokumennya bisa diotorisasi user lain di Orion |
+| 5 | Aplikasi menolak posting bila pemetaan kosong, dengan pesan yang menyebut nama user dan langkah perbaikannya (F-05.10) — bukan diam-diam menulis nilai kosong ke GL |
+
+> Pemetaan ini **belum lengkap saat PRD ditulis** dan memang tidak perlu lengkap sekarang. Yang penting: daftarnya diselesaikan sebelum fase posting diuji, dan aplikasi tidak pernah memposting tanpa pemetaan yang sah.
 
 ## 9. Risks & Mitigations
 
@@ -983,6 +1360,10 @@ Catatan basis data: mintakan grant eksplisit dari DBA sehingga aplikasi tidak be
 | RK-11 | ± 25 objek `MGTDAT` + 12 report/form Orion (Delivery Margin, `SALR*`, `OPD106_MGT_1`, `SALATTREKAP`, PPh 23, outstanding supplier, Coretax) patah saat tabel dipindah | **Tinggi** — laporan penjualan harian & laporan pajak berhenti, dan dashboard Finance di aplikasi Laravel ikut kosong | Compatibility view §4.5 dipasang di jendela cutover yang sama; uji regresi CL-5 masuk kriteria go/no-go |
 | RK-12 | Compatibility view lintas-schema memperlambat join berat (`PRC_DELVRY_MARGIN_MGT`, `SALR*` ke 92k baris detail DN) | Sedang | Ukur di staging pada fase M-2; siapkan materialized view di `MGTDAT` sebagai cadangan |
 | RK-13 | Job e-Filling `EFILL_009` tetap menulis ke tabel lama setelah cutover | Tinggi — status dokumen berhenti diperbarui, semua tagihan ter-*hold* | Job lama dimatikan pada hari cutover; job baru (F-10) sudah aktif lebih dulu di mode *shadow* dan hasilnya dibandingkan |
+| RK-17 | `HMEMD_USER_ORION` belum terisi untuk user Finance yang akan memposting | **Tinggi** — `th_cr_uid` salah atau kosong, dan pengecekan maker ≠ approver di sisi ERP (`ODBTRG_APPR_VOUCHER`, error 2441465) jadi tidak berfungsi sebagaimana mestinya | Lengkapi dan validasi pemetaan sebelum go-live (F-05.10). Saat ini baru 20 dari 2.838 karyawan terisi, 18 nilai unik, dan satu di antaranya (`2462`) tidak terdaftar di `MENU_USER` |
+| RK-18 | Konsumen hilir yang memfilter daftar `th_tran_code` tidak ditambahi `TPJV` | Sedang — voucher provisi transporter berhenti terpetakan ke faktur pajak (`UPDATE_FSFC_VCH`) | Masuk daftar uji regresi CL-5; telusuri semua objek yang menyebut `'JV'` sebagai literal sebelum cutover |
+| RK-15 | Normalisasi master salah petakan → tarif berubah tanpa disadari | **Tinggi** — biaya angkutan dan provisi jadi salah | Uji R-12 (hitung ulang 500 transaksi) masuk kriteria go/no-go; 23 kombinasi ganda diselesaikan manual dan di-sign-off sebelum migrasi (Q-18) |
+| RK-16 | Ruang lingkup melebar di atas rencana semula | Sedang — go-live mundur | **Sudah ditangani:** payment voucher dilepas ke rilis terpisah, alur gerbang ke fase berikutnya. Normalisasi master tetap di v1 karena skemanya terbawa migrasi — mengubahnya belakangan berarti migrasi ulang |
 | RK-14 | Paket sumber yang diserahkan terbukti tidak lengkap — `TRNSP009` baru ketahuan dari pemindaian drive, bukan dari folder handover | Sedang — fungsi hilang saat go-live | Inventarisasi report & form `TRNSP*` langsung dari Orion Reports server sebelum P5 (Q-16), bukan dari folder salinan |
 
 ---
@@ -992,14 +1373,16 @@ Catatan basis data: mintakan grant eksplisit dari DBA sehingga aplikasi tidak be
 | Fase | Isi | Estimasi |
 |---|---|---|
 | **P0 — Fondasi** | Scaffolding modul, migration semua tabel, model, enum, repository, seeder master jenis biaya, angkat service GL ke Core | 2 minggu |
-| **P1 — Master** | Master transporter + tarif (F-01), master jenis biaya, monitoring GRN chip (F-07) | 1,5 minggu |
+| **P1 — Master** | Master vendor + rate card berversi (F-01), rate card chip per vendor chip (§5.1.1), master jenis biaya, monitoring GRN chip (F-07) | 2,5 minggu |
 | **P2 — Transaksi** | Transaksi angkutan + approval maker-checker & approval inbox (F-02), biaya lain-lain (F-04), tarik & generate otomatis (F-03), auto-generate chip dari GRN + halaman GRN gagal & tarik manual (F-09) | 5 minggu |
-| **P3 — Provisi** | Provisi + preview jurnal + posting JV (F-05), `transp_posting_log` | 2,5 minggu |
-| **P4 — Tagihan** | Tagihan + pajak + matching + posting TJV + add-on (F-06), kontrol dokumen surat jalan (F-10) | 4 minggu |
+| **P3 — Provisi** | Provisi + preview jurnal + posting `TPJV` (F-05), `transp_posting_log`. Prasyarat `TPJV` di Orion sudah terpenuhi (§3.7.4a) | 2,5 minggu |
+| **P4 — Tagihan** | Tagihan + pajak + matching + posting `TJV` + baris `EXPENSE_DIRECT` & selisih (F-06, §5.6.1), additional expense (F-04), kontrol dokumen surat jalan (F-10) | 4 minggu |
 | **P5 — Report** | 5 report (F-08) | 1,5 minggu |
 | **P6 — Migrasi** | Script migrasi, cleansing, compatibility view (§4.5), rekonsiliasi, shadow-run posting & job scan | 3,5 minggu |
 | **P7 — UAT & Cutover** | UAT Finance, dry-run, cutover, hypercare | 2 minggu |
-| **Total** | | **± 22 minggu** |
+| **Total v1** | | **± 23 minggu** |
+| *Rilis lanjutan* | Payment voucher `BPS`/`BPJ` (§5.11) | *± 2 minggu* |
+| *Fase berikutnya* | Alur gerbang & loading (§5.12) | *belum diestimasi* |
 
 ---
 
@@ -1027,6 +1410,13 @@ Catatan basis data: mintakan grant eksplisit dari DBA sehingga aplikasi tidak be
 | **e-Filling** | Aplikasi web legacy pengarsipan dokumen hasil scan (PHP/XAMPP, schema `MGTAPPS`) |
 | **EFILL_009** | Menu "Transporter Comparation" di e-Filling — pencocok PDF scan LDN dengan surat jalan di transaksi angkutan |
 | **Hold tagihan** | Penahanan proses TJV karena hard copy surat jalan belum diterima & discan |
+| **Rate card** | Satu kombinasi tarif yang berlaku: vendor × destinasi (atau vendor chip) × jenis truk, dengan masa berlaku |
+| **Additional Expense** | Biaya di luar tarif angkutan (tol, kawal, inap, solar) — transaksi tersendiri yang disetujui internal despatch/stores dan menempel ke transaksi angkutan induknya, lalu ditarik Finance saat menagih |
+| **BPS / BPJ** | Transaction code payment voucher di Orion — `BPS` umum, `BPJ` untuk lokasi Jakarta |
+| **TPJV** | Transporter Provision JV — kode transaksi GL baru untuk provisi angkutan, menggantikan `JV` |
+| **TPSVC** | Jenis transaksi angkutan untuk jasa tanpa surat jalan (ambil barang, retur benang, pallet) |
+| **EDN / WDN** | Export Delivery Note / surat jalan lain — belum masuk modul transporter (T-28) |
+| **Baris tagihan `EXPENSE_DIRECT`** | Baris tagihan yang langsung membebani akun beban — untuk selisih (additional / cancellation / deduction) dan tagihan tanpa provisi. Menggantikan modul add-on |
 
 ---
 
@@ -1046,6 +1436,8 @@ Catatan basis data: mintakan grant eksplisit dari DBA sehingga aplikasi tidak be
 
 Konstanta lain: `comp_code = '002'`, `divn_code = '001'`, `dept_code = 'FIN'`, `head_no_1 = 1`, `head_no_2 = 2`.
 
+**Kode transaksi GL:** provisi memakai `JV` di sistem lama dan **`TPJV`** di sistem baru (§3.7.4a); tagihan tetap `TJV`; pembayaran `BPS` / `BPJ` (rilis lanjutan).
+
 > **Perlu dikonfirmasi:** nama akun di atas adalah asumsi dari konteks kode. Minta konfirmasi ke Finance dan simpan di tabel `transp_posting_account` beserta tanggal berlakunya.
 
 ---
@@ -1054,30 +1446,56 @@ Konstanta lain: `comp_code = '002'`, `divn_code = '001'`, `dept_code = 'FIN'`, `
 
 | # | Pertanyaan | Kepada |
 |---|---|---|
-| Q-01 | Apakah baris `FT_TXN_AUTH` wajib dibuat? LcControl saat ini tidak membuatnya, sistem lama membuatnya. | Finance / DBA Orion |
+| ~~Q-01~~ | ~~Apakah baris `FT_TXN_AUTH` wajib dibuat?~~ **Terjawab:** wajib untuk dokumen ERP (`TPJV`, `TJV`). `TPDN`/`TPCHP`/`TPSVC` bukan dokumen ERP, tidak perlu. | — |
 | ~~Q-02~~ | ~~Apakah tabel lama masih dibaca oleh laporan/aplikasi lain?~~ **Terjawab:** ya — ± 25 objek lintas domain (§3.9). Compatibility view jadi wajib (§4.5). | — |
-| Q-03 | Apakah alur add-on (`TRNSP007`) masih akan dipakai? Terakhir dipakai Desember 2022. | Finance |
-| Q-04 | Apakah 21 nomor transaksi duplikat (T-04) perlu diperbaiki di GL, atau cukup dibiarkan sebagai data historis? | Finance |
-| Q-05 | Apakah 328 baris `TP_NO` non-standar (`AMBIL BARANG`, `RETUR BENANG`, `PALLET`) merupakan kategori bisnis resmi yang perlu jadi `txn_code` tersendiri? | Finance / Logistik |
-| Q-06 | Apakah gross-up 2% adalah konstanta permanen, atau perlu dibuat parameter per vendor / per periode? | Finance |
-| Q-07 | Siapa saja user aktif modul ini (dari `MENU_USER`) dan bagaimana pemetaannya ke role Laravel? | IT |
+| ~~Q-03~~ | ~~Apakah alur add-on (TRNSP007) masih dipakai?~~ **Terjawab:** tidak — cukup dari modul tagihan (§5.6). | — |
+| ~~Q-04~~ | ~~Apakah 21 nomor transaksi duplikat perlu diperbaiki di GL?~~ **Terjawab:** dibiarkan sebagai data historis (C-08, catatan unique index). | — |
+| ~~Q-05~~ | ~~Apakah 328 baris `TP_NO` non-standar kategori bisnis resmi?~~ **Terjawab:** ya — jadi jenis transaksi tersendiri `TPSVC` (§5.2.1). | — |
+| ~~Q-06~~ | ~~Gross-up 2% konstanta permanen atau parameter?~~ **Terjawab:** sudah tidak dipakai; kebijakan baru mewajibkan klausul potong PPh di tiap MoU. Flag di-*deprecate*, default mati (F-01.3a). | — |
+| ~~Q-07~~ | ~~Siapa user aktif dan pemetaan role-nya?~~ **Terjawab:** Despatch (LDN/JWDN/EDN/PDN), Stores (CHPGRN), Finance (provisi, tagihan, pembayaran) — §8. | — |
 | ~~Q-08~~ | ~~Apakah `MGT_TP_PROVISION_DEL` masih dirujuk?~~ **Terjawab:** tabel itu salah rancang sejak awal — tidak dimigrasi sama sekali; datanya ditinggal sebagai arsip pasif di `MGTDAT`. | — |
-| Q-09 | Berapa lama data historis harus bisa diakses lewat aplikasi baru (retensi)? | Finance |
-| Q-10 | Apakah kebijakan due date (10 / 25) masih berlaku dan berlaku untuk semua vendor? | Finance |
-| Q-11 | Job scan baru mengakses `Doc_Folder` dengan cara apa — share jaringan yang di-mount ke server aplikasi, atau API kecil di sisi e-Filling? Menentukan desain job F-10.3. | IT |
+| ~~Q-09~~ | ~~Berapa lama retensi data historis?~~ **Terjawab:** tanpa batas — audit anti-dumping bisa menyasar periode mana pun (NF-09, NF-10). | — |
+| ~~Q-10~~ | ~~Apakah kebijakan due date 10 / 25 masih berlaku?~~ **Terjawab:** ya, berlaku untuk semua vendor. | — |
+| ~~Q-11~~ | ~~Job scan mengakses `Doc_Folder` dengan cara apa?~~ **Terjawab:** network share yang di-mount ke server aplikasi (belum ada API). Detail teknisnya jadi Q-25. | — |
 | ~~Q-12~~ | ~~`JWDN` dan `CHPGRN` sengaja tidak dikontrol?~~ **Terjawab:** `JWDN` terlewat dan wajib ikut dikontrol; `CHPGRN` memang tidak perlu. | — |
-| Q-13 | Siapa yang berhak melakukan override `Waived` atas kontrol dokumen LDN, dan apakah butuh persetujuan berjenjang? | Finance |
-| Q-14 | Ambang gross weight chip 60.000 kg — apakah ini batas kontraktual per vendor atau batas teknis truk? Menentukan apakah parameternya global atau per master transporter. | Logistik / Finance |
-| Q-15 | Apakah pembuatan transaksi TPCHP boleh dipisah dari approval GRN (asinkron), atau Finance memerlukan keduanya atomik seperti sekarang? | Finance / Logistik |
-| Q-16 | Berkas `TRNSP009.RDF` sudah diterima (versi Okt 2021). Yang masih perlu dipastikan: apakah report ini masih terpasang & dipakai, mengingat `TRANSPORTER_BUDGET_V` (Apr 2025) sudah memuat logika yang lebih baru? Sekalian minta inventaris lengkap report `TRNSP*` dari Orion Reports server — paket sumber terbukti belum tentu lengkap. | IT |
+| ~~Q-13~~ | ~~Siapa yang berhak melakukan override `Waived`?~~ **Terjawab:** user pembuat tagihan, tanpa persetujuan berjenjang (F-10.8). | — |
+| ~~Q-14~~ | ~~Ambang gross weight 60.000 kg itu batas apa?~~ **Terjawab:** batas teknis truk → jadi parameter per jenis truk (F-09.6). Namun data aktual tidak konsisten dengan itu — lihat Q-24. | — |
+| ~~Q-15~~ | ~~TPCHP asinkron atau atomik dengan approval GRN?~~ **Terjawab:** keduanya tidak — generate jadi **manual** oleh user setelah GRN di-approve, dengan kesempatan koreksi di aplikasi baru (§5.8). | — |
+| ~~Q-17~~ | ~~Bolehkah pembayaran diinisiasi dari modul ini?~~ **Terjawab:** ya, memakai modul pembayaran bersama yang sudah ada; approval di Orion tidak diintervensi (§5.11). | — |
+| ~~Q-18~~ | ~~Siapa yang memvalidasi pemetaan master?~~ **Terjawab:** sign-off Head of Despatch dan Head of Finance, jadi syarat fase M-1. | — |
+| ~~Q-19~~ | ~~Additional expense perlu approval berjenjang?~~ **Terjawab:** cukup satu level — user lain di tim yang sama. | — |
+| ~~Q-20~~ | ~~Additional expense tanpa induk boleh?~~ **Terjawab:** dilarang. Jasa tanpa surat jalan lewat `TPSVC` (§5.2.1). | — |
+| ~~Q-21~~ | ~~Provisi susulan atau baris tagihan?~~ **Terjawab:** satu induk = satu provisi. Semua selisih (additional / cancellation / deduction) langsung ke beban saat menagih (§5.6.1). | — |
+| ~~Q-16~~ | ~~Apakah `TRNSP009` masih dipakai?~~ **Terjawab:** sudah tidak relevan; digantikan `TRANSPORTER_BUDGET_V`. Tidak dimigrasi. | — |
 
 ---
+
+### Pertanyaan yang masih terbuka
+
+| # | Pertanyaan | Kepada |
+|---|---|---|
+| ~~Q-22~~ | ~~Kapan `TPJV` dibuat di Orion?~~ **Terjawab & diverifikasi:** `IM_TXN_AUTH` dan `IM_TXN_AUTH_USER` sudah berisi `TPJV`, `FM_TRAN_DOC_NO` sudah 12 periode untuk 2026. P3 tidak lagi terblokir. Satu jebakan tersisa ditangani lewat F-05.8 (§3.7.4a). | — |
+| ~~Q-23~~ | ~~`EDN` / `WDN` ditangani di mana?~~ **Terjawab:** `EDN` milik modul Shipping Instruction (EMKL, export cost); yang masuk modul ini hanya trucking pabrik → bandara untuk kiriman via pesawat, lewat `TPSVC` (F-02.12a). `WDN` belum terjawab → Q-27. | — |
+| ~~Q-24~~ | ~~`GH_FLEX_06` berat satu truk atau beberapa?~~ **Terjawab:** beberapa truk. Data mengonfirmasi dan memperkuat — 96,5% baris melebihi kapasitas truknya (§5.8.1). Ambang tetap di level GRN, bukan per jenis truk. | — |
+| ~~Q-25~~ | ~~Teknis mount `Doc_Folder`?~~ **Disetujui** untuk dibicarakan dengan tim development saat P4. | — |
+| ~~Q-26~~ | ~~Penamaan `TPSVC`?~~ **Disetujui.** | — |
+| ~~Q-27~~ | ~~`WDN` ditangani modul mana?~~ **Terjawab:** tidak dikenai biaya angkut — tanggungan pembeli. Tidak ditarik ke modul ini (F-03.9). | — |
+| ~~Q-28~~ | ~~Perlu pencatatan per truk untuk GRN chip?~~ **Terjawab:** ya, tapi datanya sudah didefinisikan di GRN. v1 memakai asumsi 1 GRN = 1 truk dengan data dari GRN; struktur beberapa truk menyusul bersama alur gerbang (§5.12). | — |
+| ~~Q-29~~ | ~~Dokumen tanpa `FT_TXN_AUTH` diperlakukan sama di Orion?~~ **Terjawab secara arsitektural:** `FT_TXN_AUTH` dibuat Orion sendiri lewat `STP_DINSERT_APPR_RECS_NEW`; aplikasi luar memang hanya menulis header + detail. Modul LC sudah benar, `PKG_TRANSPORTER` yang menyimpang (T-27). | — |
+| ~~Q-30~~ | ~~Kelengkapan `HMEMD_USER_ORION` untuk pemosting Finance?~~ **Terjawab:** dilengkapi menyusul, dikerjakan sebagai bagian fase M-6b (§6.4) dengan daftar periksa di §8.1. | — |
 
 ## Document Control
 
 | Versi | Tanggal | Perubahan |
 |---|---|---|
 | 1.0 Draft | 2026-09-14 | Draft awal berdasarkan analisa 8 form (.fmb), 8 report (.rdf), `PKG_TRANSPORTER`, 14 tabel aktif, 8 view, dan profiling data produksi di schema `MGTDAT`. |
+| 2.2 Draft | 2026-09-15 | Menambahkan §8.1 — kondisi pemetaan `HMEMD_USER_ORION` saat ini (18 nilai unik, satu tidak valid), siapa yang membutuhkannya, dan daftar periksa pelengkapannya sebelum go-live. Q-30 ditutup jadi butir pekerjaan fase M-6b. |
+| 2.1 Draft | 2026-09-15 | Koreksi penting soal `FT_TXN_AUTH`: baris otorisasi **dibuat Orion sendiri** lewat prosedur standar `STP_DINSERT_APPR_RECS` / `_NEW` yang dipanggil paket keuangannya (`FINPKG_FT2502`, `FINPKG_FT2504`, `ORNDBPKG_*`). Aplikasi luar memang hanya menulis header + detail — jadi modul LC sudah benar sejak awal dan `PKG_TRANSPORTER` yang menyimpang (T-27 ditulis ulang, Q-29 ditutup). Ditemukan juga `ODBTRG_APPR_VOUCHER` yang menegakkan maker ≠ approver di level ERP (error 2441465), sehingga pemetaan `HMEMD_USER_ORION` per individu jadi kritis — F-05.10, F-05.11, fase M-6b, RK-17 ditulis ulang, Q-30. |
+| 2.0 Draft | 2026-09-15 | (a) **`FT_TXN_AUTH` diputuskan tidak ditulis**, mengikuti modul LC — dibuktikan dengan 182 dokumen `JV` 2026 yang sudah terposting tanpa baris itu; sisa keraguan jadi Q-29 (§3.7.4a, F-05.9, RK-17 ditulis ulang); (b) **konsep tanggung jawab biaya angkut** ditambahkan (§5.1.2, T-29): `VENDOR` / `BUYER_BORNE` / `INTERNAL`, dibuktikan 319 transaksi `BY PARTY` + armada sendiri yang nol provisi. Tabel `transp_vendor` berganti jadi `transp_carrier` supaya namanya tidak menyesatkan; (c) `WDN` tidak dikenai biaya angkut, tidak ditarik (Q-27 ditutup, F-03.9, F-03.10); (d) GRN chip v1 memakai asumsi 1 GRN = 1 truk dengan data dari GRN, multi-truk menyusul bersama alur gerbang (Q-28 ditutup). |
+| 1.9 Draft | 2026-09-15 | Menutup lima pertanyaan terakhir: (a) prasyarat `TPJV` **diverifikasi langsung di Orion** — `IM_TXN_AUTH`, `IM_TXN_AUTH_USER`, dan 12 periode `FM_TRAN_DOC_NO` 2026 sudah ada, P3 tidak lagi terblokir; ditemukan jebakan `tauth_tbl_identifier` yang akan menggagalkan posting `TPJV` pertama, ditangani F-05.8 & F-05.9 (§3.7.4a, RK-17 ditulis ulang); (b) `EDN` milik modul Shipping Instruction, hanya trucking ke bandara yang masuk lewat `TPSVC` (F-02.12a) — `WDN` jadi Q-27; (c) §5.8.1 baru: data membuktikan 96,5% GRN chip melebihi kapasitas truknya, jadi ambang tetap di level GRN dan nopol ditandai "truk utama" (F-09.12 s/d F-09.14), usulan multi-truk jadi Q-28; (d) mount `Doc_Folder` disetujui; (e) nama `TPSVC` disetujui. |
+| 1.8 Draft | 2026-09-15 | Menutup 18 pertanyaan terbuka dan memasukkan keputusannya: (a) `FT_TXN_AUTH` wajib untuk dokumen ERP saja; **provisi pindah dari `JV` ke `TPJV`** dengan seluruh konsekuensinya (§3.7.4a, RK-17, RK-18, Q-22); (b) 21 nomor duplikat dibiarkan historis → unique index fungsional (C-08); (c) jasa tanpa surat jalan jadi jenis transaksi `TPSVC` (§5.2.1); (d) gross-up di-*deprecate*, nol vendor aktif (F-01.3a); (e) role Despatch / Stores / Finance ditetapkan (§8); (f) retensi tanpa batas (NF-09, NF-10); (g) waive dokumen boleh oleh pembuat tagihan (F-10.8); (h) ambang berat chip jadi parameter per jenis truk (F-09.6); (i) **generate TPCHP jadi manual** — staging, koreksi di aplikasi baru, lalu user yang mengeksekusi (§5.8 ditulis ulang); (j) **satu induk = satu provisi**, semua selisih langsung ke beban (§5.6.1); (k) additional expense tanpa induk dilarang (F-04.3); (l) `TRNSP009` tidak dimigrasi; (m) pembayaran memakai modul bersama, approval Orion tidak diintervensi. Temuan baru T-27 (`FT_TXN_AUTH` tidak konsisten) dan T-28 (`EDN`/`WDN` tidak masuk modul). Pertanyaan baru Q-22 s/d Q-26. |
+| 1.7 Draft | 2026-09-15 | Klarifikasi dari review: (a) additional expense dirancang ulang sebagai **transaksi ber-approval yang menempel ke induknya** — disetujui user lain di tim pelapor (despatch untuk yarn, stores untuk chip), bukan di-*acknowledge* Finance; Finance **menarik** yang dibutuhkan saat menagih dan membiarkan sisanya (§5.4, enum baru, `transp_additional_expense` + `_line`); (b) payment voucher dikeluarkan dari v1 jadi **rilis terpisah**, tabelnya tetap dibuat supaya skema tidak berubah lagi; (c) normalisasi master dipastikan tetap di v1. Menambah Q-20 & Q-21. Estimasi v1 25 → 23 minggu. |
+| 1.6 Draft | 2026-09-15 | Hasil review kedua: (a) master dinormalisasi jadi `transp_vendor` + `transp_rate_card` + `transp_rate_line` dengan masa berlaku tarif, vendor wajib terhubung `OM_SUPPLIER` dan nama tidak disalin (§5.1, T-23 s/d T-26); (b) tarif chip eksplisit per **vendor chip** (§5.1.1); (c) modul add-on dihapus — diganti `transp_bill_line` bertipe `PROVISION` / `ADDITIONAL_SERVICE` / `DIRECT` (§5.6); (d) Other Charges dirancang ulang jadi **Nota Jasa Tambahan** dengan alur Reported → Acknowledged → Provisioned/Billed (§5.4); (e) payment voucher `BPS`/`BPJ` masuk cakupan, reuse service LcControl (§5.11); (f) usulan alur gerbang & loading dicatat sebagai fase berikutnya dengan kaitan disiapkan di v1 (§5.12). Menambah C-19 s/d C-23, R-12, RK-15, RK-16, Q-17 s/d Q-19. Estimasi 22 → 25 minggu. |
 | 1.5 Draft | 2026-09-14 | Keputusan desain dari review: (a) `MGT_TP_PROVISION_DEL` dinyatakan salah rancang dan **tidak dimigrasi** — digantikan soft delete + activity log (F-02.9), Q-08 ditutup; (b) approval maker-checker wajib untuk **semua** transaksi angkutan, approver harus user lain (F-02.6, enum + aturan SoD di §8); (c) chip yang gagal ter-generate dari GRN punya halaman khusus beserta alasannya dan bisa ditarik manual (F-09.9 s/d F-09.13, tabel `transp_grn_pull_attempt`); (d) despatch dibuat sendiri oleh user di halaman yang sama (F-02.10, F-03.7). Menambah C-17 & C-18. Estimasi 21 → 22 minggu. |
 | 1.4 Draft | 2026-09-14 | Menambahkan §3.2.1 — rincian `TRNSP009` (Transporter Budget) setelah berkasnya diterima: tanpa parameter user, 11 kolom, dua bagian `UNION ALL` provisi + tagihan outstanding, group per supplier. Inventaris report modul jadi 9. F-08.5 dipertajam (wajib berfilter, mengacu logika `TRANSPORTER_BUDGET_V` yang lebih baru). Q-16 dan RK-14 disesuaikan. |
 | 1.3 Draft | 2026-09-14 | Melengkapi inventaris konsumen hilir setelah pemindaian penuh drive D selesai: report Orion bertambah jadi `SALR026/027/028/029/036/037/041/043/044/049`, `OPD106_MGT_1`, dan form `SALATTREKAP`. Menemukan `TRNSP009.RDF` yang tidak ada di paket sumber (Q-16, RK-14). Menyesuaikan CL-5, R-09, RK-11. |
@@ -1085,8 +1503,7 @@ Konstanta lain: `comp_code = '002'`, `divn_code = '001'`, `dept_code = 'FIN'`, `
 | 1.1 Draft | 2026-09-14 | Menambahkan §3.5 (trigger `ODBTRG_TPCHP` — jalur auto-generate TPCHP dari GRN chip) dan §3.6 (kontrol dokumen LDN lewat aplikasi e-Filling `EFILL_009`). Menambah temuan T-18 s/d T-22, requirement F-09 & F-10, aturan cleansing C-13 & C-14, dan pertanyaan Q-11 s/d Q-15. Mengoreksi T-02. |
 
 **Sumber analisa:**
-- `D:\IT Project\docs-markdown\apps-mutugading\transporter\TRNSP001–008.fmb` / `.rdf`, `TRNSP009.rdf`
-- `D:\IT Project\docs-markdown\apps-mutugading\transporter\ODBTRG_TPCHP.trg`
+- `TRNSP001–008.fmb`, `TRNSP001–009.rdf`, dan `ODBTRG_TPCHP.trg` — berkas binernya sudah diekstrak ke teks dan dihapus; hasilnya ada di [`legacy-source/`](legacy-source/), diindeks oleh [`LEGACY_REFERENCE.md`](LEGACY_REFERENCE.md)
 - `MGTDAT.PKG_TRANSPORTER` (spec + body, 4.011 baris)
 - `MGTDAT` data dictionary: `USER_TABLES`, `USER_TAB_COLUMNS`, `USER_CONSTRAINTS`, `USER_INDEXES`, `USER_SEQUENCES`, `USER_TRIGGERS`, `USER_VIEWS`, `USER_SOURCE`
 - `DBA_SOURCE` / `DBA_OBJECTS` / `DBA_TRIGGERS` / `DBA_SCHEDULER_JOBS` seluruh instance (34 schema) — untuk menelusuri penulis `MTDD_STS_DOC`

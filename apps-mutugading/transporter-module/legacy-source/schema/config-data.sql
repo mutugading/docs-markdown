@@ -1,0 +1,161 @@
+-- Data konfigurasi yang dipakai modul Transporter (snapshot 2026-09-15)
+-- Sumber: MGTDAT.IM_VS_STATIC_VALUE, MGTDAT.IM_APP_ERROR_MESSAGE, MGTAPPS.EFILL_*
+
+-- ============ IM_VS_STATIC_VALUE: DESTINATION ============
+-- BANDUNG                BANDUNG
+-- BATANG                 BATANG
+-- BAWEN                  BAWEN
+-- BEKASI                 BEKASI
+-- BOGOR                  BOGOR
+-- BOYOLALI               BOYOLALI
+-- CIANJUR                CIANJUR
+-- CIREBON                CIREBON
+-- GRESIK                 GRESIK
+-- JAKARTA                JAKARTA
+-- JEPARA                 JEPARA
+-- KARAWANG               KARAWANG
+-- KARTASURA              KARTASURA
+-- KEBUMEN                KEBUMEN
+-- KLATEN                 KLATEN
+-- KUDUS                  KUDUS
+-- KUTOARJO               KUTOARJO
+-- LAWANG                 LAWANG - MALANG
+-- MADIUN                 MADIUN
+-- MAGELANG               MAGELANG
+-- MALANG                 MALANG
+-- MOJOKERTO              MOJOKERTO
+-- NGUTER                 NGUTER
+-- PANDAAN                PANDAAN
+-- PASURUAN               PASURUAN
+-- PEKALONGAN             PEKALONGAN
+-- PURWAKARTA             PURWAKARTA
+-- PURWOREJO              PURWOREJO
+-- SALATIGA               SALATIGA
+-- SEMARANG               SEMARANG
+-- SERANG                 SERANG
+-- SIDOARJO               SIDOARJO
+-- SOLO                   SOLO
+-- SRAGEN                 SRAGEN
+-- SUBANG                 SUBANG
+-- SUKABUMI               SUKABUMI
+-- SUKOHARJO              SUKOHARJO
+-- SURABAYA               SURABAYA
+-- TANGERANG              TANGERANG
+-- TOMBRO                 TOMBRO
+-- TULUNGAGUNG            TULUNGAGUNG
+-- UNGARAN                UNGARAN
+-- WATES                  WATES
+-- WONOGIRI               WONOGIRI
+-- YOGYA                  YOGYA
+
+-- ============ IM_VS_STATIC_VALUE: TYPE_TRUCK / TRANSP_TYPE / TRANSPORT ============
+-- TRANSPORT      AMBIL BARANG           Ambil Barang
+-- TRANSPORT      OTHERS                 Others
+-- TRANSPORT      PALLET                 Pallet
+-- TRANSPORT      RETUR BENANG           Retur Benang
+-- TRANSP_TYPE    Q                      Quantity
+-- TRANSP_TYPE    W                      Wholesale
+-- TYPE_TRUCK     BUILT-UP               BUILT UP
+-- TYPE_TRUCK     CDD                    CDD
+-- TYPE_TRUCK     CDD-TRONTON            CDD TRONTON
+-- TYPE_TRUCK     COLT-DIESEL            COLT DIESEL
+-- TYPE_TRUCK     ENGKEL                 ENGKEL
+-- TYPE_TRUCK     FUSO                   FUSO
+-- TYPE_TRUCK     TRAILER                TRAILER
+-- TYPE_TRUCK     TRONTON                TRONTON
+
+-- ============ IM_VS_STATIC_VALUE: TRANSPORTER (profil pajak vendor) ============
+-- field_01 = skema PPN, field_02 = skema PPh, field_03 = masa berlaku PPh 0.5 (DDMMYYYY)
+-- LS00213    LOGISTICS POS                              ppn=PPN      pph=-          s/d=-
+-- LS00254    ALAM WIDJAJA PUTRA                         ppn=-        pph=-          s/d=-
+-- LS00481    DWI KARYA, CV                              ppn=-        pph=-          s/d=-
+-- LS00515    SEMERU MERAPI ANGKUTAN                     ppn=PPN      pph=-          s/d=-
+-- LS00516    JAVA MOTOR TRANSPORT ANGKUTAN              ppn=-        pph=PPH 0.5    s/d=31122024
+-- LS00520    KEVIN PUTRA, PT                            ppn=PPN      pph=PPH 0.5    s/d=31122024
+-- LS00522    SRI RAHAYU ANGKUTAN                        ppn=-        pph=-          s/d=-
+-- LS00535    KHALSA ANGKUTAN                            ppn=-        pph=-          s/d=-
+-- LS00961    SEMERU PUTRA, CV                           ppn=-        pph=-          s/d=-
+-- LS01018    SEMARANG TRANSPORT                         ppn=-        pph=-          s/d=-
+-- LS01102    DHARMA MULIA PRIMA KARYA, PT               ppn=-        pph=-          s/d=-
+-- LS01119    MULTI MATRA, PT                            ppn=-        pph=-          s/d=-
+-- LS01146    VAHANA ORION LOGISTICS AND TRANSPORTATIO   ppn=-        pph=-          s/d=-
+-- LS01178    BERLIAN TRANS                              ppn=PPN      pph=-          s/d=-
+-- LS01224    HU HERYADI TRANSPORT                       ppn=-        pph=-          s/d=-
+-- LS01225    RM TRANS, CV                               ppn=-        pph=-          s/d=-
+-- LS01283    BARAKA SARANA TAMA, PT                     ppn=-        pph=-          s/d=-
+-- LS01302    BINTANG MULIA TRANSPORT                    ppn=-        pph=-          s/d=-
+-- LS01367    ANGKUTAN EXPRESS INDONESIA                 ppn=-        pph=-          s/d=-
+-- LS01414    BINTANG PERKASA LOGISTIK, PT               ppn=-        pph=-          s/d=-
+-- LS01443    RAPI TRANS LOGISTIK INDONESIA, PT.         ppn=-        pph=-          s/d=-
+-- LS01501    BERLIAN SINAR PERTIWI, PT.                 ppn=PPN      pph=-          s/d=-
+-- LS01579    DANKAR TRANS SEJAHTERA, PT                 ppn=-        pph=-          s/d=-
+-- LS01729    ARIEF MITRA RAYA, PT                       ppn=-        pph=-          s/d=-
+-- LS01829    JAYA MULYA ERALINDO, PT                    ppn=-        pph=-          s/d=-
+-- LS01945    TRANSPORTER IBEX                           ppn=-        pph=-          s/d=-
+-- LS01983    PUTRA JAYA TRANSINDO, PT.                  ppn=-        pph=-          s/d=-
+-- LS02040    SEMESTA MANDIRI TRANSPORT, PT              ppn=-        pph=-          s/d=-
+-- LS02046    SIBA SURYA, PT.                            ppn=-        pph=-          s/d=-
+-- LS02058    BAHANKU MAJU INDONESIA, PT                 ppn=-        pph=-          s/d=-
+-- LS02099    PANTHERA BIRU INDONESIA, PT                ppn=PPN      pph=-          s/d=-
+-- LS02113    ARMADA GLORIA PRATAMA, PT                  ppn=-        pph=-          s/d=-
+-- LS02226    ALTAYAZA MULIA  ADNI, PT                   ppn=-        pph=-          s/d=-
+-- LS02335    FARIDA ANGKUTAN                            ppn=-        pph=-          s/d=-
+-- LS02511    MOSTRANS GLOBAL DIGILOG, PT.               ppn=PPN      pph=NON PPH    s/d=-
+-- LS02620    MUSTIKA KENCANA LOGISTIC, PT               ppn=-        pph=-          s/d=31122024
+-- LS02625    JEJE HARAPAN TRANSINDO, PT                 ppn=-        pph=-          s/d=-
+-- LS02636    MEGA TRANS, CV                             ppn=PPN      pph=-          s/d=-
+-- LS02664    SINAR GUNA LESTARI, PT                     ppn=PPN      pph=-          s/d=-
+-- LS02704    SIASAT CEPAT MUDA, PT.                     ppn=-        pph=-          s/d=-
+-- LS02867    OMM SIMPAN INDONESIA, PT                   ppn=PPN      pph=-          s/d=-
+-- LS02868    TRI SUKSES TRANSINDO, PT                   ppn=-        pph=-          s/d=-
+-- LS03009    KHALSA POLYMER JAYA, PT.                   ppn=-        pph=-          s/d=-
+-- LS03017    OKI DOKI INDONESIA, PT                     ppn=-        pph=-          s/d=-
+-- LS03050    BERKAT ACI MULIA                           ppn=-        pph=-          s/d=-
+-- LS03056    DARWIN SARANA LOGISTIC PT                  ppn=-        pph=-          s/d=-
+-- LS03060    CV. TRI SUKSES TRANSINDO                   ppn=-        pph=-          s/d=-
+-- LS03072    UNTARA JAYA PUTRA, PT                      ppn=-        pph=-          s/d=-
+
+-- ============ Pesan error yang dipakai trigger & form ============
+-- 2441452  Chips Transpoter Master belum di Setup !!
+-- 2441453  Gross Quantity Flexi Field Harus Sama atau Lebih Besar Dengan Total Quantity Item.
+-- 2441456  Cek Gross Quantity Flexi Field Tidak Boleh lebih besar dari 50500 Kgs.
+-- 2441461  Setup Master Transporter BELUM ADA !!. Please Kirimkan Copy Contract kemudian Info ke IT ext. 173 / 114
+-- 2441464  Tidak Bisa di Approve !!  GRN Chip Batch Number Harus Isi !!
+-- 2441465  Approval Tidak Bisa di Lakukan karena User Approval Sama dengan User Created !!
+
+-- ============ e-Filling: jenis dokumen & pola nama berkas ============
+-- CHPGRN           prefix="CHPGRN-"
+-- EDN              prefix="EDN-"
+-- JWDN             prefix="JWDN-"
+-- JWDN SALES       prefix="JWDN-"
+-- LDN              prefix="LDN-"
+-- LDN SALES        prefix="LDN-"
+-- PDN              prefix="PDN"
+-- PDN SALES        prefix="PDN-"
+-- WDN              prefix="WDN-"
+
+-- ============ e-Filling: folder per jenis dokumen ============
+-- Akar: D:/XAMPP/htdocs/webapps/Doc_Folder/{TYPE}/{TAHUN}/{TYPE}-{nomor}.pdf
+-- CHPGRN         2022
+-- CHPGRN         2023
+-- CHPGRN         2024
+-- CHPGRN         2025
+-- CHPGRN         2026
+-- CHPGRN         CHPGRN
+-- JWDN           2025
+-- JWDN           2026
+-- JWDN           JWDN
+-- LDN            2021
+-- LDN            2022
+-- LDN            2023
+-- LDN            2024
+-- LDN            2025
+-- LDN            2026
+-- LDN            LDN
+-- PDN            2021
+-- PDN            2022
+-- PDN            2023
+-- PDN            2024
+-- PDN            2025
+-- PDN            2026
+-- PDN            PDN

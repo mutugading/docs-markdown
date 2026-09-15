@@ -1,0 +1,250 @@
+-- ==============================================================
+-- TRNSP001.rdf — query & struktur report (hasil ekstraksi)
+-- ==============================================================
+
+-- ---------- Tabel/view yang dibaca ----------
+-- FROM MGT_TRANSP_HEAD
+-- FROM OT_WMS_PACK_TABLE_ALTHARA
+
+-- ---------- Judul & label kolom ----------
+-- A0B0C
+-- B(F0J
+-- B0C0D
+-- BLUE
+-- BpC R
+-- BpC T
+-- BpC V
+-- C0D0E
+-- CUSTOMER
+-- Capasity 
+-- Code
+-- Courier New
+-- CpR T
+-- CpT V
+-- CpV X
+-- Customer
+-- D0E0F
+-- DESTINATION
+-- DN No
+-- Date
+-- Default
+-- Destination
+-- Destination Format
+-- Destination Name
+-- Destination Type
+-- Dn No
+-- E0F0G
+-- Enter values for the parameters
+-- F H0J0K
+-- F0G0H
+-- G0H0I
+-- GREEN
+-- Grade 1
+-- Grade 2
+-- Grand Total:
+-- Gross
+-- H0I0J
+-- I0J0K
+-- Item Code
+-- Item Desc
+-- JpK R
+-- JpK T
+-- JpK V
+-- JpK X
+-- JpK Z
+-- JpK d
+-- JpK f
+-- JpK h
+-- K0L0M
+-- MGTDAT
+-- MGTDATxu
+-- NGNN
+-- NNNGNNNGNNNGNNNGNN0D00
+-- No Police
+-- Number of Copies
+-- Output Mode
+-- PBW2
+-- Qty Gross
+-- Qty Nett
+-- Quantity
+-- Quantity 
+-- Quantity Nett
+-- REPORT
+-- RIBS
+-- Rate
+-- Report Parameters
+-- Run in Background
+-- Rutransporter
+-- Screen
+-- Show Print Job Dialog
+-- TRANSPORTER
+-- TRANSPORTER REGISTER
+-- TRNSP001
+-- TYPE
+-- Tahoma
+-- Total
+-- Total Rate
+-- Total:
+-- Transp
+-- Transp Code
+-- Transp Dt
+-- Transp No
+-- Transporter
+-- Transporter 
+-- Truck
+-- Truck Cap
+-- Truck Qty
+-- Truck Rate
+-- Truck Type
+-- Type
+-- W0X0Y
+-- YPRINTJOB
+-- ZMODE
+-- aDESFORMAT
+-- bDESNAME
+-- black
+-- blue
+-- brcrz
+-- c0d0e0f0g0h0i
+-- cDESTYPE
+-- class attributes
+-- cxf8f8h8j8l
+-- cyan
+-- d0e0f
+-- d0e0f0g0h0i0j
+-- darkblue
+-- darkcyan
+-- darkgray
+-- darkmagenta
+-- darkred
+-- darkyellow
+-- dflt
+-- erR 
+-- fTotal:
+-- fxj8j8l8n8p
+-- g(jpn
+-- gray
+-- gray36
+-- gray40
+-- gray44
+-- gray48
+-- gray52z
+-- gray56p
+-- gray60ffffff
+-- gray68Q
+-- gray72G
+-- gray80333333
+-- gray84(
+-- gray88
+-- gray92
+-- gray96
+-- green
+-- h(nprpr0r0s8t8v
+-- h(nprpr8r0t8v8x
+-- h0i0j0k
+-- j(nprpr8r0t8v8x
+-- j0k0l
+-- k0l0m
+-- k0l0m0n0o0p0q
+-- k0l8n0p8r8t
+-- l0m0n0o0p0q0r
+-- m0n0o0p0q0r0s
+-- magenta
+-- npopopw
+-- npopw
+-- o0p0q0r0s0t0u
+-- oppp
+-- opr rptpt
+-- p%pO
+-- p(p9
+-- p)p2
+-- p)p9
+-- p)pR
+-- p0q0r0s0t0u0v
+-- p0q0r0sptpv0v
+-- r0g0b0
+-- r0g0b100
+-- r0g0b50
+-- r0g0b75
+-- r0g0b88
+-- r0g25b0
+-- r0g25b50
+-- r0g25b75
+-- r0g25b88
+-- r0g50b0
+-- r0g50b50
+-- r0g50b75
+-- r0g50b88
+-- r0g75b0
+-- r0s0t
+-- r0s0t0upvpv0v
+-- r100g0b0
+-- r100g0b100
+-- r100g25b100
+-- r100g25b50
+-- r100g25b75
+-- r100g25b88
+-- r100g50b100
+-- r100g50b50
+-- r100g50b75
+-- r100g50b88
+-- r25g0b0
+-- r50g0b0
+-- r50g0b50
+-- r50g0b75
+-- r50g0b88
+-- r50g25b0
+-- r50g25b100
+-- r50g50b0
+-- r50g50b100
+-- r50g75b0
+-- r75g0b0
+-- r75g0b50
+-- r75g0b75
+-- r75g0b88
+-- r75g25b0
+-- r75g25b100
+-- r75g50b0
+-- r75g50b100
+-- r75g75b0
+-- r88g0b0
+-- r88g0b50
+-- r88g0b75
+-- r88g0b88
+-- r88g25b0
+-- r88g25b100
+-- r88g50b0
+-- r88g50b100
+-- r88g75b0
+-- rpsps
+-- rpspu
+-- rpspw
+-- rter
+-- s0t0u
+-- sptptp
+-- struct types
+-- t0u0v
+-- t0u0v0wpxp
+-- t0u0v0wpxpz0z
+-- tk2 reserved
+-- tk2 uiStrings
+-- ttransporter
+-- type
+-- v0w0x
+-- v0w0x0ypzp
+-- v0w0x0ypzpz0z
+-- vpwpw
+-- vpwpz
+-- w0x0y
+-- white
+-- wpxp
+-- yellow
+-- zdestination
+
+-- ---------- Query ----------
+select a.mth_txn_code ||'-'|| a.mth_transp_no transp_no,
+;
+
+-- ---------- PL/SQL (format trigger / AfterReport) ----------
+
+-- (tidak ada blok PL/SQL yang bisa diekstrak)
