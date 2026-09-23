@@ -47,7 +47,7 @@ same rework as T02 rather than asking him to edit the file twice.
 | **T14** | `MinPriceService`: create, edit draft, overlap check (`spec.md` §3.2), void | T08 | Tests 2, 3 green; the overlap message names the conflicting rule id and its period |
 | **T15** | Supersede (`spec.md` §3.4): draft now, close the old row only at approval | T14 | Test 4 green, including that the old rule is untouched while the request is unsigned |
 | **T16** | `MinPriceManager` page + view + partials; route, breadcrumb, sidebar entry | T14, T12 | List, filter, paginate, create, edit, supersede, void — all through the service |
-| **T17** | `MinPriceImport` + `ImportMinPrice` job + `MinPriceExport` + `ExportMinPrice` job, `ReportStatusNotification` on both | T14 | Tests 5, 6 green; every imported row lands `DRAFT`; a bad file reports every failing row with its number |
+| **T17** | `MinPriceImport` + `ImportMinPriceJob` job + `MinPriceExport` + `ExportMinPriceJob` job, `ReportStatusNotification` on both | T14 | Tests 5, 6 green; every imported row lands `DRAFT`; a bad file reports every failing row with its number |
 
 ---
 

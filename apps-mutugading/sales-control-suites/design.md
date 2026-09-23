@@ -88,8 +88,8 @@ Modules/Finance/app/
 │       └── PriceRejectionExport.php
 ├── Imports/Master/SalesControl/MinPriceImport.php
 └── Jobs/
-    ├── Master/SalesControl/{ImportMinPrice,ExportMinPrice}.php
-    └── Reports/SalesControl/ExportPriceControlReport.php
+    ├── Master/SalesControl/{ImportMinPriceJob,ExportMinPriceJob}.php
+    └── Reports/SalesControl/ExportPriceControlReportJob.php
 
 Modules/Finance/resources/views/
 ├── livewire/master/sales-control/

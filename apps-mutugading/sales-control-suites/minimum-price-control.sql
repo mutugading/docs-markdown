@@ -428,20 +428,23 @@ INSERT INTO MGTDAT.IM_VS_STATIC_VALUE (VSSV_VS_CODE, VSSV_CODE, VSSV_FRZ_FLAG_NU
   VALUES ('MINPRC_MGT', 'STA', 2);
 
 -- Message registry. VERIFIKASI nama kolom dengan DESC IM_APP_ERROR_MESSAGE.
-INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
+INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR, AEM_CR_UID, AEM_CR_DT)
   VALUES ('CUST', 1012110,
           'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.',
-          'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.');
+          'Harga di bawah minimum price. Baris: &1. Ajukan approval pengecualian sebelum approve dokumen.',
+          'ADMIN3', sysdate);
 
-INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
+INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR, AEM_CR_UID, AEM_CR_DT)
   VALUES ('CUST', 1012111,
           'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.',
-          'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.');
+          'Kurs untuk tanggal dokumen tidak ditemukan (&1 - &2). Hubungi Finance untuk input kurs.',
+          'ADMIN3', sysdate);
 
-INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR)
+INSERT INTO MGTDAT.IM_APP_ERROR_MESSAGE (AEM_APP_CODE, AEM_ERROR_CODE, AEM_MESSAGE_ENG, AEM_MESSAGE_FOR, AEM_CR_UID, AEM_CR_DT)
   VALUES ('CUST', 1012112,
           'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.',
-          'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.');
+          'Currency &1 tidak didukung kontrol minimum price. Hanya USD dan IDR.',
+          'ADMIN3', sysdate);
 
 COMMIT;
 
@@ -887,10 +890,8 @@ SHOW ERRORS;
 -- Jangan berikan lewat role. Jangan berikan UPDATE atau DELETE.
 -- Jalankan sebagai MGTHRIS:
 -- ---------------------------------------------------------------------
--- GRANT SELECT ON MGTHRIS.SALES_CTL_APPR_REQUEST        TO MGTDAT;
--- GRANT SELECT ON MGTHRIS.SALES_CTL_APPR_LINE           TO MGTDAT;
--- GRANT SELECT ON MGTHRIS.SALES_MIN_PRICE               TO MGTDAT;
--- GRANT INSERT ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG     TO MGTDAT;
+GRANT SELECT any table TO MGTDAT;
+GRANT INSERT ON MGTHRIS.SALES_MIN_PRICE_CHECK_LOG TO MGTDAT;
 --
 -- Empat grant, tidak ada yang kelima. MGTDAT tidak perlu akses apa pun ke
 -- HM_MST_SEQUENCES atau PKG_HM_SEQUENCES: trigger sys id milik MGTHRIS dan
@@ -908,12 +909,8 @@ SHOW ERRORS;
 -- Sebagian mungkin sudah ada - modul Finance sudah membaca MGTDAT hari ini.
 -- Cek dulu sebelum minta ke DBA. Jalankan sebagai MGTDAT:
 -- ---------------------------------------------------------------------
--- GRANT SELECT  ON MGTDAT.OT_SO_HEAD         TO MGTHRIS;
--- GRANT SELECT  ON MGTDAT.OT_SO_ITEM         TO MGTHRIS;
--- GRANT SELECT  ON MGTDAT.OM_ITEM            TO MGTHRIS;
--- GRANT SELECT  ON MGTDAT.OM_CUSTOMER        TO MGTHRIS;   -- kalau layar butuh nama customer
--- GRANT SELECT  ON MGTDAT.IM_VS_STATIC_VALUE TO MGTHRIS;
--- GRANT EXECUTE ON MGTDAT.PKG_MGT_PRICE_CTRL TO MGTHRIS;
+GRANT SELECT any table TO MGTHRIS;
+GRANT EXECUTE ON MGTDAT.PKG_MGT_PRICE_CTRL TO MGTHRIS;
 --
 -- CATATAN: dulu SALES_MIN_PRICE_CHECK_LOG dijaga read-only untuk aplikasi
 -- dengan cara TIDAK memberi grant INSERT. Sekarang tabel itu milik MGTHRIS,
@@ -923,7 +920,7 @@ SHOW ERRORS;
 -- =====================================================================
 -- BAGIAN G - SMOKE TEST (jalankan di TEST, bukan produksi)
 -- =====================================================================
-/*
+
 -- G0. AKSES LINTAS SKEMA. Jalankan sebagai MGTDAT, PALING AWAL.
 --     Kalau salah satu gagal, F1 belum jalan atau diberikan lewat role.
 --     Percuma menjalankan G1-G4 sebelum ini lolos.
@@ -972,4 +969,4 @@ SELECT SMPCL_ITEM_CODE, SMPCL_RATE, SMPCL_EXG_DIVISOR, SMPCL_EXG_RATE_SRC,
  ORDER BY SMPCL_SYS_ID;
 
 ROLLBACK;
-*/
+

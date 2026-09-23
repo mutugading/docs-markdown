@@ -31,6 +31,7 @@ this repo; take §9 to Indra.
 | [`schema.md`](schema.md) | The four MGTHRIS tables, what each schema owns, the Laravel migrations, id and request-number generation, **and §9: the exact edits `minimum-price-control.sql` needs** |
 | [`design.md`](design.md) | Folder map, models, repositories, services, the Oracle package gateway, Livewire pages, routes, permissions, config, storage |
 | [`spec.md`](spec.md) | Behaviour contracts: the two state machines, price-preview rules, revision handling, overlap validation, attachments, reports, and the test list |
+| [`email-approval.md`](email-approval.md) | The second approval channel: the approver master, the single-use signed link, what an email decision writes in place of a scan, and what stays unchanged |
 | [`verification.md`](verification.md) | The six pre-deploy checks from PRD §4.8 written as runnable SQL, plus the open questions and who answers them |
 | [`plan.md`](plan.md) | Phased implementation plan, risks, testing approach |
 | [`tasks.md`](tasks.md) | Numbered, dependency-ordered tasks with acceptance criteria |

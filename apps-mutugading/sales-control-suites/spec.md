@@ -127,7 +127,7 @@ Off-by-one here means a day where the wrong floor applies and nobody notices for
 
 ### 3.5 Excel import
 
-`Maatwebsite\Excel`, queued (`ImportMinPrice`), `ReportStatusNotification` on completion — the house
+`Maatwebsite\Excel`, queued (`ImportMinPriceJob`), `ReportStatusNotification` on completion — the house
 import shape. Columns match §3.1 one for one.
 
 Every row lands as `DRAFT`. Import is a data-entry shortcut, not an approval path; a spreadsheet that
@@ -239,6 +239,14 @@ and signer, and approves.
 - The approver may not be the requester. Enforced by permission sets in practice; assert it in
   `approve()` as well, comparing `SCAR_CR_UID`. A single person holding both roles is a configuration
   mistake that should fail loudly, not quietly self-approve.
+
+### 6.1 The second channel
+
+A request can also be approved through a link emailed to a configured approver, and both channels are
+equally valid — see [`email-approval.md`](email-approval.md). Nothing above changes: the email route
+satisfies the same `C03`, fills the same three BOD columns and runs the same
+requester-is-not-approver assertion. What differs is only what `SCAR_ATTACH_PATH` points at — a
+generated decision record rather than a scan — and `SCAR_APPR_CHANNEL` says which.
 
 ---
 
