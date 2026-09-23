@@ -5,9 +5,10 @@
 | **Target** | `Modules/Finance` → `Shipment` domain |
 | **Schema** | Write: MGTHRIS (`ship_*`) · Read: MGTDAT (Orion ERP) |
 | **Replaces** | Legacy `mgthris` app, Shipping module (`app/Http/Livewire/Shipping/*`) |
-| **Status** | Draft v1.0 — 2026-08-28 |
+| **Status** | Draft v1.1 — 2026-09-02 (front-office impact folded in) |
 | **Author** | IT (Mike) |
-| **References** | `design.md`, `spec.md`, `schema.md`, `gap-analysis.md`, `data-migration.md`, `plan.md`, `tasks.md` |
+| **References** | `design.md`, `spec.md`, `schema.md`, `gap-analysis.md`, `data-migration.md`, `plan.md`, `tasks.md`, `open-questions.md` |
+| **Upstream module** | `PRD EXIM.md` — the Exim Front Office, a **separate** delivery in front of this one |
 
 ---
 
@@ -70,6 +71,12 @@ into the ERP tables. This PRD applies that to Exim.
   every column they need, but they ship in Phase 2.
 - Not migrating the legacy `Merge PDF` helper (already dead code, Windows-only paths).
 - No new approval hierarchy. Same single-confirm model as today.
+- **Not building the operational documents in front of the provision** — BIM, the import BL file, the
+  export Shipping Instruction, payment requests. They are a separate module with its own PRD
+  (`PRD EXIM.md`), deliberately kept apart so parity here stays verifiable apple-to-apple. What this
+  delivery owes it is one additive migration — nullable parent FKs, `spv_source_type`, two cost-type
+  flags, `sht_uom`, `spc_no_tariff_match` (`schema.md` §12 file 40, `tasks.md` T009A) — plus the
+  behaviour corrections listed in `gap-analysis.md` §4 as B12–B18. Nothing here waits for that module.
 
 ---
 
@@ -100,7 +107,9 @@ into the ERP tables. This PRD applies that to Exim.
   belongs to, which vouchers it raises, whether it raises a payment request, and whether confirming it
   closes the provision (today: PIB and SHIP close, EMKL waits for the bill).
 - **Tariff** (`ship_tariff`) — vendor × container type × activity, with a shape: `TIER` (bands consumed
-  by container quantity), `FIX` (one band, quantity forced to 1), `FLAT` (single row, quantity capped).
+  by container quantity, **one cost line per consumed band**), `FIX` (one band selected, quantity forced
+  to 1), `RATE` (`rate × qty`, the band a sanity check only). See `spec.md` §4.1 — these semantics were
+  re-confirmed with the team on 2026-09-02 and two of them changed.
 - **Cost line** — activity × quantity × rate, plus PPN/PPh percentages, the four accounts it posts to,
   and the amounts in three currencies (line currency FC, USD LC, bank currency CC).
 - **Settlement link** — `stc_spc_sys_id`: a bill cost line points at the provision cost line it settles.
@@ -158,8 +167,9 @@ actually raised, and is never stamped otherwise.
 3. Enter the vendor's invoice no. + date + received date, due date, bank and Faktur Pajak.
 4. See the **variance** per line, per invoice and per bill (`provision − bill`).
 5. Save, submit, revoke, confirm, amend. Confirm posts the bill voucher (`EBJV` export, `IBJV` import).
-6. **Generate payment** posts the payment voucher (`ADVP-EXP` export, `BPS`/`ADVP` import) against the
-   bill's pay date and stores the reference.
+6. **Generate payment** posts the payment voucher (`ADVP`, or `BPS`/`BPJ` for a PIB) against the bill's
+   pay date and stores the reference. `ADVP-EXP` was named here and does not exist in the ERP —
+   `open-questions.md` F-PAY2.
 
 ### FR-6 — Faktur Pajak
 Line-level Faktur Pajak no. + date, searchable from the ERP faktur view, appliable to every line of an

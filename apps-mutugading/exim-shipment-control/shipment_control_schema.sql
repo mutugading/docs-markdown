@@ -9,7 +9,8 @@
 --
 -- Target: Oracle 11.2+ · schema MGTHRIS · see schema.md for the column rationale.
 -- Sequence/PK convention follows LcControl: a BEFORE INSERT trigger calls
--- MGTHRIS.PKG_HM_SEQUENCES.get_next_seq_no.
+-- MGTHRIS.PKG_HM_SEQUENCES.get_next_seq_no, whose counters are rows in
+-- MGTHRIS.HM_MST_SEQUENCES, not native Oracle sequences (see section 5).
 -- Audit columns are the project standard: *_CREATED_BY / _CREATED_TIMESTAMP /
 -- _MODIFIED_BY / _MODIFIED_TIMESTAMP.
 -- =====================================================================================
@@ -597,15 +598,32 @@ CREATE TABLE MGTHRIS.SHIP_LEGACY_MAP (
 );
 
 -- ------------------------------------------------------------------ 5. SEQUENCES + TRIGGERS
--- One sequence per table with a NUMBER PK. The trigger routes through
--- PKG_HM_SEQUENCES so the app and the database agree on how ids are handed out.
+-- NO Oracle CREATE SEQUENCE. PKG_HM_SEQUENCES is table-driven: it reads
+-- MGTHRIS.HM_MST_SEQUENCES by name, and App\Helpers\SysIdHelper is the same
+-- counter read from PHP. A native sequence would be a second counter nobody
+-- reads. So each table gets one HM_MST_SEQUENCES row plus one trigger.
 -- Repeat this pair for: SHIP_COST_TYPE(SHC), SHIP_ACTIVITY(SHA), SHIP_TARIFF(SHT),
 -- SHIP_POSTING_ACCOUNT(SPA), SHIP_PROVISION(SPV), SHIP_PROVISION_INVOICE(SPI),
 -- SHIP_PROVISION_COST(SPC), SHIP_PROVISION_CONTAINER(SPK), SHIP_PROVISION_DOC(SPD),
 -- SHIP_BILL(STL), SHIP_BILL_INVOICE(STI), SHIP_BILL_COST(STC),
 -- SHIP_BILL_CONTAINER(STK), SHIP_BILL_DOC(STD), SHIP_LEGACY_MAP(SLM).
+-- The trigger names abbreviate the longer tables because Oracle identifiers stop
+-- at 30 characters; HMMS_SEQ_NAME is VARCHAR2(50), so it spells them out.
+-- p_date_format is NULL and HMMS_NUMBER_FORMAT is 'TM9': a surrogate key wants a
+-- plain integer, with no date part and no padding. TM9 is Oracle's text-minimum
+-- format -- do NOT write '0' here, it is a one-digit mask and TO_CHAR(10, '0')
+-- overflows to '#'.
 
-CREATE SEQUENCE MGTHRIS.SHIP_PROVISION_SPV_SYS_ID_SEQ START WITH 1 INCREMENT BY 1 NOCACHE;
+INSERT INTO MGTHRIS.HM_MST_SEQUENCES
+  (HMMS_SEQ_ID, HMMS_SEQ_NAME, HMMS_SEQ_DESC, HMMS_TABLE_NAME, HMMS_COLUMN_NAME,
+   HMMS_START_WITH, HMMS_INCREMENT_BY, HMMS_MIN_VALUE, HMMS_MAX_VALUE, HMMS_LAST_VALUE,
+   HMMS_NUMBER_FORMAT, HMMS_PREFIX, HMMS_SEQ_TYPE, HMMS_CREATED_BY, HMMS_CREATED_AT)
+SELECT MAX(HMMS_SEQ_ID) + 1, 'SHIP_PROVISION_SPV_SYS_ID_SEQ',
+       'Shipment Control SHIP_PROVISION.SPV_SYS_ID primary key',
+       'SHIP_PROVISION', 'SPV_SYS_ID',
+       1, 1, 1, NULL, 0, 'TM9', NULL, 0, 'SYSTEM', SYSTIMESTAMP
+  FROM MGTHRIS.HM_MST_SEQUENCES;
+COMMIT;
 
 CREATE OR REPLACE TRIGGER MGTHRIS.SHIP_PROVISION_SYS_ID_TRG
   BEFORE INSERT ON MGTHRIS.SHIP_PROVISION
@@ -615,7 +633,7 @@ BEGIN
   :NEW.SPV_SYS_ID := MGTHRIS.PKG_HM_SEQUENCES.get_next_seq_no(
       p_seq_name    => 'SHIP_PROVISION_SPV_SYS_ID_SEQ',
       p_user_name   => 'SYSTEM',
-      p_date_format => 'YYYY'
+      p_date_format => NULL
   );
 END;
 /
@@ -639,12 +657,14 @@ SELECT cust_code            AS customer_code,
 CREATE OR REPLACE VIEW MGTHRIS.V_SHIP_COMPANY_BANK AS
 SELECT bad_main_acnt_code   AS bank_account_code,
        bad_bank_code        AS bank_code,
-       bad_bank_acnt_no     AS bank_account_no,
+       bad_acnt_no          AS bank_account_no,
        bad_curr_code        AS currency
   FROM MGTDAT.FM_BANK_ACNT_DETAIL;
 
--- Column names above are transcribed from the legacy documentation and MUST be
--- verified against the live MGTDAT dictionary before these views are created.
+-- Column names above were verified against ALL_TAB_COLUMNS on MGTDAT on
+-- 2026-09-02 (T003). One correction came out of it: the company bank account
+-- number is BAD_ACNT_NO, not BAD_BANK_ACNT_NO, which does not exist on
+-- FM_BANK_ACNT_DETAIL. Every other column matched.
 
 -- ------------------------------------------------------------------ 7. GUARDS (AFTER THE BACKFILL)
 -- These enforce what the legacy app only checked in PHP. Create them only once the

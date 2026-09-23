@@ -1,5 +1,17 @@
 # Scratch notes — Shipment Control
 
+> **Superseded, kept for provenance.** These notes were the first sketch of what became the Exim Front
+> Office. Everything here is now specified properly in [`PRD EXIM.md`](PRD%20EXIM.md) and
+> [`spec.md`](spec.md) §10–§13, and it moved on in two ways worth knowing:
+>
+> - The **import** flow does not start with a "Shipment Planning" record. It anchors on the **BL**, with
+>   1 BL = 1 AJU = 1 PIB = 1 supplier (`spec.md` §11.1).
+> - The **export** flow's starting document is the **Shipping Instruction**, and the whole "draft /
+>   final" wording was dropped for an explicit status enum (`spec.md` §10.4).
+>
+> The open questions below are answered in [`open-questions.md`](open-questions.md) §6. Do not plan from
+> this file.
+
 Raw notes, not yet folded into PRD/spec/schema. Recorded 2026-08-29.
 
 ## Import: starts with Shipment Planning

@@ -140,19 +140,25 @@ sekali, BIM yang belum ter-SI ikut; yang sudah ter-SI tidak berubah karena SI su
 
 ### 4.5 Rate freight contract sebagai baseline
 
-Rate ini **sudah ada di ESC**, jadi di-pull ke BIM saat BIM dibuat — bukan diketik ulang sales.
-Field mana di ESC → `open-questions.md` S3a.
+**Rate ini diketik manual oleh tim ekspor saat mem-booking vendor** — dijawab tim ekspor 2026-09-10
+(`open-questions.md` S3a). Saat booking itulah rate benar-benar disepakati, dan tidak ada catatan
+sebelum itu yang boleh dianggap final. Ini **membalik** rencana awal yang mem-pull rate dari ESC: kalau
+di-pull, baseline berisi angka pra-booking, padahal baseline itulah pembanding semua perhitungan margin.
 
-Sumbernya `OT_SO_ITEM.SOI_FLEX_10`, satuannya **per kontainer dalam USD** (incoterm ada di
-`OT_SO_HEAD.SOH_FLEX_01`).
+Nilai di ESC tetap dibaca — **ditampilkan di samping field sebagai referensi, bukan diisikan otomatis**.
+Sumbernya `OT_SO_ITEM.SOI_FLEX_10`, satuannya per kontainer dalam USD (incoterm ada di
+`OT_SO_HEAD.SOH_FLEX_01`). Terukur 2026-09-10: terisi di 4.895 dari 19.926 baris item ESC, 739 nilai
+berbeda, mayoritas 800–3.200.
 
 Field: `sbm_contract_freight_rate`, `_currency`, `_uom` (default `PER_CONTAINER`), `_quoted_by`,
 `_quoted_date`, `_valid_until`.
 
-> Rate di ESC berada di level **item**, sementara BIM di level contract. Kalau satu ESC punya
-> beberapa baris item dengan rate berbeda, ambil yang pertama dan tandai untuk direview — jangan
-> merata-ratakan. Laporan variance nanti yang akan menunjukkan kalau ada baris yang ternyata berisi
-> total shipment, bukan rate per kontainer.
+> Rate di ESC berada di level **item**, sementara BIM di level contract. Kalau satu ESC punya beberapa
+> baris item dengan rate berbeda: **beri peringatan, jangan blokir** (S4, tanggal yang sama). Tampilkan
+> rate-rate yang ditemukan, tandai `sbm_review_pending`, dan **jangan merata-ratakan** — rata-rata
+> menyembunyikan kasus satu baris yang sebenarnya berisi total shipment. Tim ekspor menutup tanda itu
+> dengan mengetik rate hasil booking, yang memang pekerjaan yang sama. Terukur: 25 dari 4.717 ESC
+> ber-rate, sekitar dua kali setahun.
 
 **Rate ini di-freeze dan tidak pernah di-update.** Rate aktual saat booking masuk ke SI. Selisihnya
 bukan cost control — itu **margin penjualan yang tergerus**, dan sekarang tidak ada yang

@@ -31,7 +31,8 @@ Rules the command obeys:
 - **Chunked transactions.** One transaction per chunk of provisions (with all their children), so a
   failure halfway leaves whole documents, never half a document.
 - **Own log channel** `shipment_backfill` in `config/logging.php` (project standard for batch work),
-  plus a per-run summary written to `storage/app/shipment-backfill/{timestamp}/`.
+  plus a per-run summary written to `storage/logs/shipment_backfill_report-{timestamp}.md`, which the
+  Log Viewer page lists alongside the preflight and verification reports.
 - **No model events, no activity log.** Backfilled rows are history; `withoutEvents()` and
   `activity()->disableLogging()` wrap the run so the audit trail is not filled with 100k fake changes.
 - **Never derives money.** Amounts are copied as stored, not recalculated — the legacy figures are what
@@ -52,7 +53,8 @@ Rules the command obeys:
 5. ship_provision_invoice    (SHP_ARR_INV)
 6. ship_provision_cost       (SHP_ARR_DET)
 7. ship_bill                 (SHP_BILL_HEAD, both trans codes)
-8. ship_bill_container / _doc (only for DIRECT bills)
+8. (nothing — there is no shp_bill_cont and no shp_bill_po_head in the legacy
+   schema, checked 2026-09-08, so ship_bill_container / _doc stay empty)
 9. ship_bill_invoice         (SHP_BILL_INV)
 10. ship_bill_cost           (SHP_BILL_DET) — resolves stc_spc_sys_id via the id map
 11. Rollups: recompute invoice + header totals, report mismatches
@@ -87,19 +89,19 @@ non-mechanical decisions:
 
 | Case | Rule |
 |---|---|
-| **Direction** | `sah_trans_code = 'SHPEXP'` → `EXPORT`, `'SHPARR'` → `IMPORT`. `sbh_trans_code = 'EXPBILL'` → `EXPORT`, `'IMPBILL'` → `IMPORT`. Anything else → error row, not a guess. |
+| **Direction** | `sah_trans_code = 'SHPEXP'` → `EXPORT`, `'SHPARR'` → `IMPORT`. `sbh_trans_code = 'EXPBILL'` → `EXPORT`, `'IMPBILL'` → `IMPORT`. **`SHPCTR` and `EXPCTR` are skipped entirely** — a cancelled project, two draft headers with their children (Q15, decided 2026-09-08). Anything else → error row, not a guess. |
 | **Flex columns** | Mapped **by direction** (a wrong direction silently writes an SI number into a Pabean field, which is why the pre-flight asserts every head has a known trans code). |
 | **Party** | `sah_supp_code` → `spv_customer_code` when `EXPORT`, `spv_supplier_code` when `IMPORT`. |
 | **Port** | Import only. `sah_flex_1` (Pabean code) → `spv_port_code`, matched against `ship_port` after trimming, upper-casing and left-padding to 6 digits (`40300` → `040300`); `sah_flex_2` (Pelabuhan) → `spv_port` verbatim. A code that matches no port row is **not** written to `spv_port_code` (the FK would fail): it goes to `spv_port` prefixed with `?` and the row is listed in the report, so Finance can decide whether it is a typo or a fourth port. Bill rows follow the same rule into `stl_port_code` / `stl_port`. |
 | **Invoice cost type** | export: `sai_flex_2`; import: `sah_cost_type`. Null or unknown → `UNKNOWN`, seeded as an inactive cost type so history renders and new documents cannot pick it. |
-| **Bill source** | `sbh_sah_sys_id IS NULL` → `DIRECT`, else `PROVISION`. |
+| **Bill source** | `sbh_trans_type` holds `DIRECT` / `PROVISION` on every row — it is persisted, not screen state (checked 2026-09-08), so it is read rather than inferred, cross-checked against `sbh_sah_sys_id`, and a disagreement is reported. |
 | **Payment voucher** | `NVL(sah_vcr_adv, sah_vcr_pay)` → `spv_pay_voucher`; when both are set and differ, the run reports the row and keeps `sah_vcr_adv`. |
 | **Pay date** | copied only when the corresponding voucher column is non-null; otherwise null (behaviour change B2). Every row where this drops a date is listed in the report. |
 | **Doc type** | export → `EDN`; import → `PO`, except `saph_po_no = 'SAMPLE'` → `SAMPLE`. |
 | **Container qty** | null → 0 for `LCL`, else reported. |
 | **Activity name** | copied to `*_activity_name`; the code is matched against `ship_activity` and unmatched codes are auto-created **inactive** so nothing is lost. |
 | **Facility** | same: unmatched `sad_fasilitas` values are created with `shf_auto_registered = 1`, `shf_active = 0`. |
-| **Trans no.** | copied as-is. After the run, the `HmMstSequences` rows for `SHIP_PROVISION` / `SHIP_BILL` are advanced past the highest migrated number for the current year — otherwise the first new document collides. **This step is easy to forget and breaks go-live.** |
+| **Trans no.** | copied as-is, and unique **with the direction**, not alone — Q12, decided 2026-09-08. No legacy number is reused inside its own series, so nothing needs renumbering. After the run, the `HmMstSequences` rows for `SHIP_PROVISION` / `SHIP_BILL` are advanced past the highest migrated number for the current year — otherwise the first new document collides. **This step is easy to forget and breaks go-live.** |
 | **Audit columns** | legacy `*_uid` / `*_date` columns → `*_created_by` / `*_created_timestamp`; missing → `'BACKFILL'` and the run timestamp. |
 
 ## 5. Pre-flight queries (run against the legacy schema)
@@ -113,6 +115,24 @@ SELECT sah_sys_id, sah_trans_code FROM shp_arr_head
  WHERE sah_trans_code NOT IN ('SHPEXP','SHPARR');
 SELECT sbh_sys_id, sbh_trans_code FROM shp_bill_head
  WHERE sbh_trans_code NOT IN ('EXPBILL','IMPBILL');
+
+-- RED 1b. Duplicate transaction number (blocks uq_ship_provision_trans_no /
+--          uq_ship_bill_trans_no). A legacy document is (trans code, trans no.):
+--          SHPEXP and SHPARR run separate series, so group on the PAIR. The
+--          earlier measurement (433 of 1,502 provision numbers, 638 of 1,293 bill
+--          numbers) grouped on the bare number and over-counts — see
+--          open-questions.md Q12, corrected 2026-09-08 and not yet re-measured.
+SELECT sah_trans_code, sah_trans_no, COUNT(*) c FROM shp_arr_head
+ GROUP BY sah_trans_code, sah_trans_no HAVING COUNT(*) > 1;
+SELECT sbh_trans_code, sbh_trans_no, COUNT(*) c FROM shp_bill_head
+ GROUP BY sbh_trans_code, sbh_trans_no HAVING COUNT(*) > 1;
+
+-- AMBER 1b(ii). The same digits in both series — two documents, not a duplicate.
+--          Only a problem while the unique key is on the number alone (Q12).
+SELECT sah_trans_no, COUNT(DISTINCT sah_trans_code) s FROM shp_arr_head
+ GROUP BY sah_trans_no HAVING COUNT(DISTINCT sah_trans_code) > 1;
+SELECT sbh_trans_no, COUNT(DISTINCT sbh_trans_code) s FROM shp_bill_head
+ GROUP BY sbh_trans_no HAVING COUNT(DISTINCT sbh_trans_code) > 1;
 
 -- RED 2. Duplicate vendor invoice number (blocks the new unique index)
 SELECT UPPER(sbi_inv_no) inv, sbi_vnd_code, COUNT(*) c
@@ -148,7 +168,7 @@ SELECT sah_sys_id, sah_aju_no FROM shp_arr_head
 SELECT DISTINCT sah_cost_type FROM shp_arr_head;
 SELECT DISTINCT sai_flex_2 FROM shp_arr_inv;
 SELECT DISTINCT sad_act_code FROM shp_arr_det
- WHERE sad_act_code NOT IN (SELECT sa_code FROM shp_activities);
+ WHERE sad_act_code NOT IN (SELECT sa_act_code FROM shp_activities);  -- sa_act_code, not sa_code
 SELECT DISTINCT sad_fasilitas FROM shp_arr_det WHERE sad_fasilitas IS NOT NULL;
 
 -- AMBER 8. Confirmable-but-incomplete: lines with no accounts
@@ -182,6 +202,21 @@ Writes one report; every check must pass before go-live.
 The masters are **seeded from the legacy values plus the constants found in legacy code**, because most
 of them never existed as data. Seeder:
 `Modules/Finance/database/seeders/Shipment/ShipmentControlMasterSeeder.php`.
+
+> **Three corrections, made 2026-09-10 when the seeder was written against the real schema.** This
+> section was drafted from the legacy documentation and got three things wrong; the seeder follows the
+> tables, and this text now does too.
+>
+> 1. **The legacy table names are singular:** `SHP_MASTER` (42 rows) and `SHP_MASTER_COST` (280), not
+>    `ShpMasters` / `SHP_MASTER_COSTS`. `SHP_ACTIVITIES` (141) is as written.
+> 2. **The tariff shape does not need inferring.** `smc_type` already holds `X` / `TIER` / `FIX`
+>    (127 / 60 / 93). Only the `X` → `RATE` rename and the tier *grouping* are derived.
+> 3. **`sht_uom` is not `CONT` on every row.** `smc_uom` already holds `CONT`, `UNIT`, `KGS`, `CBM` and
+>    `DAYS`, so it is copied. The claim that "legacy priced everything per container" is false of the
+>    master, whatever is true of the transactions.
+>
+> There is also a `SHP_PORTS` table (110 rows), but it lists shipping port *names* and not the customs
+> offices a PIB is filed at, so `ship_port` is still seeded rather than copied.
 
 ### `ship_cost_type`
 
@@ -221,21 +256,45 @@ whether any row still needs it, or whether `BOTH` should be dropped from the all
 | EXPENSE | IMPORT | — | — | `HAS_PPH` | `401130` | `401134` |
 | EXPENSE | IMPORT | — | — | `NO_PPH` | `401130` | `401141` |
 | BANK | IMPORT | — | — | — | `100343` | — |
+| VENDOR | — | BILL | — | — | `203001` | — *(the vendor code, per invoice)* |
 
 Export expense/provision accounts come from `ship_tariff` (legacy `smc_main_acnt` / `smc_sub_acnt` /
 `smc_prov_acnt`), so no seed rows are needed beyond the provision default.
 
-> These numbers are transcribed from the legacy documentation, not from a live database read.
-> **Verify every one against production before the seeder ships** (task T004 acceptance).
+> **Verified 2026-09-10 (Mike), against `MGTDAT.FM_ACNT_COMP` on the dev copy of production.** Every
+> account above exists under company **`002`**, and none exists under `001`. Repeat the check on
+> production before the real run; it is one query.
+>
+> Two things came out of that check:
+>
+> - **The `VENDOR` row is F9's answer**, and it was read rather than asked for: `203001` — SUPPLIER
+>   (SERVICE) CONTROL ACCOUNT – LOCAL — carries all 226 payable credits across the 131 settlement
+>   vouchers still unposted in the ERP.
+> - **`203001` has no row without a sub account** (696 subs, one per supplier), so the payable posts
+>   with the vendor code as its sub account and nothing is seeded for it.
 
 ### `ship_tariff`
 
-Copied from `SHP_MASTER_COSTS` with `sht_direction = smc_level`, and:
+Copied from `SHP_MASTER_COST` with `sht_direction = smc_level`, and:
 
-- `sht_shape` inferred once, at migration time: activity name ending in `-I`/`-II`/`-III`/… → `TIER`
-  (with `sht_tier_group` = the name without the suffix and `sht_tier_seq` = the roman numeral);
-  a row whose `[min, max]` band is narrower than the full range and is the only row for its
-  (vendor, container, activity) → `FIX`; otherwise `FLAT`.
+- **`sht_shape` is copied from `smc_type`, not inferred.** `TIER` → `TIER`, `FIX` → `FIX`, and
+  `X` → **`RATE`** — that rename is the only mapping, and it is data, not a schema migration. The value
+  `FLAT` is **not** used: it was an earlier draft's name for the same thing (`schema.md` §10). Counted
+  on the real table: 127 `RATE`, 60 `TIER`, 93 `FIX`.
+- **`sht_tier_group` / `sht_tier_seq` are derived**, and they are the only derived values: the activity
+  name ends `-I` / `-II` / `-III`, so the group is the name without the suffix and the sequence is the
+  numeral. All 60 `TIER` rows are named that way and no other row's suffix agrees with its type except
+  three, which the seeder names in its report rather than grouping quietly (`JASA-EXP-I [X]`,
+  `PENUMPUKAN-I [FIX]`, `JASA-IMP-I [FIX]`). The group is the name stem alone because
+  `ShipTariffRepository::lookup()` has already scoped by direction, vendor and container type before the
+  service groups — keyed that way the 60 rows form **24 ladders, every one of them a clean 1..n**.
+- **`sht_uom` is copied from `smc_uom`**, which legacy already keeps: `CONT` (180), `UNIT` (62),
+  `CBM` (18), `KGS` (18), `DAYS` (2). Air rows are the one set worth reviewing rather than accepting
+  (`open-questions.md` Q9).
+- **`TIER` rows must be reviewed as sets, with a total.** The shape is progressive (`spec.md` §4.1), so
+  the review report prints, per tier group, the bands and what a representative quantity actually costs —
+  e.g. Jasindo at 10 × 40FCL → three lines, 3,750,000. A group reviewed band-by-band looks fine even
+  when the grouping is wrong; a total does not.
 - `sht_eff_from` = the row's created date (or `2000-01-01` when null), `sht_eff_to` = null.
 - **`sht_port_code` starts null on every copied row** — legacy had no port on the tariff, so every
   existing rate is an "any port" rate and nothing re-prices on day one. Finance then splits the rows
@@ -285,12 +344,25 @@ to the backfill report.
 
 ### `ship_activity` / `ship_container_type` / `ship_facility`
 
-Straight copy from `ShpActivities` and `ShpMasters` (`type = 'CONT'` / `'FASILITAS'`), plus
-`shk_requires_qty = 0` for `LCL`.
+`ship_activity` is a straight copy of `SHP_ACTIVITIES` (141 rows), keeping `sa_act_id` as the sys id
+and its three accounts. **`sa_act_level` is the cost type, not a direction** — its values are `SHIP`,
+`EDN`, `PIB`, `EIN`, `EMKL` and `ALL` — so it seeds `sha_cost_type` (null for `ALL`) and `sha_direction`
+stays `ALL`, because legacy never recorded one.
+
+`ship_container_type` is the five `SHP_MASTER` rows with `type = 'CONT'`, seeded as constants rather
+than copied: the legacy *name* carries a space (`20 FCL`) that the code does not, and
+`shk_requires_qty = 0` for `LCL` has to be added anyway.
+
+`ship_facility` is a copy of `SHP_MASTER` where `type = 'FASILITAS'` (17 rows). Some of them are
+document names rather than facilities, carrying a registration number in `flex_1` and a date in
+`flex_2` — the pre-flight's AMBER 7. They come across as they stand, flagged `shf_auto_registered`: a
+provision that references one needs a parent row, and rewriting somebody's data during a seed is worse
+than carrying an ugly code.
 
 ### `ship_parameter`
 
-`spec.md` §6, with `EDN_START_NO` read from the legacy `ShpMasters` row.
+`spec.md` §6, both groups, with `EDN_START_NO` read from the legacy `SHP_MASTER` row that keeps the
+number in its `code` column (`2025000000` at the time of writing).
 
 ## 8. Cut-over runbook
 
@@ -328,3 +400,85 @@ been modified in the new app (checked via `*_modified_timestamp`).
 
 The legacy tables are never written by this migration, so the legacy app can be re-enabled at any point
 during the window.
+
+---
+
+## 10. BIM migration — upload with assisted mapping
+
+A different kind of job from §1–§9, and it belongs to the front office (`PRD EXIM.md` §4.6, `tasks.md`
+T052). There is no source **table** to read: the old BIM is a free-text block of 8–14 lines per contract
+in the ERP's sales screen. So this is an **upload plus a review screen**, not a chunked backfill.
+
+**Scope: ESCs dated within the last twelve months** (O6, answered 2026-09-10 by the export team).
+Historical BIMs from completed contracts are not migrated — nothing reads them, and importing them
+would multiply the review effort by ten.
+
+The cut-off is a **date**, not a status, and that is deliberate: `soh_appr_status = 3` with no close date
+describes 5,848 ESCs going back to 2012, because nothing in that table is ever closed, so "still
+running" cannot be read off it. On the 2026-09-10 measurement the twelve-month window is **447 ESCs
+across 76 customers** — a review pile one person can work through. **Re-run the query on the cut-over
+date** rather than freezing a list now:
+
+```sql
+select * from ot_so_head
+ where soh_txn_code = 'ESC'
+   and soh_appr_status = 3
+   and soh_dt >= add_months(<cut-over date>, -12)
+```
+
+### What the samples actually contain
+
+The reason this needs review rather than parsing is in the production data:
+
+- **Incoterm has no home.** It appears in `Shipping Line Restriction` (`FOB SHIPMENT`), in
+  `Free Time at Destinations` (`NO - FOB. FORWARDER BEST LINK`) and in `Specific Instruction`
+  (`TERM : DAP 2020 INCOTERMS TO DELFINGEN PLANT`).
+- **Fields hold the wrong thing.** `Shipment Type` contains `8 JUNE 2026`, `WK 27`, `LC 90`.
+- **Free time is not a number.** `14`, `21`, `0`, `Regular`, `Normal`, `FOB`, `Min 10 days`.
+- **Dates are mistyped.** `8 JUN 206` — a year one digit short.
+- **Even the labels vary.** `Specifil Instruction`, `HBL/MBL` without a space. So the **label cannot be
+  used as a mapping key**, which rules out a straightforward key-value parse.
+
+### The split
+
+| Mapped automatically | Must be reviewed by sales |
+|---|---|
+| Consignee, Notify Party (direct text) | `Shipment Type` — often a date or an LC code |
+| LC Number (when it looks like a number) | `Free Time` — `Regular` / `Normal` / `FOB` carry no number |
+| Partial Shipment, Container Fumigation (YES/NO) | `BIM Date` — mixed formats, and at least one bad year |
+| Container config (`2*40 HFCL`) | `Shipping Line Restriction` — ALLOW vs EXCLUDE is not explicit |
+| Sample Approval (YES/NO/APPROVED) | Incoterm — spread across three different fields |
+
+### The rule that must not be broken
+
+> **A field that cannot be mapped confidently is left empty and flagged (`sbm_review_pending = 1`), not
+> guessed.**
+
+Structured data containing a wrong value is more dangerous than the free text it replaced, because it now
+looks official and gets calculated with. An empty flagged field costs someone two minutes; a wrong
+incoterm changes which cost types appear and which components are added to the customs value.
+
+The original text is kept verbatim in `SBM_LEGACY_BODY` and shown **side by side** during review, so the
+reviewer is deciding rather than recalling. `sbm_source = 'MIGRATED'` marks every row this job creates.
+
+### Validation
+
+| # | Check |
+|---|---|
+| M1 | Every uploaded block produced exactly one `ship_bim` row, or is listed as rejected with a reason |
+| M2 | No migrated row has a `sbm_free_time_days` value that was not a number in the source — `Regular` becomes `CARRIER_STANDARD` with a null day count, never `0` |
+| M3 | No migrated row has an incoterm unless it was unambiguous in the source; the rest are flagged |
+| M4 | Every `sbm_esc_no` exists in the ERP as a contract, and none is duplicated |
+| M5 | `sbm_review_pending = 1` count is reported and worked down to zero before the first SI is raised against a migrated BIM |
+| M6 | `SBM_LEGACY_BODY` is populated for every migrated row (it is the only audit trail this job has) |
+
+M5 is the one with a deadline attached: a migrated BIM with unreviewed fields can still be pulled into an
+SI, and the SI snapshots whatever is there. The review screen should therefore warn when an SI is being
+created from a BIM that is still flagged.
+
+**Shipped 2026-09-15 as T052.** `finance:shipment:import-bims {file} --months=12 --as-of= --dry-run`,
+reading a two-column sheet (`esc_no`, `bim_text`). The command reports imported / skipped / rejected /
+needing review and names every rejection, which is M1; the review panel on the BIM screen shows
+`SBM_LEGACY_BODY` beside the fields and clears the flag, which is M5's counter. **The warning when an SI
+is raised from a still-flagged BIM belongs to T053**, where the SI is built — the flag and the count
+exist here for it to read.

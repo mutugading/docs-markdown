@@ -1,4 +1,4 @@
-c# gap-analysis.md — legacy Shipping → Shipment Control
+# gap-analysis.md — legacy Shipping → Shipment Control
 
 Legacy = `mgthris` app, `MGTAPPS.SHP_*` tables, screens `ExportContract`, `ExportSettlement`,
 `ImportPayReq`, `ImportShipSettlement`, `ImportDashboard`, trait `ShipCommonFunction`.
@@ -34,7 +34,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 | `sah_cost_type` | `spv_cost_type` | export legacy hardcoded `EDN`; see Q1 |
 | `sah_supp_code` | `spv_customer_code` (export) / `spv_supplier_code` (import) | legacy reused one column for both roles |
 | `sah_vnd_name` | `spv_vendor_name` | + `spv_vendor_code` where derivable |
-| `sah_curr` / `sah_exg_rate` | `spv_currency` / `spv_exchange_rate` | |
+| `sah_curr` / `sah_exc_rate` | `spv_currency` / `spv_exchange_rate` | the column is `exc`, not `exg` |
 | `sah_bank_curr` / `sah_bank_code` | `spv_bank_currency` / `spv_bank_code` | |
 | `sah_is_cc` | `spv_is_cross_currency` | |
 | `sah_v_bank_acc` / `_name` / `_no` | `spv_vendor_bank_acc` / `_name` / `_no` | |
@@ -54,7 +54,9 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 | `sah_vcr_prov` | `spv_prov_voucher` | |
 | `sah_vcr_adv` / `sah_vcr_pay` | `spv_pay_voucher` | legacy split ADVP/BPS (`_adv`) from "paid off the request" (`_pay`); one column + the cost type tells you which |
 | `sah_pay_date` | `spv_pay_date` | only where a payment voucher exists (see §4) |
-| — | `spv_prov_voucher_date`, `spv_pay_voucher_date`, `spv_submitted_by/_at`, `spv_confirmed_by/_at`, the six total columns | new |
+| `sah_vcr_prov_cr_date` / `sah_vcr_adv_cr_date` | `spv_prov_voucher_date` / `spv_pay_voucher_date` | **not new** — legacy kept the voucher stamps and the backfill migrates them |
+| `sah_submitted_uid/_date` / `sah_approved_uid/_date` | `spv_submitted_by/_at` / `spv_confirmed_by/_at` | |
+| — | the six total columns | new; computed by the backfill from the lines |
 
 ### 2.2 `SHP_ARR_INV` → `ship_provision_invoice`
 
@@ -66,7 +68,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 | `sai_vnd_code` / `sai_vnd_name` | `spi_vendor_code` / `spi_vendor_name` |
 | `sai_inv_no` / `sai_inv_date` | `spi_invoice_no` / `spi_invoice_date` |
 | `sai_flex_1` | `spi_carrier_name` |
-| `sai_curr` / `sai_exg_rate` | `spi_currency` / `spi_exchange_rate` |
+| `sai_curr` / `sai_exc_rate` | `spi_currency` / `spi_exchange_rate` |
 | `sai_total` | `spi_total_base` (recomputed, not copied — legacy left it null on export) |
 | `sai_total_ppn` / `_pph` | `spi_total_ppn` / `_pph` |
 | `sai_fc_amt` / `sai_lc_amt` / `sai_total_cc` / `sai_total_amt` | `spi_total_fc` / `_lc` / `_cc` / *(dropped — duplicate of `_fc`)* |
@@ -113,13 +115,13 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 |---|---|
 | `sbh_sys_id` | `stl_legacy_sys_id` |
 | `sbh_trans_code` = `EXPBILL`/`IMPBILL` | `stl_direction` |
-| `transType` (`PROVISION`/`DIRECT`) — screen state only | `stl_source` — **now persisted** |
+| `sbh_trans_type` (`PROVISION`/`DIRECT`) | `stl_source`. **Correction 2026-09-08:** it is a real column on every row, not screen state; the backfill reads it and cross-checks it against `sbh_sah_sys_id` |
 | `sbh_sah_sys_id` | `stl_spv_sys_id` |
 | `sbh_trans_no` / `_date` / `_status` | `stl_trans_no` / `stl_trans_date` / `stl_status` |
 | `sbh_bill_date` / `sbh_due_date` | `stl_bill_date` / `stl_due_date` |
 | `sbh_cost_type` | `stl_cost_type` |
 | `sbh_vnd_code` / `sbh_vnd_name` | `stl_vendor_code` / `stl_vendor_name` |
-| `sbh_curr` / `sbh_exg_rate` / `sbh_bank_curr` / `sbh_bank_code` | `stl_currency` / `stl_exchange_rate` / `stl_bank_currency` / `stl_bank_code` |
+| `sbh_curr` / `sbh_exc_rate` / `sbh_bank_curr` / `sbh_bank_code` | `stl_currency` / `stl_exchange_rate` / `stl_bank_currency` / `stl_bank_code` |
 | `sbh_v_bank_acc` / `_name` / `_no` | `stl_vendor_bank_acc` / `_name` / `_no` |
 | `sbh_flex_1..5` | `stl_si_no`, `stl_peb_type`, `stl_destination`, `stl_inco_term`, `stl_ein_no` (export) / `stl_port_code`, `stl_port`, … (import) |
 | `sbh_aju_no` / `sbh_bl_no` / `sbh_pib_no` | `stl_aju_no` / `stl_bl_no` / `stl_pib_no` |
@@ -132,7 +134,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 `sbi_sys_id` → `sti_legacy_sys_id` · `sbi_sbh_sys_id` → `sti_stl_sys_id` ·
 `sbi_inv_no` / `_date` → `sti_invoice_no` / `sti_invoice_date` · `sbi_rcv_date` → `sti_received_date` ·
 `sbi_vnd_code` / `_name` → `sti_vendor_code` / `_name` · `sbi_flex_1` → `sti_carrier_name` ·
-`sbi_curr` / `sbi_exg_rate` → `sti_currency` / `sti_exchange_rate` ·
+`sbi_curr` / `sbi_exc_rate` → `sti_currency` / `sti_exchange_rate` ·
 `sbi_total` / `_ppn` / `_pph` / `sbi_fc_amt` / `sbi_lc_amt` / `sbi_total_cc` / `sbi_total_diff`
 → `sti_total_base` / `_ppn` / `_pph` / `_fc` / `_lc` / `_cc` / `_diff` ·
 cost type: from the head → `sti_cost_type`.
@@ -180,7 +182,7 @@ cost type: from the head → `sti_cost_type`.
 | 2 | EDN/DO picker with `EDN_START_NO` floor + "already attached" exclusion | 1 | |
 | 3 | Container editor | 1 | |
 | 4 | Invoice per cost type (SHIP / EMKL / INS / COMM) | 1 | |
-| 5 | Tariff pull (TIER / FIX / FLAT) | 1 | shape now explicit; import tariffs additionally keyed by port |
+| 5 | Tariff pull (`RATE` / `FIX` / `TIER`) | 1 | shape now explicit; `TIER` is progressive (B12); import tariffs additionally keyed by port |
 | 6 | Insurance computation | 1 | parameters, not constants |
 | 7 | Commission from ESC agent terms (+ vendor switch) | 1 | |
 | 8 | Amount calculation incl. cross currency + PPh advance | 1 | one calculator, both documents |
@@ -191,7 +193,7 @@ cost type: from the head → `sti_cost_type`.
 | 13 | Facility auto-registration | 1 | + `shf_auto_registered` flag |
 | 14 | Submit / revoke / confirm / amend / delete | 1 | import bill **gains** submit/revoke |
 | 15 | Vouchers EPJV / IPJV / EBJV / IBJV | 1 | PHP port |
-| 16 | Vouchers ADVP / ADVP-EXP / BPS | 1 | PHP port |
+| 16 | Vouchers ADVP / BPS (BPJ from Jakarta) | 1 | PHP port; `ADVP-EXP` does not exist in the ERP — F-PAY2 |
 | 17 | Settlement from one provision invoice | 1 | |
 | 18 | Settlement merging several provisions for one vendor | 1 | |
 | 19 | DIRECT bill with its own containers / docs | 1 | `stl_source` persisted |
@@ -227,6 +229,20 @@ cost type: from the head → `sti_cost_type`.
 | B10 | `sah_vcr_adv` and `sah_vcr_pay` collapse into one payment-voucher column | the cost type already says which kind it is |
 | B11 | The Pabean code is picked from a 3-row port master instead of typed free-hand, and the EMKL tariff is priced per port | a typo used to produce a provision that matched no tariff; the port also stops one vendor's rates for two customs offices from having to live in two vendor codes |
 
+Confirmed with the teams on 2026-09-02 while specifying the front office (`PRD EXIM.md`). These change
+Shipment Control behaviour even before any front-office screen exists, so Finance hears about them with
+the rest:
+
+| # | Change | Why |
+|---|---|---|
+| B12 | **`TIER` pricing is progressive** — 10 containers across three bands produce three cost lines, not one at the band that matched | It is what the vendors actually charge. Legacy's single-band reading understates a 10-container Jasindo EMKL invoice by Rp 250,000, with nothing on screen to say so. Expect provisions to come out **higher** than the legacy screen for multi-band quantities, and to match the invoice |
+| B13 | Tariff type `X` is renamed **`RATE`**, and `FLAT` disappears — an out-of-range quantity now prices in full and warns instead of being silently capped | `X` told the reader nothing, and a capped amount nobody was told about is the worse of the two failures |
+| B14 | A quantity that matches **no** tariff band produces a **flagged zero** and appears on a report, instead of a silent zero | Today the vendor's bill turns up later as a direct expense with no provision behind it and reads as an uncommitted charge — when the master was simply one row short |
+| B15 | Overlapping `FIX` bands are **left in the data**; the resolution rule settles them (`MIN ≤ qty < MAX`, first match ascending) | Tidying the master is a data project with no owner; a deterministic rule is free, and the boundary is a parameter if Finance wants the other convention (`open-questions.md` D14a) |
+| B16 | A provision **cannot** be posted into a closed ERP period, backdated or not — it is refused **before** anything is written | Legacy discovered a closed period halfway through posting. What Finance then does — reopen, or post to the current period — is `open-questions.md` F1 |
+| B17 | Provision lines that are never billed are **reversed** rather than left standing, and hanging provisions get their own report | Nothing was closing them, so the accrual sat on the books indefinitely |
+| B18 | The EMKL↔PIB field copying (PIB no./date/SPPB one way, port the other) is **transitional** and will be deleted | It only exists because no document owned the customs entry. Once the import BL file is live, the BL owns Aju/PIB/SPPB/port and every provision reads them from it (`spec.md` §5.4–5.5, retired by `tasks.md` T056) |
+
 ---
 
 ## 5. Data-quality issues found in the legacy docs (confirm during backfill)
@@ -248,14 +264,7 @@ Each has a query in `data-migration.md` §5.
 
 ## 6. Open questions
 
-| # | Question | Blocks |
-|---|---|---|
-| Q1 | Export provisions always carried `sah_cost_type = 'EDN'` while the real cost type sat on the invoice. Do we keep `EDN` as the export header cost type, or set the header to the dominant invoice cost type? | schema seed + backfill mapping |
-| Q2 | Should export and import be separate permissions (a user who may only touch export)? | permission seeder |
-| Q3 | `spv_customer_code` vs `spv_supplier_code`: is there any provision that legitimately needs both? | header DTO |
-| Q4 | Account priority: should a configured PIB posting-account row beat a PO-carried account, or the reverse (legacy: PIB wins)? | `ShipAccountResolver` |
-| Q5 | Is the `ft_payment_header.ph_flex_01/_04` duplicate-bill-number check still wanted as a warning? | `spec.md` §3.3 |
-| Q6 | Cut-over date, and does legacy stay writable in parallel for any period? | `data-migration.md` §2 |
-| Q7 | Who owns `ship_posting_account` / `ship_parameter` / `ship_tariff` data going forward? | permissions + training |
-| Q8 | Do the Phase 2 reports need the pre-cut-over rows exactly as legacy rendered them, or is the backfilled shape enough? | report acceptance |
-| Q9 | Air freight through Soekarno-Hatta (`050100`): should containers stop being required, and does the EMKL tariff there key on something other than container type (weight? shipment?) — legacy priced everything per container | container validation, `ShipTariffService`, `ship_tariff` shape |
+**Moved to [`open-questions.md`](open-questions.md).** Q1–Q9 are §1 there, unchanged, alongside the
+front-office blocks. One register, so there is never a question about which document holds the current
+state of a decision — and closing a question means writing the answer into the document it blocks, then
+moving the row to that file's §6 with the date and who decided.
