@@ -10,7 +10,7 @@ allowed scope list in `CLAUDE.md`/`CONTRIBUTING.md` if not already there).
 
 ## Progress log
 
-**Status as of 2026-09-15: T01–T31 done, T31 VERIFIED against real Oracle, T04 dropped, T33-T37 added
+**Status as of 2026-09-15: T01–T31 done, T31 VERIFIED against real Oracle, T04 dropped, T33-T39 added
 and done. T32 (UAT) is the only task left and it needs people, not code.**
 
 Committed, on its own dedicated feature branch (not merged, not pushed to remote — pushing/PR is
@@ -195,6 +195,15 @@ notification delivered.
 ⚠️ **`.env` is not in version control, so this fix does not travel with the repo.** Any other
 environment showing `ORA-00942` on a queue insert needs the same one-line change.
 
+⚠️ **And the `.env` change alone is not enough on this dev box.** The app container runs
+`php artisan serve --no-reload`, which bakes `.env` into the `php -S` worker processes at boot;
+Laravel's Dotenv will not overwrite a variable already in the process environment, so the browser kept
+inserting into `JOBS_V2` long after `.env` said `jobs` and `config:clear` had been run repeatedly (no
+cached config file existed at all). Confirmed by reading `/proc/<pid>/environ`. **Restart the app
+container after any `.env` change** — or drop `--no-reload`, which is precisely what disables
+`serve`'s own restart-on-env-change. Note this also means verification driven from `artisan tinker`
+cannot catch it: a fresh process reads `.env` correctly every time.
+
 **Manual-trial findings, 2026-09-15 (not caught by any test):**
 
 - **The Group select closed the whole definition drawer.** `<x-ui::form.select>` teleports its option
@@ -323,4 +332,6 @@ environment showing `ORA-00942` on a queue insert needs the same one-line change
 | ✅ **T35** | **Not in the original plan — added 2026-09-15, phase 1 of 2.** Background report execution: `RPT_RUNS` table + `RptRun`/`ReportRunStatusEnum`/repository, `RunReportJob` (query → xlsx + JSON snapshot → `minio_private` → `ReportStatusNotification`), `ReportRunService`, and a "Proses di Background" button on the viewer. **Reverses `plan.md`'s "nothing to queue" decision** — measurement showed the query is ~38s and the Excel formatting 3.2s, so it is the query that had to leave the request cycle, not the export. Mirrors `ExportLedgerJob`'s pipeline exactly | T15, T25 | 7 tests; verified end to end on the live DB (run #1: 4,357 rows in 40s, both artifacts on MinIO, notification delivered). `run()` stays until T36's result page lands |
 | ✅ **T36** | **Phase 2, done 2026-09-15.** `ReportRunViewer` (`/dashboard/reports/runs/{run}`) renders a finished run from its JSON snapshot — **4,357 rows in 0.4s vs 38s inline**. Notification deep-links to it. `ReportViewer` is now form-and-dispatch only (0.48s), watching its queued run via `wire:poll.5s` plus the Reverb private-channel listener, and redirecting to the result on completion. Run access is scoped to the requester, not just `report.view.{id}`. Two downloads on the result page: the pre-built full file (no row ceiling) and the client-filtered subset (AC-8, keeps the 5,000 bound) | T35 | A finished run is viewable without re-running the query; the notification opens it |
 | ✅ **T37** | **Retention sweep, done 2026-09-15.** `report:prune-runs` (nightly 03:30, `report_retention` log channel, `--dry-run`, `--limit`, `--stale-minutes`): deletes expired artifacts **then** rows — never the reverse, since the row is the only record of where the artifacts live — and marks runs whose worker died as failed so the viewer stops polling them. Sweeps by run DIRECTORY, so a file orphaned by a job that crashed mid-write is caught too. Retention window moved to `report.retention_days` config, read by both the job and the sweep | T35 | 10 tests; verified against the real bucket: `Swept 1 run(s), freed 303.7 KB` |
+| ✅ **T38** | **Not in the original plan — 2026-09-15.** Large-report handling. Export picks its writer by size: PhpSpreadsheet (PRD §8.4 formatting) up to `report.rich_format_max_rows`, OpenSpout streaming beyond. `RD_MAX_ROWS` now caps only the ON-SCREEN snapshot — the query is capped by `report.max_export_rows` instead, so a small view limit no longer truncates the download. Executor gained `cursor()`; the job walks the result once, teeing the snapshot off as rows pass to the writer | T35, T36 | Measured: PhpSpreadsheet died at 40k rows; streaming does 300k at a flat 72 MB. 7 tests on the switch boundary |
+| ✅ **T39** | **2026-09-15.** `exports:prune` moved from app-level into **Modules/Core** (`Modules\Core\Console\Commands\PruneExportsCommand`, config `core.exports.*`, scheduled from `CoreServiceProvider`), so it belongs to a module the team can surface in the app | T37 | Command + schedule live in Core; 12 tests moved with it |
 | ⏳ **T32** | **Only task left; needs people, not code.** T31 is green now, so nothing blocks this. UAT: a developer builds one real pilot report (group → definition → parameters) with no code deploy, assigns `report.view.{id}` to a test role via the existing Spatie UI, an end user runs it and downloads Excel. The developer here is a **`Super Admin`**, not a `Developer` — that role was dropped | T30, T31, T12 | Sign-off from both a developer and an end-user tester; the downloaded Excel matches the on-screen table exactly |
