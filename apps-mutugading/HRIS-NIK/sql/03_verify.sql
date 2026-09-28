@@ -1,0 +1,246 @@
+-- =====================================================================
+-- HRIS-NIK · 03_verify.sql · Verifikasi pasca 01_ddl + 02_backfill APPLY (+ 04_cutover)
+-- Schema  : MGTHRIS  ·  Oracle 11g  ·  read-only
+-- Aturan  : setiap cek bertanda [0] harus menghasilkan 0 baris / nilai 0.
+--           Cek bertanda [info] untuk laporan ke HR.
+--           Seri NIK per (company, bulan join) → semua cek seri dikelompokkan per company.
+--           V18–V21 : relasi penempatan (backfill SEPARATE + fitur Duplicate Employee).
+--           V22–V24 : hanya bermakna setelah 04_cutover.sql (CUTOVER_DATE terisi).
+-- =====================================================================
+SET DEFINE OFF
+SET LINESIZE 220 PAGESIZE 200
+SET FEEDBACK ON
+
+PROMPT == V1 [0] NIK_NEW duplikat dalam company yang sama ==
+SELECT HMEMD_HMCOMP_COMP_ID COMP, HMEMD_NIK_NEW, COUNT(*) CNT
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_NEW IS NOT NULL
+ GROUP BY HMEMD_HMCOMP_COMP_ID, HMEMD_NIK_NEW
+HAVING COUNT(*) > 1;
+
+PROMPT == V2 [0] Format salah / prefix <> bulan join / seri 0000 / tanpa company ==
+SELECT HMEMD_SYS_ID, HMEMD_HMCOMP_COMP_ID COMP, HMEMD_NIK, HMEMD_NIK_NEW, HMEMD_JOIN_DATE
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_NEW IS NOT NULL
+   AND (NOT REGEXP_LIKE(HMEMD_NIK_NEW, '^[0-9]{10}$')
+        OR SUBSTR(HMEMD_NIK_NEW, 1, 6) <> TO_CHAR(HMEMD_JOIN_DATE, 'YYYYMM')
+        OR SUBSTR(HMEMD_NIK_NEW, 7, 4) = '0000'
+        OR HMEMD_JOIN_DATE IS NULL
+        OR HMEMD_HMCOMP_COMP_ID IS NULL);
+
+PROMPT == V3 [0] Akun sistem yang mendapat NIK_NEW ==
+SELECT HMEMD_SYS_ID, HMEMD_NIK, HMEMD_NIK_NEW
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE NVL(HMEMD_IS_USER_APP, 0) = 1 AND HMEMD_NIK_NEW IS NOT NULL;
+
+PROMPT == V4 [0] Seri tidak rapat per company per bulan (max seri <> jumlah NIK) ==
+-- Valid hanya setelah backfill pertama; setelah trigger aktif gap wajar bila baris dihapus.
+SELECT HMEMD_HMCOMP_COMP_ID COMP, SUBSTR(HMEMD_NIK_NEW, 1, 6) PERIOD, COUNT(*) CNT,
+       MAX(TO_NUMBER(SUBSTR(HMEMD_NIK_NEW, 7, 4))) MAX_NO
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_NEW IS NOT NULL
+ GROUP BY HMEMD_HMCOMP_COMP_ID, SUBSTR(HMEMD_NIK_NEW, 1, 6)
+HAVING COUNT(*) <> MAX(TO_NUMBER(SUBSTR(HMEMD_NIK_NEW, 7, 4)));
+
+PROMPT == V5 [0] Counter < seri terpakai (generate berikutnya akan bentrok) ==
+SELECT s.COMP, s.PERIOD, s.MAX_NO, c.HNC_LAST_NO
+  FROM (SELECT HMEMD_HMCOMP_COMP_ID COMP, SUBSTR(HMEMD_NIK_NEW, 1, 6) PERIOD,
+               MAX(TO_NUMBER(SUBSTR(HMEMD_NIK_NEW, 7, 4))) MAX_NO
+          FROM MGTHRIS.HM_EMP_DATA
+         WHERE HMEMD_NIK_NEW IS NOT NULL
+         GROUP BY HMEMD_HMCOMP_COMP_ID, SUBSTR(HMEMD_NIK_NEW, 1, 6)) s
+  LEFT JOIN MGTHRIS.HM_NIK_COUNTER c ON c.HNC_COMP_ID = s.COMP AND c.HNC_PERIOD = s.PERIOD
+ WHERE NVL(c.HNC_LAST_NO, 0) < s.MAX_NO;
+
+PROMPT == V6 [0] Urutan BR-05 dilanggar (hasil BACKFILL, company & bulan sama) ==
+-- NIK dari trigger (NEW_HIRE/REHIRE/...) mengikuti urutan input, tidak dicek.
+SELECT a.HMEMD_HMCOMP_COMP_ID COMP, a.HMEMD_NIK_NEW, a.HMEMD_JOIN_DATE,
+       b.HMEMD_NIK_NEW NEXT_NIK, b.HMEMD_JOIN_DATE NEXT_JOIN
+  FROM MGTHRIS.HM_EMP_DATA a
+  JOIN MGTHRIS.HM_EMP_DATA b
+    ON b.HMEMD_HMCOMP_COMP_ID = a.HMEMD_HMCOMP_COMP_ID
+   AND SUBSTR(b.HMEMD_NIK_NEW, 1, 6) = SUBSTR(a.HMEMD_NIK_NEW, 1, 6)
+   AND b.HMEMD_NIK_NEW > a.HMEMD_NIK_NEW
+   AND TRUNC(b.HMEMD_JOIN_DATE) < TRUNC(a.HMEMD_JOIN_DATE)
+   AND b.HMEMD_NIK_REASON = 'BACKFILL'
+ WHERE a.HMEMD_NIK_NEW IS NOT NULL
+   AND a.HMEMD_NIK_REASON = 'BACKFILL'
+   AND ROWNUM <= 20;
+
+PROMPT == V7 [0] Baris ber-NIK_NEW tanpa map HRIS (kecuali HMEMD_NIK NULL / sudah = NIK_NEW) ==
+SELECT e.HMEMD_SYS_ID, e.HMEMD_NIK, e.HMEMD_NIK_NEW, e.HMEMD_HMDIV_DIV_ID
+  FROM MGTHRIS.HM_EMP_DATA e
+ WHERE e.HMEMD_NIK_NEW IS NOT NULL
+   AND e.HMEMD_NIK IS NOT NULL
+   AND e.HMEMD_NIK <> e.HMEMD_NIK_NEW
+   AND NOT EXISTS (SELECT 1 FROM MGTHRIS.HM_EMP_NIK_MAP m
+                    WHERE m.HENM_HMEMD_SYS_ID = e.HMEMD_SYS_ID AND m.HENM_SOURCE = 'HRIS');
+
+PROMPT == V8 [0] Map tidak konsisten (NIK_NEW map <> NIK_NEW pemilik, atau pemilik tanpa NIK_NEW) ==
+SELECT m.HENM_SYS_ID, m.HENM_NIK_OLD, m.HENM_SOURCE, m.HENM_NIK_NEW, e.HMEMD_NIK_NEW
+  FROM MGTHRIS.HM_EMP_NIK_MAP m
+  JOIN MGTHRIS.HM_EMP_DATA e ON e.HMEMD_SYS_ID = m.HENM_HMEMD_SYS_ID
+ WHERE e.HMEMD_NIK_NEW IS NULL
+    OR NVL(m.HENM_NIK_NEW, '#') <> e.HMEMD_NIK_NEW;
+
+PROMPT == V9 [0] MERGED_ROW: baris non-survivor masih punya NIK_NEW ==
+SELECT m.HENM_SRC_SYS_ID, d.HMEMD_NIK, d.HMEMD_NIK_NEW
+  FROM MGTHRIS.HM_EMP_NIK_MAP m
+  JOIN MGTHRIS.HM_EMP_DATA d ON d.HMEMD_SYS_ID = m.HENM_SRC_SYS_ID
+ WHERE m.HENM_SOURCE = 'MERGED_ROW' AND d.HMEMD_NIK_NEW IS NOT NULL;
+
+PROMPT == V10 [0] (PRA-cutover) Kolom legacy berubah dibanding backup (HMEMD_NIK harus identik) ==
+PROMPT    Ganti <yyyymmdd> dengan tanggal backup APPLY. Setelah 04_cutover.sql pakai V22–V24.
+-- SELECT e.HMEMD_SYS_ID, b.HMEMD_NIK OLD_NIK, e.HMEMD_NIK NEW_NIK
+--   FROM MGTHRIS.HM_EMP_DATA e JOIN MGTHRIS.BAK_HM_EMP_DATA_<yyyymmdd> b ON b.HMEMD_SYS_ID = e.HMEMD_SYS_ID
+--  WHERE NVL(e.HMEMD_NIK, '#') <> NVL(b.HMEMD_NIK, '#');
+
+PROMPT == V11 [0] Objek invalid / trigger tidak sesuai ==
+SELECT object_name, object_type, status
+  FROM user_objects
+ WHERE status <> 'VALID'
+   AND object_name IN ('FN_GEN_NIK','HM_EMP_DATA_TRG_NIK','HM_EMP_DATA_TRG_NIK_UPD',
+                       'HM_EMP_NIK_MAP_TRG01','V_EMP_NIK_LOOKUP','HM_EMP_DATA_TRG','HM_EMP_DATA_TRG01',
+                       'IX_HMEMD_PREV_SYS_ID','IX_HMEMD_NIK_LTRIM','UQ_HMEMD_NIK_NEW');
+SELECT trigger_name, status
+  FROM user_triggers
+ WHERE trigger_name IN ('HM_EMP_DATA_TRG_NIK','HM_EMP_DATA_TRG_NIK_UPD','HM_EMP_NIK_MAP_TRG01')
+   AND status <> 'ENABLED';
+SELECT constraint_name, status
+  FROM user_constraints
+ WHERE constraint_name IN ('UQ_HMEMD_NIK_NEW','CK_HMEMD_NIK_NEW','FK_HMEMD_PREV_SYS_ID',
+                           'CK_HMEMD_NIK_REASON','PK_HM_NIK_COUNTER','FK_HNC_COMP')
+   AND status <> 'ENABLED';
+
+PROMPT == V12 [info] Flag fase ==
+SELECT HNCF_KEY, HNCF_VALUE FROM MGTHRIS.HM_NIK_CONFIG;
+
+PROMPT == V13 [info] Rekap cakupan ==
+SELECT CASE WHEN NVL(HMEMD_IS_USER_APP, 0) = 1 THEN '1 akun sistem'
+            WHEN HMEMD_NIK_NEW IS NOT NULL      THEN '2 NIK_NEW terisi'
+            WHEN HMEMD_HMCOMP_COMP_ID IS NULL   THEN '3 tertahan: company NULL'
+            WHEN HMEMD_JOIN_DATE IS NULL        THEN '4 tertahan: join date NULL'
+            ELSE '5 tertahan: dedup/non-survivor' END KATEGORI,
+       SUM(CASE WHEN HMEMD_RESIGN_DATE IS NULL THEN 1 ELSE 0 END) AKTIF,
+       SUM(CASE WHEN HMEMD_RESIGN_DATE IS NOT NULL THEN 1 ELSE 0 END) RESIGN,
+       COUNT(*) TOTAL
+  FROM MGTHRIS.HM_EMP_DATA
+ GROUP BY CASE WHEN NVL(HMEMD_IS_USER_APP, 0) = 1 THEN '1 akun sistem'
+               WHEN HMEMD_NIK_NEW IS NOT NULL      THEN '2 NIK_NEW terisi'
+               WHEN HMEMD_HMCOMP_COMP_ID IS NULL   THEN '3 tertahan: company NULL'
+               WHEN HMEMD_JOIN_DATE IS NULL        THEN '4 tertahan: join date NULL'
+               ELSE '5 tertahan: dedup/non-survivor' END
+ ORDER BY 1;
+
+PROMPT == V13b [info] Rekap per company & reason ==
+SELECT HMEMD_HMCOMP_COMP_ID COMP, NVL(HMEMD_NIK_REASON, '(NULL)') REASON, COUNT(*) CNT
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_NEW IS NOT NULL
+ GROUP BY HMEMD_HMCOMP_COMP_ID, HMEMD_NIK_REASON
+ ORDER BY 1, 2;
+
+PROMPT == V14 [info] Map per sumber ==
+SELECT HENM_SOURCE, HENM_DIV_ID, COUNT(*) CNT
+  FROM MGTHRIS.HM_EMP_NIK_MAP
+ GROUP BY HENM_SOURCE, HENM_DIV_ID
+ ORDER BY 1, 2;
+
+PROMPT == V15 [info] NIK_ANY ambigu di V_EMP_NIK_LOOKUP (>1 baris karyawan) → aplikasi wajib filter COMP/DIV ==
+SELECT NIK_ANY, COUNT(DISTINCT HMEMD_SYS_ID) EMP_CNT,
+       LISTAGG(COMP_ID || '/' || DIV_ID || ':' || MATCH_SOURCE, ', ') WITHIN GROUP (ORDER BY COMP_ID, DIV_ID) DETAIL
+  FROM MGTHRIS.V_EMP_NIK_LOOKUP
+ GROUP BY NIK_ANY
+HAVING COUNT(DISTINCT HMEMD_SYS_ID) > 1
+ ORDER BY 2 DESC, 1;
+
+PROMPT == V16 [0] NIK_ANY ambigu antar karyawan AKTIF dalam company + divisi yang sama ==
+-- Rehire / kontrak->permanen wajar punya 2 baris ber-NIK lama sama, tetapi baris lama sudah resign.
+SELECT v.NIK_ANY, v.COMP_ID, v.DIV_ID, COUNT(DISTINCT v.HMEMD_SYS_ID) EMP_CNT
+  FROM MGTHRIS.V_EMP_NIK_LOOKUP v
+  JOIN MGTHRIS.HM_EMP_DATA e ON e.HMEMD_SYS_ID = v.HMEMD_SYS_ID AND e.HMEMD_RESIGN_DATE IS NULL
+ GROUP BY v.NIK_ANY, v.COMP_ID, v.DIV_ID
+HAVING COUNT(DISTINCT v.HMEMD_SYS_ID) > 1;
+
+PROMPT == V17 [info] Contoh 10 NIK terbaru ==
+SELECT * FROM (
+  SELECT HMEMD_HMCOMP_COMP_ID COMP, HMEMD_NIK_NEW, HMEMD_NIK, HMEMD_HMDIV_DIV_ID DIV,
+         TO_CHAR(HMEMD_JOIN_DATE, 'YYYY-MM-DD') JOIN_DATE, HMEMD_NIK_REASON REASON
+    FROM MGTHRIS.HM_EMP_DATA
+   WHERE HMEMD_NIK_NEW IS NOT NULL
+   ORDER BY HMEMD_NIK_NEW DESC)
+ WHERE ROWNUM <= 10;
+
+PROMPT == V18 [0] Baris ber-NIK_NEW tanpa reason ==
+SELECT HMEMD_SYS_ID, HMEMD_NIK, HMEMD_NIK_NEW
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_NEW IS NOT NULL AND HMEMD_NIK_REASON IS NULL;
+
+PROMPT == V19 [0] Reason REHIRE / CONTRACT_TO_PERMANENT / TRANSFER_COMPANY tanpa baris sebelumnya ==
+SELECT HMEMD_SYS_ID, HMEMD_NIK_NEW, HMEMD_NIK_REASON
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_NIK_REASON IN ('REHIRE','CONTRACT_TO_PERMANENT','TRANSFER_COMPANY')
+   AND HMEMD_PREV_SYS_ID IS NULL;
+
+PROMPT == V20 [0] Relasi PREV tidak valid ==
+-- self-reference / KTP beda / join baru < resign lama / company tidak sesuai reason
+SELECT n.HMEMD_SYS_ID, n.HMEMD_NIK_NEW, n.HMEMD_NIK_REASON,
+       o.HMEMD_HMCOMP_COMP_ID COMP_OLD, n.HMEMD_HMCOMP_COMP_ID COMP_NEW,
+       o.HMEMD_RESIGN_DATE OLD_RESIGN, n.HMEMD_JOIN_DATE NEW_JOIN
+  FROM MGTHRIS.HM_EMP_DATA n
+  JOIN MGTHRIS.HM_EMP_DATA o ON o.HMEMD_SYS_ID = n.HMEMD_PREV_SYS_ID
+ WHERE o.HMEMD_SYS_ID = n.HMEMD_SYS_ID
+    OR NVL(o.HMEMD_KTP_NO, '#') <> NVL(n.HMEMD_KTP_NO, '#')
+    OR (o.HMEMD_RESIGN_DATE IS NOT NULL AND TRUNC(n.HMEMD_JOIN_DATE) < TRUNC(o.HMEMD_RESIGN_DATE))
+    OR (n.HMEMD_NIK_REASON IN ('REHIRE','CONTRACT_TO_PERMANENT')
+        AND NVL(o.HMEMD_HMCOMP_COMP_ID, '#') <> NVL(n.HMEMD_HMCOMP_COMP_ID, '#'))
+    OR (n.HMEMD_NIK_REASON = 'TRANSFER_COMPANY'
+        AND NVL(o.HMEMD_HMCOMP_COMP_ID, '#') = NVL(n.HMEMD_HMCOMP_COMP_ID, '#'));
+
+PROMPT == V21 [0] Baris lama (punya penerus dari Duplicate Employee) masih aktif ==
+SELECT o.HMEMD_SYS_ID, o.HMEMD_NIK, o.HMEMD_NIK_NEW, n.HMEMD_NIK_NEW PENERUS, n.HMEMD_NIK_REASON
+  FROM MGTHRIS.HM_EMP_DATA n
+  JOIN MGTHRIS.HM_EMP_DATA o ON o.HMEMD_SYS_ID = n.HMEMD_PREV_SYS_ID
+ WHERE o.HMEMD_RESIGN_DATE IS NULL
+   AND n.HMEMD_NIK_REASON IN ('REHIRE','CONTRACT_TO_PERMANENT','TRANSFER_COMPANY');
+
+PROMPT == V22 [0] (pasca-cutover) Karyawan aktif ber-NIK_NEW tapi HMEMD_NIK <> NIK_NEW ==
+PROMPT    Status 00 tanpa resign date sengaja tidak di-cutover (lihat 04_cutover.sql C0.6).
+SELECT e.HMEMD_SYS_ID, e.HMEMD_NIK, e.HMEMD_NIK_NEW
+  FROM MGTHRIS.HM_EMP_DATA e
+ WHERE e.HMEMD_RESIGN_DATE IS NULL
+   AND e.HMEMD_NIK_NEW IS NOT NULL
+   AND NVL(e.HMEMD_HMEMPS_CODE, '#') <> '00'   -- sama dengan filter 04_cutover.sql
+   AND NVL(e.HMEMD_NIK, '#') <> e.HMEMD_NIK_NEW
+   AND EXISTS (SELECT 1 FROM MGTHRIS.HM_NIK_CONFIG
+                WHERE HNCF_KEY = 'CUTOVER_DATE' AND HNCF_VALUE IS NOT NULL);
+
+PROMPT == V23 [0] (pasca-cutover) NIK lama karyawan yang di-cutover hilang dari map HRIS ==
+PROMPT    Ganti <yyyymmdd> dengan tanggal backup 04_cutover.sql (BAK_HM_EMP_DATA_CUT_<yyyymmdd>).
+-- SELECT e.HMEMD_SYS_ID, e.HMEMD_NIK, b.HMEMD_NIK NIK_LAMA
+--   FROM MGTHRIS.HM_EMP_DATA e
+--   JOIN MGTHRIS.BAK_HM_EMP_DATA_CUT_<yyyymmdd> b ON b.HMEMD_SYS_ID = e.HMEMD_SYS_ID
+--  WHERE b.HMEMD_NIK IS NOT NULL
+--    AND b.HMEMD_NIK <> NVL(e.HMEMD_NIK, '#')
+--    AND NOT EXISTS (SELECT 1 FROM MGTHRIS.HM_EMP_NIK_MAP m
+--                     WHERE m.HENM_HMEMD_SYS_ID = e.HMEMD_SYS_ID
+--                       AND m.HENM_SOURCE = 'HRIS' AND m.HENM_NIK_OLD = b.HMEMD_NIK);
+-- (Tanpa backup: V7 sudah menjamin map HRIS ada untuk setiap HMEMD_NIK <> NIK_NEW pra-cutover.)
+
+PROMPT == V24 [0] (pasca-cutover) Leave balance tidak ikut NIK aktif (sinkron HM_EMP_DATA_TRG) ==
+SELECT l.HTELBC_HMEMD_SYS_ID, l.HTELBC_HMEMD_NIK, e.HMEMD_NIK
+  FROM MGTHRIS.HT_EMP_LEAVE_BALANCE l
+  JOIN MGTHRIS.HM_EMP_DATA e ON e.HMEMD_SYS_ID = l.HTELBC_HMEMD_SYS_ID
+ WHERE e.HMEMD_RESIGN_DATE IS NULL
+   AND NVL(l.HTELBC_HMEMD_NIK, '#') <> NVL(e.HMEMD_NIK, '#')
+   AND ROWNUM <= 50;
+
+PROMPT == V25 [0] (pasca-cutover) PIN mesin karyawan cutover kosong (harus = NIK lama) ==
+SELECT HMEMD_SYS_ID, HMEMD_NIK, HMEMD_USER_MACHINE_ID
+  FROM MGTHRIS.HM_EMP_DATA
+ WHERE HMEMD_RESIGN_DATE IS NULL
+   AND HMEMD_NIK_NEW IS NOT NULL
+   AND HMEMD_NIK = HMEMD_NIK_NEW
+   AND HMEMD_NIK_REASON = 'BACKFILL'
+   AND HMEMD_USER_MACHINE_ID IS NULL;
+
+PROMPT == Selesai 03_verify.sql ==
