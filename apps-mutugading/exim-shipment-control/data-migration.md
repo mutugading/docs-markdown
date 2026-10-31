@@ -36,9 +36,11 @@ Rules the command obeys:
 - **No model events, no activity log.** Backfilled rows are history; `withoutEvents()` and
   `activity()->disableLogging()` wrap the run so the audit trail is not filled with 100k fake changes.
 - **Never derives money.** Amounts are copied as stored, not recalculated — the legacy figures are what
-  Finance reconciled and reported on. Only `spi_total_base` / `spv_total_*` (which legacy left null or
-  inconsistent) are computed, and the run reports every provision where a computed rollup disagrees with
-  the legacy children by more than 0.01 instead of overwriting silently.
+  Finance reconciled and reported on. The rollups legacy kept on its own headers and invoices are not
+  copied at all: the new schema has no columns for them and sums the cost lines on read (spec.md §4.4).
+  The run still reports every invoice whose legacy stored total disagrees with its own legacy lines by
+  more than 0.01, because that is a fact about the data Finance is leaving behind and it should be heard
+  once, in writing, rather than found later.
 
 ## 2. Ordering
 

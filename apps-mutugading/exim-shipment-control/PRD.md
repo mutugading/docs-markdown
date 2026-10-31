@@ -165,6 +165,11 @@ actually raised, and is never stamped otherwise.
    containers and documents unioned. Each bill line is seeded from its provision line
    (`stc_provision_amount`, quantity 1, rate = provision amount) and keeps the link.
 3. Enter the vendor's invoice no. + date + received date, due date, bank and Faktur Pajak.
+   A provision raises its costs on one invoice, but the vendor may bill them on several. A line can be
+   **moved to another invoice** of the same settlement from a dropdown on the line. The line keeps its
+   provision link and its own currency. Removing it and adding it again would lose the link.
+   PPN % and PPh % are picked from a list (PPN 0 / 1.1 / 11, PPh 0 / 0.5 / 2) on both the provision and
+   the settlement grid, so nobody types them. A line already holding another rate keeps it.
 4. See the **variance** per line, per invoice and per bill (`provision − bill`).
 5. Save, submit, revoke, confirm, amend. Confirm posts the bill voucher (`EBJV` export, `IBJV` import).
 6. **Generate payment** posts the payment voucher (`ADVP`, or `BPS`/`BPJ` for a PIB) against the bill's

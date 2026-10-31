@@ -6,8 +6,9 @@ answer yes or no to, and a way back. Tick the boxes as you go; the ticked copy i
 **This document is not the decision.** T029 is executed by a person on a night, with Finance in the
 room. **Every step below has now been rehearsed end to end against the dev server's copy of production
 data (2026-09-08) and the verification came back green** — see the table below for what that cost. What
-is left is production itself, and the four items the next section lists — five of the original six
-answers came in on 2026-09-10.
+is left is production itself, and the items the next section lists — five of the original six
+answers came in on 2026-09-10. **The pre-flight has now run against production (2026-09-28) and
+found nothing RED** — see *Production pre-flight* below.
 
 > **Commands run inside the app container:** `dpa php artisan …`
 > (`docker compose -f …/docker-compose.yml exec app php artisan …`).
@@ -22,7 +23,6 @@ Each one is a real hole, and none of them is mine to close.
 | # | What | Who |
 |---|---|---|
 | **Q6a** | **The cut-over date.** The policy is settled — a full stop, legacy read-only, no parallel window — but no date is set, and every window below hangs off it | Finance + the requester |
-| **Q17** | Renumber vendor `IS00697`'s duplicate invoice on **production** before the run. Finance decided to renumber; the row is named in the rehearsal table below and the step is under T-1d | Finance |
 | **Q13** | May a report recompute a historical line, knowing it can disagree with the stored figure by cents? Not a blocker for the backfill — it copies stored amounts — but it is an answer the Phase 2 reports are waiting on | Finance |
 | **accounts** | Re-run the account verification against **production**. The dev copy is a copy of production and the check was green on it, but this is the one part of the sign-off a copy cannot give you | us |
 
@@ -41,6 +41,8 @@ outside the project has opened a migrated document in both systems side by side.
 Two more that the migration has already answered, recorded here so nobody re-opens them at 2am:
 **Q12** — the unique key is `(direction, trans_no)`, measured, no renumbering needed.
 **Q15** — `SHPCTR` / `EXPCTR` are a cancelled project and are not migrated.
+**Q17** — done on production before 2026-09-28: the duplicate invoice is renumbered `2026-46A`
+(not the `2026-46B` the decision named — same fix, different suffix).
 
 ---
 
@@ -61,13 +63,33 @@ green. **1,969 provisions / 3,400 invoices / 9,588 cost lines / 1,943 settlement
 | 630 settlements carried a payment voucher and no pay date, so every report called them overdue (Q20) | the backfill reads the voucher's date from the ERP; 750 pay dates recovered on the 2026-09-09 re-run |
 | **One vendor invoice number on two settlements** (`IS00697`, `2026-46` / `2026-46 `, bills 2026000657 and 2026000658, different amounts) | **Finance renumbers the 5,901.88 row to `2026-46B`** — decided 2026-09-10, as the dev copy was renumbered to finish the rehearsal. It is a T-1d step now, done on production through the legacy screen |
 
+## Production pre-flight (2026-09-28)
+
+Run against production (`mgtoradb-scan`, schema `MGTAPPS`) on 2026-09-28 08:46. Report:
+`storage/logs/shipment_preflight_report-20260928-084647.md`. **Verdict: clear to run — 0 RED, 5 AMBER.**
+
+| Check | Dev copy (2026-09-08) | Production (2026-09-28) | What it means |
+|---|---|---|---|
+| RED 2 — one vendor invoice number twice | **1** (blocked) | none | Q17 done: settlement `2026000658`'s `2026-46` is now `2026-46A` |
+| Every other RED check | none | none | |
+| AMBER 5 — provision pay dates with no voucher (dropped, B2) | 17 | **34** | Up by 17, all provisions dated 2026-08-26 … 2026-09-24. The legacy screens are still taking pay dates with no voucher, so this grows until the freeze |
+| AMBER 5 — settlement pay dates with no voucher | none | none | |
+| AMBER 7 — cost types, activities, facilities with no master row | 4 + 4 + 0 + 16 | none | The masters are seeded on production and cover everything legacy uses |
+| AMBER 8 — cost lines with no main or provision account | 162 | 162 | Unchanged. History migrates without them; an open one needs an account before it can be confirmed |
+| AMBER — numbers shared between the export and import series | 454 / 638 | 486 / 690 | Not duplicates (Q12) — two series, same digits |
+| AMBER — cancelled-project rows, skipped (Q15) | 2 | 2 | |
+
+The target was checked at the same time: the `ship_*` tables exist and are empty, the masters are seeded
+(14 cost types, 4 ports), and the unique guards (`2026_09_20_120000_add_ship_unique_constraints`) are
+already applied.
+
 ## T-14d — pre-flight
 
-- [ ] `dpa php artisan finance:shipment:preflight --limit=50 --path=…/preflight-{date}.md`
-- [ ] Every RED finding is fixed in the legacy data or waived in writing with Finance.
-- [ ] The AMBER findings are read, not just counted. As of 2026-09-08 they were: 17 pay dates that will
-      be dropped (B2), 162 cost lines with no provision account, 16 `sad_fasilitas` values that are
-      document names rather than facility codes, and the cost types / ports the masters do not yet know.
+- [x] `dpa php artisan finance:shipment:preflight --limit=50` — run on production 2026-09-28, above.
+- [x] Every RED finding is fixed in the legacy data or waived in writing with Finance. None left.
+- [ ] The AMBER findings are read, not just counted. As of 2026-09-28 they are: 34 pay dates that will
+      be dropped (B2) and 162 cost lines with no provision account. The cost-type and facility gaps the
+      dev copy showed are gone.
 
 **Gate:** the command exits 0.
 
@@ -100,7 +122,8 @@ green. **1,969 provisions / 3,400 invoices / 9,588 cost lines / 1,943 settlement
 
 - [ ] Legacy master-data edits frozen (`SHP_MASTER`, `SHP_ACTIVITIES`, `SHP_MASTER_COST`).
 - [ ] Anyone who can raise a legacy Shipping document has been told the date and the hour.
-- [ ] **Q17's renumber done on production, by Finance, in the legacy app.** Vendor `IS00697` carries
+- [x] **Q17's renumber done on production, by Finance, in the legacy app.** Done by 2026-09-28 — the
+      row reads `2026-46A`, not `2026-46B`. Vendor `IS00697` carries
       invoice `2026-46` on settlement `2026000657` (1,129.56) and `2026-46 ` — same number, trailing
       space — on `2026000658` (5,901.88). Two invoices, one misnumbered; Finance decided on 2026-09-10
       to renumber, as the rehearsal did on the dev copy: the **5,901.88 row becomes `2026-46B`**. Do it
@@ -122,37 +145,64 @@ green. **1,969 provisions / 3,400 invoices / 9,588 cost lines / 1,943 settlement
 
 ## T-0, out of hours
 
+> **Production run, 2026-09-28 09:06 — run id `20260928-090646`.** Done ahead of Q6a (no cut-over date),
+> with the legacy screens still open (4.1 not done) and the freeze (T-1d) not done. A dry run at 09:00
+> (`20260928-090036`) came back identical first. `--chunk=1000`, no chunk failed.
+>
+> | Written | Rows | | Notice | Count |
+> |---|---|---|---|---|
+> | provisions | 2,069 | | Pay date taken from the payment voucher | 920 |
+> | provision containers | 2,078 | | Document with no currency, defaulted by direction | 487 |
+> | provision documents | 2,834 | | Invoice with no vendor, filed against Kas Negara | 68 |
+> | provision invoices | 3,582 | | Rollup disagrees with the legacy total | 1,269 |
+> | provision cost lines | 10,137 | | Pay date dropped — no payment voucher | 34 |
+> | settlements | 2,105 | | Cost line with no activity, filed as UNKNOWN | 2 |
+> | settlement invoices | 3,439 | | Provisions closed because nothing is unbilled | 1 |
+> | settlement cost lines | 10,490 | | Number sequence advanced past the migrated rows | 2 |
+> | `ship_legacy_map` | 36,734 | | Skipped — cancelled project (Q15) | 2 |
+>
+> Reports: `storage/logs/shipment_backfill_report-20260928-090646.md` and
+> `storage/logs/shipment_verify_report-20260928-090825.md` (V1–V8 and V10 pass; V9 waived).
+>
+> **Because the legacy screens are still open,** a legacy document edited after 09:06 no longer matches
+> its migrated copy. `--resume` picks up documents raised since, but not edits to ones already copied, and
+> the daily 05:30 verification will fail — and notify — on each one. Either close the legacy screens now,
+> or roll back and re-run on the night.
+
 ### 4.1 Legacy read-only
 - [ ] Permission removed in the legacy app. **Nothing below writes to `MGTAPPS`** — the backfill only
       reads it — so this is about people, not about the migration.
 
 ### 4.2 The backfill
-- [ ] `dpa php artisan finance:shipment:backfill --chunk=100` (both directions, no `--direction`).
+- [x] `dpa php artisan finance:shipment:backfill --chunk=100` (both directions, no `--direction`).
+      Run 2026-09-28 at `--chunk=1000`.
       A smaller chunk is worth it: a chunk that hits bad data rolls back **whole**, and the smaller it
       is the fewer good documents wait for the fix. The rehearsal ran 27,000 rows at 100 comfortably.
-- [ ] **The ERP must be reachable.** The backfill reads `MGTDAT.FT_PAYMENT_HEADER` to recover the date
+- [x] **The ERP must be reachable.** (920 pay dates recovered on 2026-09-28.) The backfill reads `MGTDAT.FT_PAYMENT_HEADER` to recover the date
       of each payment voucher a settlement names (Q20). It is a read, it is batched per chunk, and a
       run that cannot reach it still migrates everything — it just leaves those documents looking
       unpaid, and says so in the report. Check the report says *Pay date taken from the payment
       voucher* a few hundred times; on the rehearsal it said 750.
-- [ ] **Write the run id down.** It is in the last line of the output and is what `--rollback` takes.
-- [ ] A failed chunk does not stop the run: the rest migrates, the report names the documents in it,
+- [x] **Write the run id down.** It is in the last line of the output and is what `--rollback` takes.
+      2026-09-28: `20260928-090646`.
+- [x] A failed chunk does not stop the run: the rest migrates, the report names the documents in it,
       and `--resume` takes exactly those once the data behind them is fixed. On the 2026-09-08
       rehearsal that was one chunk, from one vendor invoice number claimed by two settlements.
 
 ### 4.3 The sequences
-- [ ] The backfill advances `SHIP_PROVISION` and `SHIP_BILL` past the highest migrated number itself.
+- [x] The backfill advances `SHIP_PROVISION` and `SHIP_BILL` past the highest migrated number itself.
+      2026-09-28: both advanced, and V7 confirms it.
       Confirm it in the report's *Number sequence advanced* notice — if it is missing, the first
       document raised after cut-over will collide with a migrated one.
 
 ### 4.4 The unique guards
-- [ ] Already in place from step T-7d. If they were held back for any reason, `dpa php artisan migrate`
+- [x] Already in place from step T-7d. (On production since before 2026-09-28.) If they were held back for any reason, `dpa php artisan migrate`
       applies them — and refuses on dirty data, **naming the rows**. Fix those rows (or the legacy rows
       behind them and re-run the backfill); do not force it.
 
 ### 4.5 Verification
-- [ ] `dpa php artisan finance:shipment:verify-backfill --sample=50`
-- [ ] Every automated check green. **If not, roll back** — see below — rather than going live on data
+- [x] `dpa php artisan finance:shipment:verify-backfill --sample=50` — 2026-09-28 09:08.
+- [x] Every automated check green. **If not, roll back** — see below — rather than going live on data
       that does not reconcile.
 
 ### 4.6 Permissions

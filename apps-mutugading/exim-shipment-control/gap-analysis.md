@@ -69,9 +69,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 | `sai_inv_no` / `sai_inv_date` | `spi_invoice_no` / `spi_invoice_date` |
 | `sai_flex_1` | `spi_carrier_name` |
 | `sai_curr` / `sai_exc_rate` | `spi_currency` / `spi_exchange_rate` |
-| `sai_total` | `spi_total_base` (recomputed, not copied — legacy left it null on export) |
-| `sai_total_ppn` / `_pph` | `spi_total_ppn` / `_pph` |
-| `sai_fc_amt` / `sai_lc_amt` / `sai_total_cc` / `sai_total_amt` | `spi_total_fc` / `_lc` / `_cc` / *(dropped — duplicate of `_fc`)* |
+| `sai_total`, `sai_total_ppn`, `_pph`, `sai_fc_amt`, `sai_lc_amt`, `sai_total_cc`, `sai_total_amt` | *(not migrated — the rollups are summed from the cost lines on read, spec.md §4.4)* |
 
 ### 2.3 `SHP_ARR_DET` → `ship_provision_cost`
 
@@ -127,7 +125,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 | `sbh_aju_no` / `sbh_bl_no` / `sbh_pib_no` | `stl_aju_no` / `stl_bl_no` / `stl_pib_no` |
 | `sbh_vcr` | `stl_bill_voucher` |
 | `sbh_vcr_pay` / `sbh_pay_date` | `stl_pay_voucher` / `stl_pay_date` |
-| — | `stl_bill_voucher_date`, `stl_pay_voucher_date`, `stl_total_*`, `stl_total_diff`, workflow stamps |
+| — | `stl_bill_voucher_date`, `stl_pay_voucher_date`, workflow stamps (the rollups are derived, not columns — spec.md §4.4) |
 
 ### 2.7 `SHP_BILL_INV` → `ship_bill_invoice`
 
@@ -136,7 +134,7 @@ New = `Modules/Finance` → `Shipment`, `MGTHRIS.ship_*`.
 `sbi_vnd_code` / `_name` → `sti_vendor_code` / `_name` · `sbi_flex_1` → `sti_carrier_name` ·
 `sbi_curr` / `sbi_exc_rate` → `sti_currency` / `sti_exchange_rate` ·
 `sbi_total` / `_ppn` / `_pph` / `sbi_fc_amt` / `sbi_lc_amt` / `sbi_total_cc` / `sbi_total_diff`
-→ `sti_total_base` / `_ppn` / `_pph` / `_fc` / `_lc` / `_cc` / `_diff` ·
+→ *not migrated; the rollups are summed from the cost lines on read (spec.md §4.4)* ·
 cost type: from the head → `sti_cost_type`.
 
 ### 2.8 `SHP_BILL_DET` → `ship_bill_cost`

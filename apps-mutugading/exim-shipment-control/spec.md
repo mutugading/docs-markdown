@@ -290,6 +290,22 @@ Invoice: `total_base`, `total_ppn` (IDR), `total_pph` (IDR), `total_fc`, `total_
 are the sums of their lines. Header: the sums of its invoices. Bill invoice and bill header additionally
 carry `total_diff`.
 
+**None of these is a column.** They were, until 2026-09-23, written by the service on every save; the
+columns are dropped and the figures are summed from the cost lines whenever an attribute of the same
+name is read (`SumsCostLines`, `SumsInvoiceTotals`). The reason is the one legacy demonstrates: a stored
+rollup is right only while every write goes through the screen, and Finance corrects figures directly in
+the table. The pre-flight found 1,247 legacy invoices whose stored total already disagreed with their own
+lines. **The cost lines are the only record of the money.**
+
+Two consequences worth keeping in mind:
+
+- Reading a total costs a query. A list or a report loads them in one go with `withDerivedTotals()`, and
+  a page that already loaded the tree gets them free. A report built in raw SQL sums the lines in a
+  correlated subquery — see `ShipCustomColumns` and `ShipImportDetailColumns`.
+- **The header still sums its invoices, not the lines.** That is not the same arithmetic: each invoice
+  total is rounded before the header adds it, and the settlement invoice decides for itself whether its
+  `total_fc` counts the cross-currency figure. Do not "simplify" a header to a direct sum over lines.
+
 - On a **cross-currency bill**, `sti_total_fc` accumulates the **cross-currency** line amount, because
   that is what the bank pays (legacy `sbi_fc_amt` behaviour — keep it, and keep the note that
   `AMT_IDR` in the Bill report is built from it).
@@ -411,6 +427,13 @@ Then, only if nothing matched:
 ```
 
 There is no step 8 any more: the PO override moved to the top as step 0.
+
+**Provision account: the activity's own account wins over the catch-all** (2026-09-24). The seeded
+`PROVISION` rule (`208023`, document only) matches every provision line, so step 7 never ran and every
+accrual landed on `208023`. The legacy lines carry the activity's account instead — `208011`, `208008`
+or `208009` depending on the activity. So for the provision purpose only, `sha_provision_acnt` beats
+any rule that does not name the activity; a rule that names the activity still wins, and `208023` is
+used only for an activity with no account of its own. Expense keeps the strict order above.
 
 `spa_condition` carries the two legacy conditional rules: `PPN_1_1` (PPN account 108005 when the PPN
 percentage is 1.1, else 108004) and `HAS_PPH` / `NO_PPH` (the 401130/401134 vs 401130/401141 split).

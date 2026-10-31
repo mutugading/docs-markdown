@@ -32,6 +32,7 @@ Legacy sources (read-only reference, do not copy code):
 | [`plan.md`](plan.md) | Phases (P0–P5 Shipment Control, P6–P9 front office), the decisions behind them, sequencing, testing strategy |
 | [`tasks.md`](tasks.md) | Numbered tasks with acceptance criteria, grouped and dependency-ordered |
 | [`open-questions.md`](open-questions.md) | **The single register of what is still unanswered**, both modules. `PRD EXIM.md` cites its ids directly |
+| [`live-test-2026-09-28.md`](live-test-2026-09-28.md) | Production test of provision and settlement up to Submit: what worked, and nine issues to look at |
 | [`scratch.md`](scratch.md) | Early raw notes. **Largely superseded** by `PRD EXIM.md`; the questions it raised are resolved in `open-questions.md` §6 |
 
 Reading order for Shipment Control: `PRD.md` → `schema.md` → `plan.md`.
