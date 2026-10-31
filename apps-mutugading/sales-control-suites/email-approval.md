@@ -21,7 +21,11 @@ them completes:
 
 Uploading the physical scan **after** an email approval is allowed and optional. It replaces what
 `SCAR_ATTACH_PATH` points at; the email decision record keeps its own path and hash in
-`SALES_CTL_APPR_EML`, so nothing is lost.
+`SALES_CTL_APPR_DOC`, so nothing is lost.
+
+The link itself — the token, the expiry, the guest pages, the email — is not Finance code. It is the
+Core module's email approval service, which any module can use (section 4). Finance only plugs in what a
+price request looks like and what approving one does.
 
 ---
 
@@ -68,37 +72,52 @@ addresses, which is weaker but better than nothing.
 
 ---
 
-## 4. The invitation
+## 4. The link (Core email approval)
 
-`MGTHRIS.SALES_CTL_APPR_EML` (`SCAE_`). One row per invitation sent, never updated in place except by
-its own lifecycle.
+Email approval is a Core service. Finance is its first user; any module can add its own. How the
+link works — the `CM_APPR_TOKEN` table, the token, expiry, single use, locking, the guest pages and the
+settings — is in [`email-approval/developer-guide.md`](../email-approval/developer-guide.md).
+This section only covers what Finance plugs in.
 
-```
-SENT --open--> OPENED --decide--> APPROVED | REJECTED
-  |               |
-  |               `--(ttl passes)--> EXPIRED
-  `--(superseded / withdrawn)--> CANCELLED
-```
+What matters for a price request, in short: the link is a signed, single-use URL whose token is
+stored only as a hash; it expires after 72 hours; sending again to the same approver cancels their old
+link; and when one approver decides, every other approver's link for that request is cancelled. The
+open, the decision, the IP and the user agent are recorded. That is the email channel's equivalent of
+a wet signature: it cannot prove who held the phone, and neither can a signature, but it says what
+arrived, where from and when.
 
-- The link is a **signed URL** (Laravel's `signed` middleware, so the query string cannot be edited)
-  carrying an **opaque 64-character token**. Only the token's SHA-256 is stored; the raw token exists
-  in the email and nowhere else. Losing the database does not hand anyone an approval link.
-- **Single use.** Deciding moves the row to a terminal status; a second visit to the same link gets
-  the "already decided" page, not a second form.
-- **Expiring.** `SCAE_EXPIRES_DT`, default 72 hours, configurable. An expired link cannot be opened;
-  Finance sends a fresh one.
-- **Superseding.** Sending a new invitation for the same request cancels the outstanding ones. Two
-  live links for one request means two people can approve it, and the second one loses silently.
-- The open, the decision, the IP and the user agent are recorded. That is the email channel's
-  equivalent of a wet signature: it cannot prove who held the phone, and neither can a signature, but
-  it says what arrived, where from and when.
+### 4.1 The Finance handler
 
-### 4.1 Why a controller and not Livewire
+`Modules\Finance\Services\Transaction\SalesControl\MinPriceEmailApprovalHandler`, key
+`finance.min-price`, registered in `FinanceServiceProvider::boot()`.
 
-The decision page is a guest route behind `signed`. Livewire's update endpoint is a different URL and
-is not itself signed, so a Livewire component on a signed route either breaks on its first action or
-needs the signature check weakened. A plain controller with a form POST keeps the signature meaningful
-and the page is two buttons and a textarea.
+- The subject is the request (`CMAT_SUBJECT_ID` = `SCAR_SYS_ID`), the step is `approve`, and each
+  link points back at its approver row (`CMAT_TO_REF` = `SCAP_SYS_ID`).
+- Finance's `EmailApprovalService::send()` checks the request is `PRINTED`, the approver is active and
+  of the right type, and is not the requester — then asks Core to issue the link.
+- The review page shows the request, its lines and its price rules
+  (`finance::sales-control.email-approval.summary`). Buttons: **Approve** (note optional) and
+  **Reject** (note required).
+- **Approve** stores the decision record PDF, points the request at it, hands the decision to
+  `ApprovalRequestService::approve()` (which makes a price list's rules live in the same step) and
+  writes the PDF's path and hash to `MGTHRIS.SALES_CTL_APPR_DOC` (`SCAD_`, keyed by `CMAT_SYS_ID`).
+  **Reject** hands the reason to `ApprovalRequestService::reject()`.
+- All of that runs inside Core's transaction. If anything fails, nothing is saved — except the PDF
+  file already on the disk, which is left behind unreferenced. The requester's "approved / rejected"
+  notice is only sent after the transaction commits.
+- Settings live in Core under `handlers['finance.min-price']`, fed by the same env vars as before:
+  `SALES_CONTROL_EMAIL_APPROVAL` (on/off), `SALES_CONTROL_APPROVAL_LINK_TTL_HOURS`,
+  `SALES_CONTROL_APPROVAL_CONTACT`. `EMAIL_APPROVAL_ENABLED` switches the whole Core service.
+  Note the key has a dot in it, so read it as `config('core.email_approval.handlers')['finance.min-price']`,
+  not as one dotted path.
+
+The old Finance-only table `SALES_CTL_APPR_EML` was dropped by
+`2026_10_24_100000_replace_sales_ctl_appr_eml_with_appr_doc` — a fresh start, since the channel had
+not gone live.
+
+### 4.2 Adding email approval to another transaction
+
+See [`email-approval/developer-guide.md`](../email-approval/developer-guide.md) §4.
 
 ---
 
@@ -112,7 +131,10 @@ This is the **first outbound email in the application**. Before it is any use in
 - Approvers' addresses come from the approver master, not from `HM_EMP_DATA`, so a board member with
   no employee email still gets the mail.
 
-A send failure leaves the invitation row in `SENT` with nothing delivered. That is visible on the
+The email itself is Core's (`EmailApprovalRequested`); Finance supplies the words — subject
+`Approval needed: {req no} ({type})`, the request, customer, document and reason.
+
+A send failure leaves the link row in `SENT` with nothing delivered. That is visible on the
 approval page as an invitation with no open and no decision, and the fix is to send again.
 
 ---
@@ -131,11 +153,14 @@ the point of the channel, and it is why the token is short-lived, single-use and
 
 ## 7. Tests
 
+`tests/Feature/Finance/SalesControl/EmailApprovalTest.php` covers these through Core's service and
+routes. Core's own rules (tokens, expiry, locking) are tested in `tests/Feature/Core/EmailApproval/`.
+
 | # | Statement |
 |---|---|
 | E1 | An invitation can only be issued for a `PRINTED` request |
 | E2 | Issuing a second invitation cancels the first |
-| E3 | A valid token renders the decision page and stamps `SCAE_OPENED_DT` |
+| E3 | A valid token renders the decision page and stamps `CMAT_OPENED_DT` |
 | E4 | An expired token renders the unavailable page and approves nothing |
 | E5 | A decided token cannot decide twice |
 | E6 | Approving by email moves the request to `APPROVED`, fills the three BOD fields and writes a hashed decision record |
