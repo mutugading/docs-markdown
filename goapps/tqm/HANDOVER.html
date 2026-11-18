@@ -1,0 +1,203 @@
+<title>TQM Handover</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: satu kolom dokumen (maks 920px), seksi bernomor sesuai urutan baca developer, tabel di wadah scroll sendiri */
+:root{
+  --bg:#f6f7f8; --surface:#ffffff; --fg:#1b2126; --muted:#5b6670; --line:#dde2e6;
+  --accent:#0f6e74; --accent-soft:#e2f0f0; --warn:#9a5b00; --warn-soft:#fbf0dc;
+  --f-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12171b; --surface:#1a2025; --fg:#e4e9ec; --muted:#9aa6af; --line:#2c353c;
+  --accent:#5cc0c4; --accent-soft:#173235; --warn:#e8b35c; --warn-soft:#352a17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12171b; --surface:#1a2025; --fg:#e4e9ec; --muted:#9aa6af; --line:#2c353c;
+  --accent:#5cc0c4; --accent-soft:#173235; --warn:#e8b35c; --warn-soft:#352a17; color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font:15px/1.6 var(--f-body)}
+.wrap{max-width:920px;margin:0 auto;padding-block:40px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:48px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:700;display:flex;gap:12px;align-items:baseline}
+h2 .n{font-family:var(--f-mono);font-size:13px;color:var(--accent);font-weight:500}
+h3{font-size:16px;font-weight:700}
+p{margin:0;max-width:68ch}
+section{display:flex;flex-direction:column;gap:16px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:17px;color:var(--fg);max-width:64ch}
+header{display:flex;flex-direction:column;gap:14px;border-bottom:1px solid var(--line);padding-bottom:28px}
+.meta{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--f-mono);font-size:12px;padding:3px 9px;border-radius:4px;background:var(--accent-soft);color:var(--accent)}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--accent-soft);color:var(--fg);padding:1px 5px;border-radius:3px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.stat{background:var(--surface);padding:14px 16px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.stat b{font-family:var(--f-display);font-size:24px;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.stat.bad b{color:var(--warn)}
+@media (max-width:640px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:700px){.two{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.flow{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.flow i{font-style:normal;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:2px 6px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:560px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+th{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.id{font-family:var(--f-mono);color:var(--accent);white-space:nowrap;font-weight:500}
+.note{border-left:3px solid var(--warn);background:var(--warn-soft);padding:12px 14px;border-radius:0 6px 6px 0;max-width:none}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;overflow-x:auto}
+.steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:8px;max-width:72ch}
+.pill{font-family:var(--f-mono);font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.opus{border-color:var(--accent);color:var(--accent)}
+.pill.rev{border-color:var(--warn);color:var(--warn)}
+footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:20px}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">GoApps · handover proyek · 18 Nov 2026</div>
+  <h1>TQM: Pengembangan Produk &amp; Sampel</h1>
+  <p class="lede">Pengganti dua aplikasi Oracle Forms, <b>TQM Color Development</b> dan <b>TQM RND Sample Market Advice</b>, yang digabung menjadi satu service GoApps baru. Sampel dengan feedback customer Approved bisa langsung diajukan ke Cost Product Request.</p>
+  <div class="meta">
+    <span class="chip">task Q0xx</span><span class="chip">keputusan TQ-xx</span><span class="chip">branch feat/tqm</span><span class="chip">service services/tqm</span><span class="chip">dokumen .ai/tqm/</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="n">01</span>Kondisi sistem lama</h2>
+  <p>Angka di bawah dihitung dari data production Oracle (schema MGTDAT), periode 2018 sampai November 2026. Kedua aplikasi masih dipakai aktif.</p>
+  <div class="stats">
+    <div class="stat"><b>5.367</b><span>permintaan warna (MGT-PD)</span></div>
+    <div class="stat"><b>5.228</b><span>sample advice (SMA)</span></div>
+    <div class="stat bad"><b>30%</b><span>MGT-PD yang sampai ke marketing</span></div>
+    <div class="stat bad"><b>6 / 23.329</b><span>baris feedback customer yang terisi</span></div>
+  </div>
+  <div class="two">
+    <div class="panel">
+      <h3>TQM · Color Development</h3>
+      <div class="flow"><i>Permintaan MGT-PD</i>→<i>Kirim ke Masterbatch</i>→<i>MB terima &amp; kirim balik</i>→<i>Uji OK / NOT OK</i>→<i>Kirim ke marketing</i>→<i>Despatch</i>→<i>Feedback</i></div>
+      <p>12 form, menu dengan hak akses per divisi (IT, TQM, MKT, MB, TFO/TWT).</p>
+    </div>
+    <div class="panel">
+      <h3>TQM RND · Sample Market Advice</h3>
+      <div class="flow"><i>Advice SMA + item</i>→<i>Approve</i>→<i>Cetak</i>→<i>Despatch</i>→<i>Feedback per item</i></div>
+      <p>Satu form, login terpisah. Berisi harga, HS code, berat, dan properti teknis benang.</p>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Masalah utama</h3>
+    <ul>
+      <li>Satu proses bisnis terbagi ke dua login, padahal tabel user, master feedback, dan pola approval-nya sama. Form despatch sudah melayani keduanya: 3.974 dari 5.050 pengiriman berasal dari SMA.</li>
+      <li>Approval memakai satu tombol yang bergantian menjadi Approve dan Amendment. Tidak ada reject, tidak ada log, dan siapa pun yang punya akses form bisa approve.</li>
+      <li>Feedback customer hampir tidak pernah diisi, jadi tidak diketahui sampel mana yang akhirnya menjadi order. Padahal costing membutuhkan informasi itu.</li>
+      <li>Nomor dokumen memakai <code>MAX+1</code>, sehingga ada nomor ganda. Banyak isian teks bebas, misalnya Pom-Pom / POM-POM / POMPOM.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">02</span>Desain target</h2>
+  <p>Satu entitas <b>Development Request</b> dengan <code>type = COLOR | SAMPLE</code>. Daftar, status, approval, despatch, feedback, dan tautan costing dibangun sekali. Lab trial ke Masterbatch hanya berlaku untuk COLOR.</p>
+  <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  D[DRAFT] --> S[SUBMITTED]
+  S -->|Head of TQM| A[APPROVED]
+  S -->|reject| R[REJECTED]
+  R -->|revise| D
+  A -->|COLOR| L[LAB TRIAL<br/>user Masterbatch]
+  L -->|varian OK| RS[READY TO SEND]
+  L -->|NOT OK| L
+  A -->|SAMPLE| RS
+  L -.->|Buat SAMPLE dari COLOR| NS[SAMPLE baru]
+  RS --> X[DESPATCHED]
+  X --> F{FEEDBACK<br/>per item}
+  F -->|Approved| C[Ajukan Costing<br/>CPR finance]
+  F -->|Redevelopment| CH[request anak]
+  F -->|Rejected / Cancelled| CL[CLOSED]
+  C --> W[Waiting Order /<br/>Commercialized]
+</pre>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">03</span>Keputusan bisnis (sudah disepakati)</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>ID</th><th>Keputusan</th></tr></thead>
+    <tbody>
+      <tr><td class="id">K1</td><td>COLOR bisa berlanjut menjadi SAMPLE. SAMPLE menyimpan tautan opsional ke COLOR asalnya.</td></tr>
+      <tr><td class="id">K2</td><td>Service sendiri (<code>services/tqm</code>, DB sendiri), bukan bagian finance. Ke CPR lewat gRPC.</td></tr>
+      <tr><td class="id">K3</td><td>Costing diajukan saat feedback customer = Approved.</td></tr>
+      <tr><td class="id">K4</td><td>Divisi Masterbatch login ke GoApps dan mengisi sendiri hasil lab trial.</td></tr>
+      <tr><td class="id">K5</td><td>Format nomor lama dipertahankan (<code>MGT-PD-NNN/YYYY</code>, <code>SMA-NNN/YYYY</code>, <code>TQM/NNN/MM/YYYY</code>), tapi selalu dibuat sistem.</td></tr>
+      <tr><td class="id">K6</td><td>Approver = Head of TQM, satu level, untuk semua tipe.</td></tr>
+      <tr><td class="id">K7</td><td>Properti teknis benang (tenacity, elongation, twist, OPU, dll.) dihidupkan lagi di item SAMPLE.</td></tr>
+      <tr><td class="id">K8</td><td>Mulai kosong: dokumen Oracle tidak dimigrasi, hanya master data. Counter nomor meneruskan nomor terakhir Oracle.</td></tr>
+      <tr><td class="id">K9</td><td>Tombol Ajukan Costing hanya untuk marketing yang mengisi feedback item itu.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">04</span>Usulan teknis (dikonfirmasi di Q000)</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>ID</th><th>Usulan</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td class="id">TQ-01</td><td>Service <code>tqm</code> + DB <code>tqm_db</code>, struktur meniru service <code>ppc</code>. Port dicek agar tidak bentrok.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-02</td><td>Satu tabel <code>tqm_request</code> + tabel detail per tipe, lab, pengiriman, feedback, dan riwayat dengan snapshot.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-03</td><td>Penomoran lewat tabel counter per jenis dan tahun, diambil di transaksi yang sama dengan submit. Bukan <code>MAX+1</code>.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-04</td><td>Approval lewat IAM workflow seperti CPR, atau cek role langsung kalau workflow terlalu berat.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-05</td><td>Customer dari master customer <code>ppc</code>, shade dari master shade <code>finance</code>, disimpan sebagai kode + snapshot nama.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-06</td><td>Ajukan Costing = gRPC <code>CreateCostProductRequest</code>, satu CPR aktif per item.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-07</td><td>Impor master dari Oracle lewat CLI sekali jalan dengan akun read-only. Teks bebas lama dijadikan CSV usulan untuk direview TQM.</td><td><span class="pill">PROPOSED</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2><span class="n">05</span>Rencana kerja</h2>
+  <p>Fase 0–1 sudah dipecah menjadi task. Fase 2–4 ada di <code>BACKLOG.md</code> dan dipecah setelah gerbang fase sebelumnya lolos (<code>ACCEPTANCE.md</code>).</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Task</th><th>Isi</th><th>Repo</th><th>Catatan</th></tr></thead>
+    <tbody>
+      <tr><td class="id">Q000</td><td>Kickoff: konfirmasi TQ-01..07, buat worktree</td><td>—</td><td><span class="pill opus">opus</span></td></tr>
+      <tr><td class="id">Q001</td><td>Scaffold service <code>tqm</code> + migrasi counter</td><td>backend</td><td><span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q002</td><td>Proto <code>tqm/v1</code> master + request, generate</td><td>proto</td><td><span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q003</td><td>Role, menu, permission TQM di IAM</td><td>backend/iam</td><td></td></tr>
+      <tr><td class="id">Q010</td><td>Master data: lookup, color master, supplier</td><td>backend</td><td></td></tr>
+      <tr><td class="id">Q011</td><td>CLI impor master dari Oracle + CSV lookup</td><td>backend</td><td></td></tr>
+      <tr><td class="id">Q012</td><td>Domain request: state machine + penomoran konkuren</td><td>backend</td><td><span class="pill opus">opus</span> <span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q013</td><td>Approval Head of TQM</td><td>backend</td><td><span class="pill opus">opus</span> <span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q014</td><td>Frontend master data</td><td>frontend</td><td></td></tr>
+      <tr><td class="id">Q015</td><td>Frontend request: daftar, form COLOR/SAMPLE, timeline</td><td>frontend</td><td><span class="pill rev">review wajib</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div class="panel"><h3>Fase 2</h3><p>Lab trial oleh user Masterbatch, pengiriman dan despatch, cetak PDF.</p></div>
+    <div class="panel"><h3>Fase 3</h3><p>Feedback, pengingat feedback, Ajukan Costing ke CPR.</p></div>
+    <div class="panel"><h3>Fase 4</h3><p>Laporan funnel dan lead time, infra, seed counter, UAT, cut-over.</p></div>
+    <div class="panel"><h3>Di luar lingkup</h3><p>Color Kitchen, produksi masterbatch, despatch umum, histori dokumen Oracle (K8).</p></div>
+  </div>
+</section>
+
+<section>
+  <h2><span class="n">06</span>Cara mulai untuk developer</h2>
+  <ol class="steps">
+    <li>Baca <code>.ai/tqm/CONTEXT.md</code>: lokasi kode, konvensi wajib, dan aturan Git.</li>
+    <li>Ambil task paling atas di <code>.ai/tqm/TASKS.md</code> yang dependensinya sudah selesai. Baca hanya rujukan di baris <b>Ref</b>.</li>
+    <li>Kerjakan di branch <code>feat/tqm</code> (dari <code>main</code>) pada repo yang disebut kolom Repo. Commit dan PR memakai <code>[Q0xx]</code> di pesan.</li>
+    <li>Mulai dari <b>Q000</b>: konfirmasi usulan TQ-01..07 bersama pemilik proyek sebelum menulis kode.</li>
+    <li>Saat selesai, pindahkan task ke <code>ARCHIVE.md</code> dan isi bukti di <code>ACCEPTANCE.md</code> kalau task itu menutup kriteria gerbang.</li>
+  </ol>
+  <p class="note">Aturan yang paling sering terlewat: uang dan berat selalu decimal (tidak boleh float); nomor dokumen hanya dibuat sistem; perubahan status hanya lewat domain service dengan riwayat; tidak ada akses langsung ke DB service lain; Oracle hanya dibaca.</p>
+</section>
+
+<footer>Sumber lengkap di folder ini: <code>README.md</code>, <code>.ai/tqm/PRD.md</code> (kebutuhan), <code>.ai/tqm/LEGACY-MAP.md</code> (peta form dan tabel Oracle), <code>DECISIONS.md</code>, <code>TASKS.md</code>, <code>BACKLOG.md</code>, <code>ACCEPTANCE.md</code>.</footer>
+</div>

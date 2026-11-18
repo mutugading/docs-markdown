@@ -1,0 +1,435 @@
+<!-- DEFINE LAYOUT -->
+<div class="main" style="overflow-x:auto;overflow-y:auto;">
+<?php
+if ($VIEW_LINK!==""){
+	$sqlGetData = 	"select MGTAPPS.fGetUserName('$USER_NAME')GET_DATA from dual";
+	$USER_NAME_DTL = getData($conn,$sqlGetData);
+
+	$sqlIns = "	insert into mgtapps.EFILL_LOG_ACCESS(
+				ELA_SYS_ID, ELA_CREATED_BY, ELA_CREATED_TIMESTAMP, ELA_DETAIL_ACCESS, ELA_USER_NAME
+				)
+				values (
+				'123','$USER_NAME',sysdate,'View Document -> $MENU_NAME -> $VIEW_LINK','$USER_NAME_DTL'
+				)";
+	$result=oci_parse($conn,$sqlIns);
+	if (!$result) {
+	   $oerr = OCIError($conn);
+	   echo "Fetch Code 1:".$oerr["message"];
+	   exit;
+	    die();
+	}
+	$prs = oci_execute($result);
+	if (!$prs) {
+	    $e = oci_error($result);  // For oci_execute errors pass the statement handle
+	    print htmlentities($e['message']);
+	    print "\n<pre>\n";
+	    print htmlentities($e['sqltext']);
+	    printf("\n%".($e['offset']+1)."s", "^");
+	    print  "\n</pre>\n";
+	    die();
+	}
+
+	//https://mgtapps.mutugading.com:4433/webapps/Efilling_File/Doc_Folder/
+	$VIEW_LINK = "https://mgtapps.mutugading.com:4433/webapps/$VIEW_LINK";
+	//echo "VIEW_LINK $VIEW_LINK<br>";
+	echo "<iframe src='$VIEW_LINK' width='100%' style='height:100%'></iframe>";
+} else {
+	$sqlGetData = "select 'ADMIN' GET_DATA from MGTAPPS.EFILL_ADMIN_USER where EAU_USER_ID = '$USER_NAME'";
+	$EFILL_ADMIN = getData($conn,$sqlGetData);
+	if ($EFILL_ADMIN==="ADMIN"){
+		$sqlList = "select 	ETD_SYS_ID from EFILL_TYPE_DATA a where ETD_SYS_ID not in ('MBRCP')";
+	} else {
+		$sqlList = "
+								select 	ETD_SYS_ID from    EFILL_TYPE_DATA a,EFILL_USER_ACCESS b
+								where a.ETD_SYS_ID = b.EUA_ETD_SYS_ID
+								and EUA_USER_ID = '$USER_NAME' and ETD_SYS_ID not in ('MBRCP')
+								";
+	}
+	//if ($USER_NAME === "AUDITOR"){ echo "sqlList $sqlList<br>"; }
+?>
+<table style="width:100%" >
+<tr>
+		<td align="center" colspan="<?php echo $totDisp; ?>">
+		Type Data  :
+			<select name="ETD_SYS_ID" id="ETD_SYS_ID" onchange="Process('')">
+					<option value="NULL">NULL</option>
+<?php
+  //get access folder
+  $rsDataList = oci_parse($conn,$sqlList);
+	oci_execute ($rsDataList);
+	while ($rowDataList = oci_fetch_array ($rsDataList, OCI_BOTH)) {
+?>
+				<option value="<?php echo $rowDataList['ETD_SYS_ID']; ?>"
+					<?php if($ETD_SYS_ID_S===$rowDataList['ETD_SYS_ID']){ echo "selected";}?>
+					>
+						<?php echo $rowDataList['ETD_SYS_ID']; ?>
+				</option>
+<?php
+	}
+?>
+			</select>
+			<button type="button" data-toggle="modal" data-target="#myModal" onclick="viewLovData('VIEW_FOLDER')">...</button>
+<?php
+	//if ($USER_NAME === "AUDITOR"){ echo "ETD_SYS_ID_S $ETD_SYS_ID_S<br>"; }
+	if ($ETD_SYS_ID_S!==""){
+		$stsView = "Y";
+		// get Deep Folder
+		$sqlGetData = 	"SELECT MAX (lvl) GET_DATA
+						 FROM (	SELECT *
+    				 		FROM (
+								select -1,level lvl,EDF_FOLDER MENU_NAME,null,EDF_SYS_ID MENU_ID
+								from EFILL_DATA_FOLDER
+								where EDF_ETD_SYS_ID = '$ETD_SYS_ID_S'
+								connect by prior EDF_SYS_ID = EDF_SYS_ID_PARENT
+								start with EDF_SYS_ID_PARENT is null
+								order by EDF_SYS_ID
+                     			  )
+    					  )";
+		//if ($USER_NAME === "AUDITOR"){ echo "sqlGetData $sqlGetData<br>"; }
+		$deepFolder = getData($conn,$sqlGetData);
+		// end get Deep Folder
+		$x = 1;
+		//start loop
+		while($x <= $deepFolder ) {
+			//select 1
+			if ($x===1){
+				$qryFldr =
+					"SELECT lvl,EDF_FOLDER,EDF_FOLDER_ID
+			  		FROM (
+						select -1,level lvl,EDF_FOLDER,null,EDF_SYS_ID EDF_FOLDER_ID,EDF_SYS_ID_PARENT EDF_FOLDER_PARENT
+						from EFILL_DATA_FOLDER
+						where EDF_ETD_SYS_ID ='$ETD_SYS_ID_S'
+						connect by prior EDF_SYS_ID = EDF_SYS_ID_PARENT
+						start with EDF_SYS_ID_PARENT is null
+						order by EDF_SYS_ID
+			            )
+					where lvl = $x";
+					//if ($USER_NAME === "AUDITOR"){ echo "qryFldr $qryFldr<br>"; }
+		?>		Folder
+				<select name="FOLDER_VAL_1" id="FOLDER_VAL_1" onchange="Process('')">
+					<option value="NULL" >NULL</option>
+					<?php
+					$rsDataFldr = oci_parse($conn,$qryFldr);
+					oci_execute ($rsDataFldr);
+					while ($rowDataFldr = oci_fetch_array ($rsDataFldr, OCI_BOTH)) {
+					?>
+					<option value="<?php echo $rowDataFldr['EDF_FOLDER_ID']; ?>"
+					<?php
+					if ($FOLDER_VAL_1_S===$rowDataFldr['EDF_FOLDER_ID']){echo "selected";}
+					?>><?php echo $rowDataFldr['EDF_FOLDER']; ?> </option>
+					<?php
+					}
+		?>
+				</select>
+<?php
+			if ($FOLDER_VAL_1_S === "NULL"){$stsView="N";}
+			}
+		//end select 1
+		//condition
+		if ($x>1){
+			$folderWhr = "";
+			if ($x==2){
+				$folderWhr = " and EDF_FOLDER_PARENT = '$FOLDER_VAL_1_S' ";
+			}else if ($x==3){
+				$folderWhr = " and EDF_FOLDER_PARENT = '$FOLDER_VAL_2_S' ";
+			}else if ($x==4){
+				$folderWhr = " and EDF_FOLDER_PARENT = '$FOLDER_VAL_3_S' ";
+			}else if ($x==5){
+				$folderWhr = " and EDF_FOLDER_PARENT = '$FOLDER_VAL_4_S' ";
+			}
+			$qryFldr =
+			"SELECT lvl,EDF_FOLDER,EDF_FOLDER_ID,EDF_FOLDER_PARENT
+			  FROM (SELECT *
+			          FROM (
+							select -1,level lvl,EDF_FOLDER,null,EDF_SYS_ID EDF_FOLDER_ID,EDF_SYS_ID_PARENT EDF_FOLDER_PARENT
+							from EFILL_DATA_FOLDER
+							where EDF_ETD_SYS_ID ='$ETD_SYS_ID_S'
+							connect by prior EDF_SYS_ID = EDF_SYS_ID_PARENT
+							start with EDF_SYS_ID_PARENT is null
+							order by EDF_SYS_ID
+			                )
+			        )
+			where lvl = $x
+			$folderWhr ";
+		}
+		//end condition
+		//Folder 2
+		if ($x==2){
+		if ($FOLDER_VAL_2_S === "NULL"){$stsView="N";}
+
+			//if ($USER_NAME==="1949"){
+
+				$sqlGetData = 	"select MGTAPPS.pkg_efilling.fGetQryUserYear('$USER_NAME') GET_DATA from dual";
+				$sqlUserYr = getData($conn,$sqlGetData);
+				//if ($USER_NAME === "AUDITOR"){ echo "sqlGetData $sqlGetData<br>"; }
+				//Set YEAR User AUDITOR
+				if ($sqlUserYr !==""){
+					$qryFldr = "$qryFldr and EDF_FOLDER in ($sqlUserYr)";
+					//echo "</br>$qryFldr and EDF_FOLDER in ($sqlUserYr) </br>";
+				}
+			//}
+
+		?>
+		<select name="FOLDER_VAL_2" id="FOLDER_VAL_2" onchange="Process('')">
+			<option value="NULL">NULL</option>
+			<?php
+				$rsDataFldr = oci_parse($conn,$qryFldr);
+				oci_execute ($rsDataFldr);
+				while ($rowDataFldr = oci_fetch_array ($rsDataFldr, OCI_BOTH)) {
+			?>
+			<option value="<?php echo $rowDataFldr['EDF_FOLDER_ID']; ?>"
+			<?php
+			if ($FOLDER_VAL_2_S===$rowDataFldr['EDF_FOLDER_ID']){echo "selected";}
+			?>><?php echo $rowDataFldr['EDF_FOLDER']; ?> </option>
+		<?php
+		}
+		?>
+		</select>
+		<?php
+		}
+		//end Folder 2
+
+	//select 3
+	if ($x===3){
+		if ($FOLDER_VAL_3_S === "NULL"){$stsView="N";}
+	?>
+		<select name="FOLDER_VAL_3" id="FOLDER_VAL_3" onchange="Process('')">
+			<option value="NULL">NULL</option>
+			<?php
+				$rsDataFldr = oci_parse($conn,$qryFldr);
+				oci_execute ($rsDataFldr);
+				while ($rowDataFldr = oci_fetch_array ($rsDataFldr, OCI_BOTH)) {
+			?>
+			<option value="<?php echo $rowDataFldr['EDF_FOLDER_ID']; ?>"
+			<?php
+			if ($FOLDER_VAL_3_S===$rowDataFldr['EDF_FOLDER_ID']){echo "selected";}
+			?>><?php echo $rowDataFldr['EDF_FOLDER']; ?> </option>
+<?php
+		}
+?>
+		</select>
+<?php
+	}
+	//end select 3
+	//select 4
+	if ($x===4){
+		if ($FOLDER_VAL_4_S === "NULL"){$stsView="N";}
+	?>
+		<select name="FOLDER_VAL_4" id="FOLDER_VAL_4" onchange="Process('')">
+			<option value="NULL">NULL</option>
+			<?php
+				$rsDataFldr = oci_parse($conn,$qryFldr);
+				oci_execute ($rsDataFldr);
+				while ($rowDataFldr = oci_fetch_array ($rsDataFldr, OCI_BOTH)) {
+			?>
+			<option value="<?php echo $rowDataFldr['EDF_FOLDER_ID']; ?>"
+			<?php
+			if ($FOLDER_VAL_4_S===$rowDataFldr['EDF_FOLDER_ID']){echo "selected";}
+			?>><?php echo $rowDataFldr['EDF_FOLDER']; ?> </option>
+<?php
+		}
+?>
+		</select>
+<?php
+	}
+	//end select 4
+	//select 5
+	if ($x===5){
+		if ($FOLDER_VAL_5_S === "NULL"){$stsView="N";}
+	?>
+		<select name="FOLDER_VAL_5" id="FOLDER_VAL_5" onchange="Process('')">
+			<option value="NULL">NULL</option>
+			<?php
+				$rsDataFldr = oci_parse($conn,$qryFldr);
+				oci_execute ($rsDataFldr);
+				while ($rowDataFldr = oci_fetch_array ($rsDataFldr, OCI_BOTH)) {
+			?>
+			<option value="<?php echo $rowDataFldr['EDF_FOLDER_ID']; ?>"
+			<?php
+			if ($FOLDER_VAL_5_S===$rowDataFldr['EDF_FOLDER_ID']){echo "selected";}
+			?>><?php echo $rowDataFldr['EDF_FOLDER']; ?> </option>
+<?php
+		}
+?>
+		</select>
+<?php
+	}
+	//end select 5
+			$x++;
+		}
+		//end loop
+
+		//View Data
+		if ($ETD_SYS_ID_S==="NULL")	{
+			$stsView = "N";
+		}
+		if ($deepFolder===2 && $FOLDER_VAL_2_S === "NULL")	{
+			$stsView="N";
+		}
+		if ($deepFolder===3 && $FOLDER_VAL_3_S === "NULL")	{
+			$stsView="N";
+		}
+		if ($deepFolder===4 && $FOLDER_VAL_4_S === "NULL")	{
+			$stsView="N";
+		}
+		if ($deepFolder===5 && $FOLDER_VAL_5_S === "NULL")	{
+			$stsView="N";
+		}
+
+		if ($stsView==="Y"){
+?>
+		<tr>
+			<td align="center">
+			Search Data
+			<input 	type="text" id="FIND_DATA" name="FIND_DATA" value="<?php echo $FIND_DATA_S; ?>"
+							style="width:300px;height:22px;text-align:left" onkeypress="Javascript: if (event.keyCode==13) Process('');"
+			>
+			<input type="button" id="CLEAR" name="FIND" value="FIND"  onclick="Process('')" style="width:50;font-size:12px" >
+			<input type="button" id="CLEAR" name="CLEAR" value="CLEAR"  onclick="Process('CLEAR')" style="width:50;font-size:12px" >
+			</td>
+		</tr>
+	</table>
+	<table style="width:100%" border="1">
+<?php
+
+		$folderDest = "Doc_Folder/$FOLDER_VAL_1_V";
+		if ($FOLDER_VAL_2_S !== ""){
+			$folderDest = "$folderDest/$FOLDER_VAL_2_V";
+		}
+		if ($FOLDER_VAL_3_S !== ""){
+			$folderDest = "$folderDest/$FOLDER_VAL_3_V";
+		}
+		if ($FOLDER_VAL_4_S !== ""){
+			$folderDest = "$folderDest/$FOLDER_VAL_4_V";
+		}
+		if ($FOLDER_VAL_5_S !== ""){
+			$folderDest = "$folderDest/$FOLDER_VAL_5_V";
+		}
+			//$folderDest = '"D:\XAMPP\htdocs\webapps\Doc_Folder\PDN\2021\"';
+			$folderLink = "D:/XAMPP/htdocs/webapps/$folderDest";
+
+			//echo "folder Destination $folderLink </br>";
+			$fileData = "";
+			$recDisp = 0;
+			$sqlGetData = 	"select nvl(ETD_TOT_DISPLAY,0) GET_DATA from EFILL_TYPE_DATA
+							 where ETD_SYS_ID = '$ETD_SYS_ID_S'";
+			$totDisp = getData($conn,$sqlGetData);
+			if ($totDisp === '0' ){
+				$totDisp =7;
+			} else {
+				$totDisp =(int)$totDisp;
+			}
+			$withDisp = 100/$totDisp;
+			//echo "ETD_SYS_ID_S $ETD_SYS_ID_S totDisp $totDisp";
+			$link="https://mgtapps.mutugading.com:4433/";
+			$stsFile = "";
+			$printLink = "";
+			//echo "$folderLink</br>";
+			if (is_dir($folderLink)){
+	    		if ($dh = opendir($folderLink)){
+	    			$noFile = 0;
+	    			$fileDt[]="";
+	    			$color = "";
+	    			while (($file = readdir($dh)) !== false){
+	    				$stsFile = "Y";
+	    				$printLink = "";
+						if (strpos(strtoupper($file),".PDF") === FALSE) {
+							$stsFile = "N";
+						}
+						if ($stsFile === "Y")	{
+							if ($FIND_DATA_S!==""){
+								if (strpos(strtoupper($file),strtoupper($FIND_DATA_S)) === FALSE) {
+									$stsFile = "N";
+								}
+							}
+						}
+						if ($stsFile==="Y") {
+							$noFile=$noFile+1;
+							$fileDt[$noFile] = $file;
+		    				$recDisp++;
+		    				if ($recDisp===1){
+		    					//$color = "BUTTON btn_process";
+									$color = "style='width:200;font-size:12px;color:red;'";
+		    				}
+		    			// if ($recDisp===2){$color = "BUTTON btn_add";}
+							// if ($recDisp===3){$color = "BUTTON btn_delete";}
+							// if ($recDisp===4){$color = "BUTTON btn_view";}
+							// if ($recDisp===5){$color = "BUTTON btn_example";}
+							// if ($recDisp===6){$color = "BUTTON btn_update";}
+							// if ($recDisp===7){$color = "BUTTON btn_back";}
+
+							if ($recDisp===2){$color = "style='width:200;font-size:12px;color:blue;'";}
+							if ($recDisp===3){$color = "style='width:200;font-size:12px;color:green;'";}
+							if ($recDisp===4){$color = "style='width:200;font-size:12px;color:black;'";}
+							if ($recDisp===5){$color = "style='width:200;font-size:12px;color:red;'";}
+							if ($recDisp===6){$color = "style='width:200;font-size:12px;color:blue;'";}
+							if ($recDisp===7){$color = "style='width:200;font-size:12px;color:green;'";}
+
+							if ($recDisp<=$totDisp){
+								if ($recDisp==1){
+									?>
+									<tr>
+									<?php
+								}
+								$printLink = "$folderDest/$file";
+														?>
+		<td style="width:<?php echo $withDisp; ?>%" align="center">
+			<input 	type="button" value="<?php echo "$noFile. $file"; ?> " onclick="<?php echo "Process('VIEW $printLink')"; ?>"
+							<?php echo $color; ?>
+			>
+		</td>
+<?php
+							}
+							if ($recDisp===$totDisp){
+								$recDisp=0;
+								?>
+								</tr>
+								<?php
+							}
+						}
+						if ($printLink!==""){
+							$printLink = "";
+						}
+					}
+			    	closedir($dh);
+				}else {
+					echo "NO Data";
+				}
+			} else {
+				echo "Folder invalid";
+			}
+		}
+		//end View Data
+	}
+?>
+
+		</td>
+	</tr>
+</table>
+<?php
+}
+?>
+</div>
+<!-- DEFINE LAYOUT -->
+<input type="hidden" name="P_MENU_ID" id="P_MENU_ID" value="<?php echo $P_MENU_ID; ?>">
+<input type="hidden" name="STSPRS" id="STSPRS">
+<input type="hidden" name="ETD_SYS_ID_S" id="ETD_SYS_ID_S" >
+<input type="hidden" name="ETD_SYS_ID_S_OLD" id="ETD_SYS_ID_S_OLD" value="<?php echo $ETD_SYS_ID_S; ?>">
+<input type="hidden" name="FOLDER_VAL_1_S" id="FOLDER_VAL_1_S">
+<input type="hidden" name="FOLDER_VAL_1_V" id="FOLDER_VAL_1_V">
+
+<input type="hidden" name="FOLDER_VAL_2_S" id="FOLDER_VAL_2_S">
+<input type="hidden" name="FOLDER_VAL_2_V" id="FOLDER_VAL_2_V">
+
+<input type="hidden" name="FOLDER_VAL_3_S" id="FOLDER_VAL_3_S">
+<input type="hidden" name="FOLDER_VAL_3_V" id="FOLDER_VAL_3_V">
+
+<input type="hidden" name="FOLDER_VAL_4_S" id="FOLDER_VAL_4_S">
+<input type="hidden" name="FOLDER_VAL_4_V" id="FOLDER_VAL_4_V">
+
+<input type="hidden" name="FOLDER_VAL_5_S" id="FOLDER_VAL_5_S">
+<input type="hidden" name="FOLDER_VAL_5_V" id="FOLDER_VAL_5_V">
+
+<input type="hidden" name="FIND_DATA_S" id="FIND_DATA_S">
+
+<input type="hidden" name="VIEW_LINK" id="VIEW_LINK">
