@@ -6,10 +6,11 @@ laporan/perintah, atau "diverifikasi bersama <siapa>"). Tidak ada SHA.
 ## G0 — Fondasi
 | # | Kriteria | Rujukan | Bukti | Tgl |
 |---|---|---|---|---|
-| 0.1 | TQ-01..TQ-07 ACCEPTED/SUPERSEDED, branch `feat/tqm` dari `main` di setiap repo | Q000 | | |
-| 0.2 | Service `tqm` hidup di stack dev, migrasi up/down/up OK, CI hijau | Q001 | | |
-| 0.3 | Proto `tqm/v1` lint + breaking hijau, kode gen ada di backend & frontend | Q002 | | |
-| 0.4 | Role/menu/permission TQM tampil sesuai role | Q003 | | |
+| 0.1 | TQ-01..TQ-07 ACCEPTED, akun Oracle tercatat, branch `feat/tqm` dari `main` di setiap repo | Q000 | TQ-01..07 ACCEPTED + akun Oracle MGTDAT, diverifikasi bersama pemilik proyek (branch belum) | 2026-11-19 |
+| 0.2 | Modul `tqmsample` terdaftar di finance, migrasi up/down/up OK, CI hijau | Q001 | | |
+| 0.3 | Proto `finance/v1/tqm_sample_*` lint + breaking hijau, kode gen ada di backend & frontend | Q002 | | |
+| 0.4 | Role/menu/permission TQM Sample tampil sesuai role | Q003 | | |
+| 0.5 | Master customer finance tersinkron dari Oracle, MANUAL tidak tertimpa | Q004 | | |
 
 ## G1 — Master data & Development Request
 | # | Kriteria | Rujukan | Bukti | Tgl |

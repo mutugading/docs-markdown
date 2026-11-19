@@ -62,11 +62,11 @@ footer{font-size:13px;color:var(--muted);border-top:1px solid var(--line);paddin
 
 <div class="wrap">
 <header>
-  <div class="eyebrow">GoApps · handover proyek · 18 Nov 2026</div>
+  <div class="eyebrow">GoApps · handover proyek · 19 Nov 2026</div>
   <h1>TQM: Pengembangan Produk &amp; Sampel</h1>
-  <p class="lede">Pengganti dua aplikasi Oracle Forms, <b>TQM Color Development</b> dan <b>TQM RND Sample Market Advice</b>, yang digabung menjadi satu service GoApps baru. Sampel dengan feedback customer Approved bisa langsung diajukan ke Cost Product Request.</p>
+  <p class="lede">Pengganti dua aplikasi Oracle Forms, <b>TQM Color Development</b> dan <b>TQM RND Sample Market Advice</b>, yang digabung menjadi satu modul di service finance. Sampel dengan feedback customer Approved bisa langsung diajukan ke Cost Product Request.</p>
   <div class="meta">
-    <span class="chip">task Q0xx</span><span class="chip">keputusan TQ-xx</span><span class="chip">branch feat/tqm</span><span class="chip">service services/tqm</span><span class="chip">dokumen .ai/tqm/</span>
+    <span class="chip">task Q0xx</span><span class="chip">keputusan TQ-xx</span><span class="chip">branch feat/tqm</span><span class="chip">modul services/finance · tqm_sample_*</span><span class="chip">dokumen docs-markdown/goapps/tqm/</span>
   </div>
 </header>
 
@@ -133,7 +133,7 @@ flowchart LR
     <thead><tr><th>ID</th><th>Keputusan</th></tr></thead>
     <tbody>
       <tr><td class="id">K1</td><td>COLOR bisa berlanjut menjadi SAMPLE. SAMPLE menyimpan tautan opsional ke COLOR asalnya.</td></tr>
-      <tr><td class="id">K2</td><td>Service sendiri (<code>services/tqm</code>, DB sendiri), bukan bagian finance. Ke CPR lewat gRPC.</td></tr>
+      <tr><td class="id">K2</td><td>Modul di dalam service <code>finance</code> (keputusan PM: terlalu kecil untuk service sendiri), dengan tabel sendiri <code>tqm_sample_*</code>, tidak berbagi tabel CPR.</td></tr>
       <tr><td class="id">K3</td><td>Costing diajukan saat feedback customer = Approved.</td></tr>
       <tr><td class="id">K4</td><td>Divisi Masterbatch login ke GoApps dan mengisi sendiri hasil lab trial.</td></tr>
       <tr><td class="id">K5</td><td>Format nomor lama dipertahankan (<code>MGT-PD-NNN/YYYY</code>, <code>SMA-NNN/YYYY</code>, <code>TQM/NNN/MM/YYYY</code>), tapi selalu dibuat sistem.</td></tr>
@@ -146,17 +146,17 @@ flowchart LR
 </section>
 
 <section>
-  <h2><span class="n">04</span>Usulan teknis (dikonfirmasi di Q000)</h2>
+  <h2><span class="n">04</span>Keputusan teknis (disepakati 19 Nov 2026)</h2>
   <div class="tbl"><table>
-    <thead><tr><th>ID</th><th>Usulan</th><th>Status</th></tr></thead>
+    <thead><tr><th>ID</th><th>Keputusan</th><th>Status</th></tr></thead>
     <tbody>
-      <tr><td class="id">TQ-01</td><td>Service <code>tqm</code> + DB <code>tqm_db</code>, struktur meniru service <code>ppc</code>. Port dicek agar tidak bentrok.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-02</td><td>Satu tabel <code>tqm_request</code> + tabel detail per tipe, lab, pengiriman, feedback, dan riwayat dengan snapshot.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-03</td><td>Penomoran lewat tabel counter per jenis dan tahun, diambil di transaksi yang sama dengan submit. Bukan <code>MAX+1</code>.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-04</td><td>Approval lewat IAM workflow seperti CPR, atau cek role langsung kalau workflow terlalu berat.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-05</td><td>Customer dari master customer <code>ppc</code>, shade dari master shade <code>finance</code>, disimpan sebagai kode + snapshot nama.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-06</td><td>Ajukan Costing = gRPC <code>CreateCostProductRequest</code>, satu CPR aktif per item.</td><td><span class="pill">PROPOSED</span></td></tr>
-      <tr><td class="id">TQ-07</td><td>Impor master dari Oracle lewat CLI sekali jalan dengan akun read-only. Teks bebas lama dijadikan CSV usulan untuk direview TQM.</td><td><span class="pill">PROPOSED</span></td></tr>
+      <tr><td class="id">TQ-01</td><td>Modul di <code>services/finance</code>, tanpa service/DB/infra baru. Prefix <code>tqm_sample</code>: tabel <code>tqm_sample_*</code>, role <code>TQM_SAMPLE_*</code>, permission <code>finance.tqmsample.*</code>, proto <code>finance/v1/tqm_sample_*</code>. Menu TQM tetap top-level.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-02</td><td>Satu tabel <code>tqm_sample_request</code> + tabel detail per tipe, lab, pengiriman, feedback, lampiran, dan riwayat dengan snapshot. Tidak berbagi <code>cost_product_request</code>.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-03</td><td>Penomoran lewat tabel counter per jenis dan tahun, diambil di transaksi yang sama dengan submit. Bukan <code>MAX+1</code>.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-04</td><td>Approval = cek role <code>TQM_SAMPLE_APPROVER</code> di modul, dicatat di riwayat + audit log. Bukan IAM workflow.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-05</td><td>Customer dari salinan master customer di finance (sync Oracle, tanpa ppc). Shade disimpan sebagai teks + <code>shade_id</code> opsional; shade baru tidak menunggu finance.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-06</td><td>Ajukan Costing memanggil use case CPR langsung dalam satu transaksi, FK ke CPR, satu CPR aktif per item.</td><td><span class="pill">ACCEPTED</span></td></tr>
+      <tr><td class="id">TQ-07</td><td>Impor master dari Oracle lewat CLI sekali jalan dengan akun read-only. Teks bebas lama dijadikan CSV usulan untuk direview TQM. Akun MGTDAT, sama seperti sync Oracle finance.</td><td><span class="pill">ACCEPTED</span></td></tr>
     </tbody>
   </table></div>
 </section>
@@ -167,10 +167,11 @@ flowchart LR
   <div class="tbl"><table>
     <thead><tr><th>Task</th><th>Isi</th><th>Repo</th><th>Catatan</th></tr></thead>
     <tbody>
-      <tr><td class="id">Q000</td><td>Kickoff: konfirmasi TQ-01..07, buat worktree</td><td>—</td><td><span class="pill opus">opus</span></td></tr>
-      <tr><td class="id">Q001</td><td>Scaffold service <code>tqm</code> + migrasi counter</td><td>backend</td><td><span class="pill rev">review wajib</span></td></tr>
-      <tr><td class="id">Q002</td><td>Proto <code>tqm/v1</code> master + request, generate</td><td>proto</td><td><span class="pill rev">review wajib</span></td></tr>
-      <tr><td class="id">Q003</td><td>Role, menu, permission TQM di IAM</td><td>backend/iam</td><td></td></tr>
+      <tr><td class="id">Q000</td><td>Kickoff: akun Oracle read-only, buat branch</td><td>—</td><td></td></tr>
+      <tr><td class="id">Q001</td><td>Modul <code>tqmsample</code> di finance + migrasi counter</td><td>backend</td><td><span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q002</td><td>Proto <code>finance/v1/tqm_sample_*</code> master + request, generate</td><td>proto</td><td><span class="pill rev">review wajib</span></td></tr>
+      <tr><td class="id">Q003</td><td>Role, menu, permission TQM Sample di IAM</td><td>backend/iam</td><td></td></tr>
+      <tr><td class="id">Q004</td><td>Master customer di finance + sync Oracle <code>OM_CUSTOMER</code></td><td>proto, backend</td><td><span class="pill rev">review wajib</span></td></tr>
       <tr><td class="id">Q010</td><td>Master data: lookup, color master, supplier</td><td>backend</td><td></td></tr>
       <tr><td class="id">Q011</td><td>CLI impor master dari Oracle + CSV lookup</td><td>backend</td><td></td></tr>
       <tr><td class="id">Q012</td><td>Domain request: state machine + penomoran konkuren</td><td>backend</td><td><span class="pill opus">opus</span> <span class="pill rev">review wajib</span></td></tr>
@@ -182,7 +183,7 @@ flowchart LR
   <div class="two">
     <div class="panel"><h3>Fase 2</h3><p>Lab trial oleh user Masterbatch, pengiriman dan despatch, cetak PDF.</p></div>
     <div class="panel"><h3>Fase 3</h3><p>Feedback, pengingat feedback, Ajukan Costing ke CPR.</p></div>
-    <div class="panel"><h3>Fase 4</h3><p>Laporan funnel dan lead time, infra, seed counter, UAT, cut-over.</p></div>
+    <div class="panel"><h3>Fase 4</h3><p>Laporan funnel dan lead time, seed counter, UAT, cut-over. Tidak ada infra baru (ikut deploy finance).</p></div>
     <div class="panel"><h3>Di luar lingkup</h3><p>Color Kitchen, produksi masterbatch, despatch umum, histori dokumen Oracle (K8).</p></div>
   </div>
 </section>
@@ -190,14 +191,14 @@ flowchart LR
 <section>
   <h2><span class="n">06</span>Cara mulai untuk developer</h2>
   <ol class="steps">
-    <li>Baca <code>.ai/tqm/CONTEXT.md</code>: lokasi kode, konvensi wajib, dan aturan Git.</li>
-    <li>Ambil task paling atas di <code>.ai/tqm/TASKS.md</code> yang dependensinya sudah selesai. Baca hanya rujukan di baris <b>Ref</b>.</li>
+    <li>Clone <code>github.com/mutugading/docs-markdown</code> ke root workspace kalau belum ada, lalu baca <code>goapps/tqm/CONTEXT.md</code>: lokasi kode, konvensi wajib, dan aturan Git.</li>
+    <li>Ambil task paling atas di <code>goapps/tqm/TASKS.md</code> yang dependensinya sudah selesai. Baca hanya rujukan di baris <b>Ref</b>.</li>
     <li>Kerjakan di branch <code>feat/tqm</code> (dari <code>main</code>) pada repo yang disebut kolom Repo. Commit dan PR memakai <code>[Q0xx]</code> di pesan.</li>
-    <li>Mulai dari <b>Q000</b>: konfirmasi usulan TQ-01..07 bersama pemilik proyek sebelum menulis kode.</li>
+    <li>Mulai dari <b>Q000</b>: keputusan TQ-01..07 dan akun Oracle (MGTDAT) sudah disepakati; tinggal membuat branch.</li>
     <li>Saat selesai, pindahkan task ke <code>ARCHIVE.md</code> dan isi bukti di <code>ACCEPTANCE.md</code> kalau task itu menutup kriteria gerbang.</li>
   </ol>
-  <p class="note">Aturan yang paling sering terlewat: uang dan berat selalu decimal (tidak boleh float); nomor dokumen hanya dibuat sistem; perubahan status hanya lewat domain service dengan riwayat; tidak ada akses langsung ke DB service lain; Oracle hanya dibaca.</p>
+  <p class="note">Aturan yang paling sering terlewat: uang dan berat selalu decimal (tidak boleh float); nomor dokumen hanya dibuat sistem; perubahan status hanya lewat domain service dengan riwayat; tabel CPR tidak diubah dan CPR hanya dibuat lewat use case-nya; Oracle hanya dibaca.</p>
 </section>
 
-<footer>Sumber lengkap di folder ini: <code>README.md</code>, <code>.ai/tqm/PRD.md</code> (kebutuhan), <code>.ai/tqm/LEGACY-MAP.md</code> (peta form dan tabel Oracle), <code>DECISIONS.md</code>, <code>TASKS.md</code>, <code>BACKLOG.md</code>, <code>ACCEPTANCE.md</code>.</footer>
+<footer>Sumber lengkap di folder ini (<code>docs-markdown/goapps/tqm/</code>): <code>README.md</code>, <code>PRD.md</code> (kebutuhan), <code>LEGACY-MAP.md</code> (peta form dan tabel Oracle), <code>DECISIONS.md</code>, <code>TASKS.md</code>, <code>BACKLOG.md</code>, <code>ACCEPTANCE.md</code>.</footer>
 </div>

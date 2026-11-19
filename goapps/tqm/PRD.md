@@ -1,6 +1,6 @@
 # PRD — TQM: Pengembangan Produk & Sampel (migrasi Oracle TQM + TQM RND → GoApps)
 
-Status: DRAFT v0.3 · 2026-11-18 · Pemilik: (isi nama pemilik proyek)
+Status: DRAFT v0.4 · 2026-11-19 (K2 diganti: modul di finance) · Pemilik: (isi nama pemilik proyek)
 Rujukan: `LEGACY-MAP.md` (peta form, tabel, alur, dan angka production; kode `L1`–`L6`).
 
 ## 1. Latar belakang
@@ -28,7 +28,7 @@ informasi itu yang dibutuhkan **costing**.
 | G2 | Alur terlihat: setiap permintaan punya status dan riwayat langkah yang jelas | timeline per dokumen, tidak ada langkah tanpa jejak |
 | G3 | Feedback customer benar-benar tercatat | ≥ 80% sampel terkirim punya feedback ≤ 60 hari |
 | G4 | Sampel yang lolos bisa langsung menjadi **Cost Product Request** tanpa ketik ulang | tombol "Ajukan Costing" mengisi customer + spek + shade |
-| G5 | Approval terkontrol | approver per role via workflow IAM, ada reject dan audit log |
+| G5 | Approval terkontrol | hanya role approver yang bisa approve, ada reject, riwayat, dan audit log |
 
 Di luar lingkup: Color Kitchen (`MGT_CK_*`), proses produksi masterbatch itu sendiri,
 dan despatch umum (`MGT_DES_SMPL` di luar sampel TQM).
@@ -61,14 +61,14 @@ Alternatif yang ditolak:
 | ID | Keputusan |
 |---|---|
 | K1 | Permintaan COLOR **bisa** berlanjut menjadi SAMPLE. SAMPLE menyimpan tautan opsional `source_request_id` (+ varian) ke COLOR asalnya. SAMPLE tanpa asal COLOR tetap boleh |
-| K2 | Modul berjalan sebagai **service sendiri** (`services/tqm`, database Postgres sendiri), bukan bagian dari `finance`. Integrasi ke CPR lewat gRPC ke `finance.v1.CostProductRequestService` |
+| K2 | Modul berjalan **di dalam service `finance`** (keputusan PM 2026-11-19: terlalu kecil untuk service sendiri), dengan tabel sendiri berprefix `tqm_sample_`, tidak berbagi tabel CPR. Nama role/permission/tabel memakai `tqm_sample` supaya aplikasi TQM lain kelak punya prefix sendiri. Detail teknis: TQ-01, TQ-02 |
 | K3 | Costing diajukan **saat feedback customer = Approved** (bukan Waiting Order, bukan sebelum kirim) |
-| K4 | Divisi **Masterbatch login ke GoApps** dan mengisi sendiri penerimaan & hasil lab trial (role `tqm.lab`) |
+| K4 | Divisi **Masterbatch login ke GoApps** dan mengisi sendiri penerimaan & hasil lab trial (role `TQM_SAMPLE_LAB`) |
 | K5 | Format nomor legacy **dipertahankan** (`MGT-PD-NNN/YYYY`, `SMA-NNN/YYYY`, `TQM/NNN/MM/YYYY`), tetapi selalu **dibuat oleh sistem** (counter per jenis per tahun di DB, unik, aman konkurensi). User tidak bisa mengetik atau mengubah nomor |
-| K6 | Approver = **Head of TQM** (role `tqm.approver`), satu level, untuk semua tipe dan divisi |
+| K6 | Approver = **Head of TQM** (role `TQM_SAMPLE_APPROVER`), satu level, untuk semua tipe dan divisi |
 | K7 | Properti teknis benang (tenacity, elongation, twist, OPU, dst., legacy `MGT_SMA_ITEM_DETAIL`) **dihidupkan lagi** sebagai bagian item SAMPLE |
 | K8 | **Mulai kosong:** dokumen Oracle tidak dimigrasi. Hanya master data yang dibawa. Oracle tetap menjadi arsip read-only. Counter nomor tahun cut-over dimulai dari nomor terakhir Oracle + 1 supaya tidak bentrok |
-| K9 | Tombol **Ajukan Costing** hanya untuk **marketing yang mengisi feedback** item itu (role `tqm.requester`, pengisi feedback = user yang menekan) |
+| K9 | Tombol **Ajukan Costing** hanya untuk **marketing yang mengisi feedback** item itu (role `TQM_SAMPLE_REQUESTER`, pengisi feedback = user yang menekan) |
 
 ## 4. Alur target
 
@@ -106,7 +106,7 @@ Perbedaan dari legacy:
 - F1.2 Lookup terkendali sebagai pengganti teks bebas: sample form (Pom-Pom, Strip, 2 Strip, Shade Strip,
   Baby Cone, Shade Card, Bobbin …), polymer, luster, cross section, fastness, end use, matching,
   light source, subject kirim, FB status, commercialized status, kurir.
-- F1.3 Customer **diambil dari master customer GoApps** (bukan teks bebas). Kalau customer belum ada,
+- F1.3 Customer **diambil dari master customer finance** (salinan Oracle `OM_CUSTOMER`, TQ-05; bukan teks bebas). Kalau customer belum ada,
   input sementara ditandai sebagai prospek.
 - F1.4 Supplier/lab trial: MGT Masterbatch (internal) + supplier eksternal.
 
@@ -120,7 +120,7 @@ Perbedaan dari legacy:
   + item (produk, denier/filamen, qty, harga, HS code, berat) + **properti teknis** (K7): BWS, contraction,
   elongation, entanglement, fiber shrinkage, knot retention 1st/2nd, modulus, OPU, paper tube, stability,
   tenacity, torque, total recovery, twist direction, twist/m. Ikut tercetak di Sample Advice.
-- F2.4 Status machine (§4), approval oleh **Head of TQM** (K6) via **workflow IAM** (sama seperti CPR `wfl_instance_id`),
+- F2.4 Status machine (§4), approval oleh **Head of TQM** (K6, cek role `TQM_SAMPLE_APPROVER`, TQ-04),
   dengan aksi submit, approve, reject, revise, dan cancel.
 - F2.5 Duplicate: salin permintaan lama sebagai dasar permintaan baru (legacy punya `pkg.duplicate`).
 - F2.6 **Buat SAMPLE dari COLOR** (K1): dari varian dengan hasil lab OK, buat SAMPLE baru yang terisi
@@ -131,7 +131,8 @@ Perbedaan dari legacy:
 - F3.1 Kirim ke lab/supplier: ref name, ref code, produk cocok, POY kg, qty bobbin.
 - F3.2 User MB (K4) menerima tugas di GoApps, lalu mengisi hasil per varian: dev no/name, shade code/name, range dosing,
   MB LDR, TR no, dan status OK/NOT OK dengan catatan.
-- F3.3 Varian OK bisa didaftarkan sebagai **MGT shade** baru (mengisi master shade yang dipakai costing).
+- F3.3 Varian OK dicatat dengan kode/nama shade-nya sebagai teks, tanpa menunggu finance. TQM tidak membuat shade
+  di master. Shade masuk master costing lewat Orion + sync saat masuk produksi (TQ-05).
 
 ### F4. Kirim sampel
 - F4.1 Kirim ke marketing/customer: subjek (shade card, bobbin), item yang dikirim.
@@ -150,9 +151,8 @@ Perbedaan dari legacy:
   marketing yang mengisi feedback tersebut (K9). Tombol ini membuat
   `CostProductRequest` (`product_classification = new`) dengan `customer_name/code`, deskripsi produk,
   `shade_code`/`shade_name`, `target_volume`, dan `target_price_range`
-  (dari estimasi harga jual SMA), lalu menyimpan `request_id` CPR di item TQM. Panggilan dilakukan
-  dari service `tqm` ke finance lewat gRPC (K2), sehingga satu item hanya bisa punya satu CPR aktif
-  (idempoten). Kalau item berasal dari COLOR (K1), riwayat lab ikut dirujuk.
+  (dari estimasi harga jual SMA), lalu menyimpan `request_id` CPR di item TQM. Karena satu service (K2), CPR dibuat dalam satu
+  transaksi dengan tautannya (TQ-06), dan satu item hanya bisa punya satu CPR aktif (idempoten). Kalau item berasal dari COLOR (K1), riwayat lab ikut dirujuk.
 - F6.4 Kalau feedback Approved diubah (mis. menjadi Redevelopment) setelah CPR dibuat, CPR **tidak**
   dibatalkan otomatis. Dokumen TQM menampilkan peringatan, dan pembatalan dilakukan manual di CPR.
 - F6.2 Arah sebaliknya: dari CPR, reviewer bisa melihat riwayat TQM (sampel, hasil lab, feedback) sebagai
@@ -171,14 +171,15 @@ Pengganti `USER_TYPE` + `c_divn` (L4) menjadi role IAM:
 
 | Role | Hak |
 |---|---|
-| `tqm.requester` (MKT) | buat COLOR request, lihat status, isi feedback, **Ajukan Costing** atas feedback yang ia isi (K9) |
-| `tqm.officer` (TQM/TWT/TFO) | semua request, kirim ke lab, terima hasil, kirim sampel, SAMPLE advice |
-| `tqm.lab` (MB, login sendiri: K4) | hanya tugas lab trial yang ditujukan ke MB: terima, isi hasil, selesai |
-| `tqm.approver` (Head of TQM, K6) | approve/reject semua tipe |
-| `tqm.despatch` | despatch |
-| `tqm.admin` | master data |
+| `TQM_SAMPLE_REQUESTER` (MKT) | buat COLOR request, lihat status, isi feedback, **Ajukan Costing** atas feedback yang ia isi (K9) |
+| `TQM_SAMPLE_OFFICER` (TQM/TWT/TFO) | semua request, kirim ke lab, terima hasil, kirim sampel, SAMPLE advice |
+| `TQM_SAMPLE_LAB` (MB, login sendiri: K4) | hanya tugas lab trial yang ditujukan ke MB: terima, isi hasil, selesai |
+| `TQM_SAMPLE_APPROVER` (Head of TQM, K6) | approve/reject semua tipe |
+| `TQM_SAMPLE_DESPATCH` | despatch |
+| `TQM_SAMPLE_ADMIN` | master data |
 
-Permission mengikuti format `{service}.{module}.{entity}.{action}`.
+Permission mengikuti format `{service}.{module}.{entity}.{action}` = `finance.tqmsample.<entity>.<action>`.
+Menu TQM tetap menu top-level sendiri (bukan di bawah Finance).
 
 ## 7. Migrasi data (K8: mulai kosong)
 
@@ -196,9 +197,9 @@ Permission mengikuti format `{service}.{module}.{entity}.{action}`.
 
 ## 8. Kebutuhan non-fungsional
 
-- Mengikuti konvensi GoApps: proto `tqm/v1` di `goapps-shared-proto`, service Go `services/tqm` dengan
-  database sendiri (K2), frontend Next.js, dan audit log.
-- Tidak boleh ada akses langsung ke database finance. Semua lewat API CPR.
+- Mengikuti konvensi GoApps: proto `finance/v1/tqm_sample_*.proto` di `goapps-shared-proto`, modul Go di
+  `services/finance` dengan tabel `tqm_sample_*` (K2), frontend Next.js, dan audit log.
+- Tabel CPR tidak diubah. TQM membuat CPR hanya lewat use case CPR, tidak menulis tabel CPR langsung.
 - Uang (harga, biaya, invoice) memakai decimal, tidak boleh float.
 - Lampiran disimpan di object storage yang sudah dipakai modul lain.
 - Nomor dokumen dijamin unik (constraint DB) dan dibuat sistem (K5).
@@ -212,7 +213,7 @@ O8 → K8, O9 → K9.
 
 | Fase | Isi |
 |---|---|
-| 1 | Scaffold service `tqm` + master data (import dari Oracle) + penomoran sistem + Development Request (COLOR & SAMPLE + properti teknis, tautan K1) + approval Head of TQM |
+| 1 | Modul TQM di finance + master customer finance + master data (import dari Oracle) + penomoran sistem + Development Request (COLOR & SAMPLE + properti teknis, tautan K1) + approval Head of TQM |
 | 2 | Lab trial (user MB, K4) + kirim sampel + despatch + cetak PDF |
 | 3 | Feedback + pengingat + integrasi CPR (F6) |
-| 4 | Laporan funnel/lead time + seed counter + cut-over Oracle |
+| 4 | Laporan funnel/lead time + seed counter + cut-over Oracle (tanpa infra baru, ikut deploy finance) |

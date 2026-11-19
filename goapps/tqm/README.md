@@ -1,7 +1,7 @@
 # TQM — Pengembangan Produk & Sampel
 
 Proyek pengganti dua aplikasi Oracle Forms, **TQM Color Development** dan **TQM RND Sample
-Market Advice**, yang digabung menjadi satu service GoApps baru (`services/tqm`). Sampel dengan
+Market Advice**, yang digabung menjadi satu modul di service `finance` (tabel `tqm_sample_*`). Sampel dengan
 feedback customer Approved bisa langsung diajukan ke Cost Product Request (finance).
 
 ## Mulai dari mana
@@ -24,7 +24,9 @@ feedback customer Approved bisa langsung diajukan ke Cost Product Request (finan
 
 ## Aturan singkat
 - Commit dan PR memakai ID task: `[Q012] ...`. Branch `feat/tqm` dari `main`.
+- Dokumen ini ada di repo `docs-markdown` (`github.com/mutugading/docs-markdown`, folder `goapps/tqm/`). Clone ke
+  root workspace kalau belum ada.
 - Task selesai: hapus dari `TASKS.md`, tambah satu baris di `ARCHIVE.md`, isi `ACCEPTANCE.md` kalau
-  menutup kriteria gerbang. Semua dalam commit yang sama dengan kodenya.
+  menutup kriteria gerbang. Commit di `docs-markdown` dengan ID task yang sama seperti commit kodenya.
 - Keputusan bisnis hanya di PRD §3a, keputusan teknis hanya di DECISIONS. Kalau ada yang belum
   diputuskan, tulis usulan `TQ-xx` (PROPOSED) dan tanyakan ke pemilik proyek, jangan diputuskan diam-diam.
