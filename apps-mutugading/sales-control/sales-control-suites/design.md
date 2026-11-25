@@ -362,9 +362,9 @@ than nine names scattered through `master.` and `transaction.`.
 Route::prefix('master')->name('master.')->group(function () {
     Route::prefix('sales-control')->name('sales-control.')->group(function () {
         Route::get('min-price', MinPriceManager::class)
-            ->name('min-price')->middleware(['can:finance-min_price-view']);
+            ->name('min-price')->middleware(['can:finance-sales_control_min_price-view']);
         Route::get('min-price-approval', MinPriceApprovalManager::class)
-            ->name('min-price-approval')->middleware(['can:finance-min_price-approve']);
+            ->name('min-price-approval')->middleware(['can:finance-sales_control_min_price-approve']);
     });
 });
 
@@ -376,18 +376,18 @@ Route::prefix('transaction')->name('transaction.')->group(function () {
             ->middleware(['permission:finance-sales_control-dashboard-view']);
 
         Route::get('min-price-active-report', MinPriceActiveReport::class)
-            ->name('min-price-active-report')->middleware(['can:finance-min_price-view']);
+            ->name('min-price-active-report')->middleware(['can:finance-sales_control_min_price-view']);
         Route::get('price-exception-report', PriceExceptionReport::class)
-            ->name('price-exception-report')->middleware(['can:finance-price_exception-report']);
+            ->name('price-exception-report')->middleware(['can:finance-sales_control_price_exception-report']);
         Route::get('price-rejection-report', PriceRejectionReport::class)
-            ->name('price-rejection-report')->middleware(['can:finance-price_exception-report']);
+            ->name('price-rejection-report')->middleware(['can:finance-sales_control_price_exception-report']);
 
         Route::get('price-check', PriceCheckPreview::class)
-            ->name('price-check')->middleware(['can:finance-price_exception-view']);
+            ->name('price-check')->middleware(['can:finance-sales_control_price_exception-view']);
         Route::get('price-exception', PriceExceptionRequest::class)
-            ->name('price-exception')->middleware(['can:finance-price_exception-create']);
+            ->name('price-exception')->middleware(['can:finance-sales_control_price_exception-create']);
         Route::get('price-exception-approval', PriceExceptionApproval::class)
-            ->name('price-exception-approval')->middleware(['can:finance-price_exception-approve']);
+            ->name('price-exception-approval')->middleware(['can:finance-sales_control_price_exception-approve']);
     });
 });
 ```
@@ -416,18 +416,18 @@ own `Modules\Auth\Models\RolePermission\{Role,Permission}` (they pin the connect
 ```
 finance-sales_control-dashboard-view    # open the suite's landing page
 
-finance-min_price-view
-finance-min_price-draft         # create and edit DRAFT rules
-finance-min_price-submit        # raise the PRICELIST request
-finance-min_price-print
-finance-min_price-approve       # upload + approve/reject  -> a role, never a person (D9)
-finance-min_price-void
+finance-sales_control_min_price-view
+finance-sales_control_min_price-draft         # create and edit DRAFT rules
+finance-sales_control_min_price-submit        # raise the PRICELIST request
+finance-sales_control_min_price-print
+finance-sales_control_min_price-approve       # upload + approve/reject  -> a role, never a person (D9)
+finance-sales_control_min_price-void
 
-finance-price_exception-view    # includes the price-check preview
-finance-price_exception-create
-finance-price_exception-print
-finance-price_exception-approve
-finance-price_exception-report
+finance-sales_control_price_exception-view    # includes the price-check preview
+finance-sales_control_price_exception-create
+finance-sales_control_price_exception-print
+finance-sales_control_price_exception-approve
+finance-sales_control_price_exception-report
 ```
 
 Roles: `Min Price - Maker` (view, draft, submit, print), `Min Price - Approver` (view, print, approve,

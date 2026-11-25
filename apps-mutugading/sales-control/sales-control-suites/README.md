@@ -67,7 +67,7 @@ and the reason. Anything still open is in `verification.md` §3, not here.
 | **D9** | **The approver is a role, not a person** (PRD §4.7). More than one holder, always — the alternative is every sales order in the company stopping when one person takes leave. |
 | **D10** | **The trigger goes last.** It is deployed after UAT, in its own change. Until Marketing has a way to request an exception, the trigger is a wall with no door. |
 | **D11** | **Tests live in `tests/Feature/Finance/SalesControl/`**, not `Modules/Finance/tests/` — `phpunit.xml` only scans `tests/`, so a suite under `Modules/` never runs. Learned the hard way on CI Project. |
-| **D12** | **Permissions follow the house shape**, `finance-{domain}-{action}` with underscores: `finance-min_price-*` and `finance-price_exception-*`. The PRD's `min-price.draft` spelling is not what Spatie is fed anywhere else in this repo. |
+| **D12** | **Permissions follow the house shape**, `finance-{domain}-{action}` with underscores: `finance-sales_control_min_price-*` and `finance-sales_control_price_exception-*`. The domain carries the `sales_control_` prefix so the assign permission page (which groups on the first two dash parts) shows each control as its own Sales Control group; renamed from `finance-min_price-*` / `finance-price_exception-*` by `2026_11_17_110000_rename_sales_control_permissions`. The PRD's `min-price.draft` spelling is not what Spatie is fed anywhere else in this repo. |
 | **D13** | **Two prefixes, by lifetime, in `MGTHRIS`.** `SALES_CTL_APPR_REQUEST` and `SALES_CTL_APPR_LINE` are the approval flow all three controls share; `SALES_MIN_PRICE` and `SALES_MIN_PRICE_CHECK_LOG` are minimum-price only. Sequence rows follow their tables. `APPR`, not `APPROVAL`, because 11g caps identifiers at 30 bytes — `schema.md` §0. |
 | **D14** | **The package reaches across schemas.** `MGTDAT.PKG_MGT_PRICE_CTRL` now reads three MGTHRIS tables and writes one. That needs **direct** grants from MGTHRIS to MGTDAT — a role will not do, PL/SQL under definer's rights ignores role privileges — plus schema-qualified references or synonyms. `schema.md` §9. This is the single most likely thing to break the deploy. |
 | **D15** | **Column prefixes follow the table name**, per house convention: `SCAR_`, `SCAL_`, `SMP_`, `SMPCL_`. `minimum-price-control.sql` has been rewritten accordingly — DDL, package body and smoke tests. |
@@ -83,7 +83,7 @@ and the reason. Anything still open is in `verification.md` §3, not here.
   `FM_EXCHANGE_RATE`, `PKG_MGT_PRICE_CTRL`. `MGTAPPS` — `MST_EXC_RATE_SAL`, read by the package.
 - **Routes:** `dashboard/module-finance/master/min-price*` and
   `dashboard/module-finance/transaction/price-exception*`; names mirror the paths.
-- **Permissions:** `finance-min_price-{view,draft,submit,print,approve,void}`,
-  `finance-price_exception-{view,create,print,approve,report}`.
+- **Permissions:** `finance-sales_control_min_price-{view,draft,submit,print,sign,approve,void}`,
+  `finance-sales_control_price_exception-{view,create,print,sign,approve,report}`.
 - **Log channel:** `finance_price_control`.
 - **Config:** `Modules/Finance/config/config.php` → `sales_control` key.

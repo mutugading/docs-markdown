@@ -28,6 +28,7 @@ Legacy sources (read-only reference, do not copy code):
 | [`schema.md`](schema.md) | Table and column design, one section per table, with the rationale for every departure from legacy. §1–§12 Shipment Control, §13–§15 the front office |
 | [`shipment_control_schema.sql`](shipment_control_schema.sql) | Oracle DDL for DBA review (advisory — the Laravel migrations are the source of truth). Covers Shipment Control only; the front-office DDL is the migrations |
 | [`gap-analysis.md`](gap-analysis.md) | Legacy → new mapping, feature parity checklist, what is dropped, and the behaviour changes Finance needs to hear about (§4) |
+| [`parity-import-provision-2026-11-09.md`](parity-import-provision-2026-11-09.md) | Line-by-line check of legacy `ImportPayReq` against the import provision screen: what was added, what moved, gaps G1–G8 still open |
 | [`data-migration.md`](data-migration.md) | Full backfill of `MGTAPPS.SHP_*`: mapping, ordering, id map, validation, rollback. §10 is the separate BIM upload with assisted mapping |
 | [`plan.md`](plan.md) | Phases (P0–P5 Shipment Control, P6–P9 front office), the decisions behind them, sequencing, testing strategy |
 | [`tasks.md`](tasks.md) | Numbered tasks with acceptance criteria, grouped and dependency-ordered |
